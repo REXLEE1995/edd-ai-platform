@@ -1,0 +1,52 @@
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite_cache/
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+.venv/
+venv/
+scratch/
+backend/scratch/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# Environment Variables & Secrets
+.env
+backend/.env
+
+# Local Databases & Logs
+*.db
+*.sqlite
+*.sqlite3
+backend/data/*.db
+data/
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
