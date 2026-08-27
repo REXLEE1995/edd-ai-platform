@@ -42,6 +42,10 @@ import {
 import { message, Drawer, Modal, Tooltip } from 'antd';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 // 全景综合尽调 AI 总结与研判大纲 (企业全景总括)
 const OVERALL_SUMMARY = {
@@ -282,6 +286,133 @@ const PDF_TOC_CATALOG = [
   }
 ];
 
+// 极简微核 HTML5 Canvas 逐页流式渲染组件 (纯矢量直接从 sample_report.pdf 读取，0 图片依赖)
+function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [rendered, setRendered] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const renderTaskRef = useRef(null);
+
+  useEffect(() => {
+    if (!pdfDoc || !containerRef.current) return;
+
+    let isMounted = true;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && !rendered) {
+          renderPage();
+        }
+      },
+      { rootMargin: '600px 0px', threshold: 0.01 }
+    );
+
+    observer.observe(containerRef.current);
+
+    async function renderPage() {
+      try {
+        setLoading(true);
+        const page = await pdfDoc.getPage(pageNum);
+        if (!isMounted || !canvasRef.current) return;
+
+        const outputScale = window.devicePixelRatio || 1.5;
+        const viewport = page.getViewport({ scale: 1.5 });
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+
+        if (renderTaskRef.current) {
+          try {
+            renderTaskRef.current.cancel();
+          } catch (e) {}
+        }
+
+        const transform = outputScale !== 1 
+          ? [outputScale, 0, 0, outputScale, 0, 0] 
+          : null;
+
+        const renderContext = {
+          canvasContext: ctx,
+          transform: transform,
+          viewport: viewport
+        };
+
+        const task = page.render(renderContext);
+        renderTaskRef.current = task;
+        await task.promise;
+
+        if (isMounted) {
+          setRendered(true);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (err?.name !== 'RenderingCancelledException') {
+          console.error(`Error rendering page ${pageNum}:`, err);
+        }
+      }
+    }
+
+    return () => {
+      isMounted = false;
+      observer.disconnect();
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch (e) {}
+      }
+    };
+  }, [pdfDoc, pageNum, rendered]);
+
+  return (
+    <div 
+      ref={containerRef}
+      id={`pdf-page-${pageNum}`}
+      className={`bg-white rounded-sm border shadow-2xs overflow-hidden transition-all duration-300 relative ${
+        isCurrentVisible ? 'border-sky-500 ring-2 ring-sky-300/40' : 'border-slate-300'
+      }`}
+    >
+      {/* 单页头部页码标尺 (企业全景尽调规范) */}
+      <div className="px-4 py-2 bg-slate-900 text-white flex items-center justify-between text-xs border-b border-slate-800 select-none">
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-xs bg-sky-600 text-white flex items-center justify-center font-mono font-bold text-[10px]">
+            {String(pageNum).padStart(2, '0')}
+          </span>
+          <span className="font-bold tracking-wide">
+            {pageNum === 1 ? '报告封面' : (pageNum <= 5 ? '报告目录与声明' : '企业深度尽调底稿')}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            PDF 原生矢量 Canvas · P.{pageNum}
+          </span>
+        </div>
+      </div>
+
+      {/* 原生 HTML5 Canvas 渲染区域 */}
+      <div className="w-full bg-white relative flex items-center justify-center min-h-[700px]">
+        {loading && !rendered && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-400 space-y-2">
+            <div className="w-6 h-6 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-xs font-mono">第 {pageNum} 页矢量解析渲染中...</span>
+          </div>
+        )}
+        <canvas 
+          ref={canvasRef} 
+          className={`w-full h-auto block select-none ${rendered ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function ReportReaderPage() {
   const params = useParams();
   const reportId = params.id || params.reportId;
@@ -291,6 +422,7 @@ export default function ReportReaderPage() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
+  const [pdfDoc, setPdfDoc] = useState(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [highlightedSourceKey, setHighlightedSourceKey] = useState('raw_ic');
@@ -300,6 +432,24 @@ export default function ReportReaderPage() {
   const [isOverallAiSummaryOpen, setIsOverallAiSummaryOpen] = useState(false);
   const sidebarNavRef = useRef(null);
   const chatBottomRef = useRef(null);
+
+  // 异步流式加载 PDF 原生文件
+  useEffect(() => {
+    let isMounted = true;
+    const loadPdfDoc = async () => {
+      try {
+        const loadingTask = pdfjsLib.getDocument('/sample_report.pdf');
+        const doc = await loadingTask.promise;
+        if (isMounted) {
+          setPdfDoc(doc);
+        }
+      } catch (err) {
+        console.error('Failed to load /sample_report.pdf via pdfjs:', err);
+      }
+    };
+    loadPdfDoc();
+    return () => { isMounted = false; };
+  }, []);
 
   // 对话历史记录 (仅包含用户点击特定板块的 AI 总结流，不包含全景总括)
   const [chatMessages, setChatMessages] = useState([]);
@@ -768,49 +918,18 @@ export default function ReportReaderPage() {
               )}
             </div>
 
-            {/* 报告连续文档流 (真实展示 61 页高质量原件扫描/底册) */}
+            {/* 报告连续文档流 (原生 HTML5 Canvas 极简微核矢量流式渲染 61 页全景报告) */}
             <div className="space-y-4 w-full">
               {pagesArray.map((pageNum) => {
-                const imgUrl = `/pdf_pages/page_${pageNum}.png`;
                 const isCurrentVisible = activePage === pageNum;
 
                 return (
-                  <div 
+                  <PdfCanvasPage
                     key={pageNum}
-                    id={`pdf-page-${pageNum}`}
-                    className={`bg-white rounded-sm border shadow-2xs overflow-hidden transition-all duration-300 relative ${
-                      isCurrentVisible ? 'border-sky-500 ring-2 ring-sky-300/40' : 'border-slate-300'
-                    }`}
-                  >
-                    {/* 单页头部页码标尺 (企业全景尽调规范) */}
-                    <div className="px-4 py-2 bg-slate-900 text-white flex items-center justify-between text-xs border-b border-slate-800 select-none">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-xs bg-sky-600 text-white flex items-center justify-center font-mono font-bold text-[10px]">
-                          {String(pageNum).padStart(2, '0')}
-                        </span>
-                        <span className="font-bold tracking-wide">
-                          {pageNum === 1 ? '报告封面' : (pageNum <= 5 ? '报告目录与声明' : '企业深度尽调底稿')}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400">
-                        <span>COVER · P.{pageNum}</span>
-                      </div>
-                    </div>
-
-                    {/* PDF 逐页高保真渲染容器 */}
-                    <div className="w-full bg-white flex items-center justify-center min-h-[900px]">
-                      <img 
-                        src={imgUrl}
-                        alt={`第 ${pageNum} 页 - 报告底稿`}
-                        loading="lazy"
-                        className="w-full h-auto object-contain block select-none pointer-events-none"
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='1130' viewBox='0 0 800 1130'%3E%3Crect width='800' height='1130' fill='%23f8fafc'/%3E%3Ctext x='50%25' y='50%25' font-size='16' text-anchor='middle' fill='%2394a3b8'%3E第 " + pageNum + " 页报告数据渲染中...%3C/text%3E%3C/svg%3E";
-                        }}
-                      />
-                    </div>
-                  </div>
+                    pdfDoc={pdfDoc}
+                    pageNum={pageNum}
+                    isCurrentVisible={isCurrentVisible}
+                  />
                 );
               })}
             </div>
