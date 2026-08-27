@@ -413,6 +413,22 @@ function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
   );
 }
 
+// PDF 文档全局单例 Promise 缓存池 (避免 React StrictMode 或重新挂载时重复发起网络 Fetch)
+const pdfDocPromiseCache = new Map();
+
+function getCachedPdfDocument(url) {
+  if (!pdfDocPromiseCache.has(url)) {
+    const loadingTask = pdfjsLib.getDocument({
+      url,
+      disableRange: false,
+      disableStream: false,
+      disableAutoFetch: false
+    });
+    pdfDocPromiseCache.set(url, loadingTask.promise);
+  }
+  return pdfDocPromiseCache.get(url);
+}
+
 export default function ReportReaderPage() {
   const params = useParams();
   const reportId = params.id || params.reportId;
@@ -433,22 +449,22 @@ export default function ReportReaderPage() {
   const sidebarNavRef = useRef(null);
   const chatBottomRef = useRef(null);
 
-  // 异步流式加载 PDF 原生文件
+  // 异步流式加载 PDF 原生文件 (带单例缓存，确保全局只请求 1 次)
   useEffect(() => {
     let isMounted = true;
-    const loadPdfDoc = async () => {
-      try {
-        const loadingTask = pdfjsLib.getDocument('/sample_report.pdf');
-        const doc = await loadingTask.promise;
+    getCachedPdfDocument('/sample_report.pdf')
+      .then((doc) => {
         if (isMounted) {
           setPdfDoc(doc);
         }
-      } catch (err) {
+      })
+      .catch((err) => {
         console.error('Failed to load /sample_report.pdf via pdfjs:', err);
-      }
+      });
+
+    return () => {
+      isMounted = false;
     };
-    loadPdfDoc();
-    return () => { isMounted = false; };
   }, []);
 
   // 对话历史记录 (仅包含用户点击特定板块的 AI 总结流，不包含全景总括)
