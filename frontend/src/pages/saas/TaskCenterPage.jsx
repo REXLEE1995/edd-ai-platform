@@ -398,10 +398,6 @@ export default function TaskCenterPage() {
                             {report.company_name}
                           </Link>
                         </h3>
-                        {getRiskBadge(report.risk_level, report.rating_score)}
-                        <span className="shadcn-badge-outline font-mono">
-                          {report.report_pages || 61} 页全景
-                        </span>
                       </div>
                       <p className="text-xs text-zinc-500 font-mono">
                         统一代码: {report.credit_code} · 报告编号: {report.report_no} · 生成时间: {report.created_at}
