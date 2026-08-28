@@ -1,0 +1,114 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.6 Chrome/144.0.7559.236 Electron/40.8.4 Safari/537.36" version="29.6.6">
+  <diagram name="�� 1 ҳ" id="AeMgU_RpW069xTpHxMyP">
+    <mxGraphModel dx="1678" dy="1602" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-11" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-4" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1.018;entryY=0.115;entryDx=0;entryDy=0;fontSize=14;startSize=8;endSize=8;entryPerimeter=0;exitX=-0.016;exitY=0.701;exitDx=0;exitDy=0;exitPerimeter=0;" target="KAhAZDLKG70ebxmR0_tQ-8">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="634" y="79" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-12" connectable="0" parent="KAhAZDLKG70ebxmR0_tQ-11" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="&lt;div&gt;通过&lt;span style=&quot;background-color: rgb(236, 236, 236); text-wrap-mode: wrap; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;taskid&lt;/span&gt;&lt;/div&gt;获取原始数据" vertex="1">
+          <mxGeometry relative="1" x="-0.0928" y="2" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" value="&lt;div&gt;&lt;font style=&quot;color: rgb(255, 25, 25);&quot;&gt;库表：&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;color: rgb(255, 25, 25);&quot;&gt;原始数据库表&lt;/font&gt;&lt;/div&gt;接口调用数据入库" vertex="1">
+          <mxGeometry height="422" width="120" x="706" y="-90" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-27" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-8" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=14;startSize=8;endSize=8;exitX=0.99;exitY=0.88;exitDx=0;exitDy=0;entryX=0.033;entryY=0.146;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" target="KAhAZDLKG70ebxmR0_tQ-26" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-31" connectable="0" parent="KAhAZDLKG70ebxmR0_tQ-27" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="标准数据入库" vertex="1">
+          <mxGeometry relative="1" x="-0.2528" y="3" as="geometry">
+            <mxPoint x="11" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" value="AI大模型数据清洗服务" vertex="1">
+          <mxGeometry height="247" width="140" x="365" y="179" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-15" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontSize=14;" value="Actor" vertex="1">
+          <mxGeometry height="60" width="30" x="61" y="-94" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-19" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-16" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=14;startSize=8;endSize=8;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="188" y="25" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-16" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;" value="发起任务&lt;br&gt;生成taskid" vertex="1">
+          <mxGeometry height="60" width="120" x="18" y="-5" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-51" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-24" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;" target="KAhAZDLKG70ebxmR0_tQ-46" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-24" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" value="&lt;b&gt;任务初始化服务&lt;/b&gt;&lt;div&gt;&lt;b&gt;&lt;br&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;任务类型、&lt;/div&gt;&lt;div&gt;必要参数&lt;div&gt;获取数据接口范围&lt;/div&gt;&lt;div&gt;建立任务&lt;/div&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;两种任务类型&lt;/div&gt;&lt;div&gt;（授权、非授权）&lt;/div&gt;" vertex="1">
+          <mxGeometry height="247" width="128" x="188" y="-101" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-36" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-25" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;fontSize=14;startSize=8;endSize=8;entryX=0.001;entryY=0.133;entryDx=0;entryDy=0;entryPerimeter=0;" target="KAhAZDLKG70ebxmR0_tQ-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-37" connectable="0" parent="KAhAZDLKG70ebxmR0_tQ-36" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="报告JSON原始数据" vertex="1">
+          <mxGeometry relative="1" x="-0.0883" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-25" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" value="AI大模型，报告生成" vertex="1">
+          <mxGeometry height="192" width="143" x="363.5" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-29" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-26" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;fontSize=14;startSize=8;endSize=8;entryX=0.988;entryY=0.163;entryDx=0;entryDy=0;entryPerimeter=0;" target="KAhAZDLKG70ebxmR0_tQ-25">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="523.111043294271" y="518.8333333333335" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-32" connectable="0" parent="KAhAZDLKG70ebxmR0_tQ-29" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="获取标准数据解读" vertex="1">
+          <mxGeometry relative="1" x="0.0929" y="-1" as="geometry">
+            <mxPoint x="12" y="-2" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-26" parent="1" style="whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=1;fontSize=14;" value="&lt;font style=&quot;color: rgb(255, 6, 6);&quot;&gt;库表：&lt;/font&gt;&lt;div&gt;结构&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;化数据入库&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="204" width="120" x="706" y="366" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-39" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-33" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=14;startSize=8;endSize=8;" target="KAhAZDLKG70ebxmR0_tQ-38" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-33" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" value="报告生成服务" vertex="1">
+          <mxGeometry height="60" width="143" x="369" y="756" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-40" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-35" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;fontSize=14;startSize=8;endSize=8;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="KAhAZDLKG70ebxmR0_tQ-33">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="515.8888549804688" y="785.5" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-35" parent="1" style="whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=1;fontSize=14;" value="&lt;div&gt;&lt;font style=&quot;color: light-dark(rgb(255, 0, 0), rgb(255, 123, 77));&quot;&gt;库表：&lt;/font&gt;&lt;/div&gt;报告结构化数据" vertex="1">
+          <mxGeometry height="245" width="120" x="709" y="602" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-44" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-38" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=14;startSize=8;endSize=8;" target="KAhAZDLKG70ebxmR0_tQ-43" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-45" connectable="0" parent="KAhAZDLKG70ebxmR0_tQ-44" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="渲染给用户" vertex="1">
+          <mxGeometry relative="1" x="-0.3067" y="3" as="geometry">
+            <mxPoint x="-3" y="8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-38" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" value="文件服务" vertex="1">
+          <mxGeometry height="60" width="143" x="188" y="754" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-43" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontSize=14;" value="Actor" vertex="1">
+          <mxGeometry height="60" width="30" x="57" y="752" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-46" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" value="&lt;div&gt;&lt;span&gt;&lt;b&gt;任务调度执行服务&lt;/b&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;三方接口调用&lt;div&gt;用户授权&lt;/div&gt;&lt;div&gt;文件下载&lt;/div&gt;" vertex="1">
+          <mxGeometry height="247" width="140" x="365" y="-101" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-47" edge="1" parent="1" source="KAhAZDLKG70ebxmR0_tQ-46" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0.031;entryY=0.118;entryDx=0;entryDy=0;entryPerimeter=0;fontSize=14;startSize=8;endSize=8;" target="KAhAZDLKG70ebxmR0_tQ-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KAhAZDLKG70ebxmR0_tQ-48" connectable="0" parent="KAhAZDLKG70ebxmR0_tQ-47" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;" value="原始数据入库" vertex="1">
+          <mxGeometry relative="1" x="-0.031" y="2" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

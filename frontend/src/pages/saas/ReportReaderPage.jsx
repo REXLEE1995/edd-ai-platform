@@ -61,6 +61,12 @@ const OVERALL_SUMMARY = {
     { label: '综合毛利率', value: '24.34%', desc: '显著高于行业中位值 14.48% (溢价+9.86%)' },
     { label: '建议授信', value: '¥5,000,000 元', desc: '建议采用实控人无限连带责任保证授信' }
   ],
+  keyMetrics: [
+    { label: '综合评分', value: '702 分 (B+级)', desc: '定量多维拟合，居塑料制造细分前 15%' },
+    { label: '年均营收', value: '4063.73 万元', desc: '近3年累计有效开票 1.36 亿元 (899份)' },
+    { label: '综合毛利率', value: '24.34%', desc: '显著高于行业中位值 14.48% (溢价+9.86%)' },
+    { label: '建议授信', value: '¥5,000,000 元', desc: '建议采用实控人无限连带责任保证授信' }
+  ],
   keyPoints: [
     '【工商与治理】注册与实缴资本 500 万元 100% 实缴到位；法定代表人吕顺光持股 90%、黄月英持股 10%，15 项历史工商变更轨迹真实。',
     '【经营与供应链】近 3 年销项有效发票 1.36 亿元，红废率仅 0.61%，水电能耗与生产吻合；核心大客户东莞环旭合作黏性强。',
@@ -894,7 +900,7 @@ export default function ReportReaderPage() {
 
                   {/* 四大核心量化指标 */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {OVERALL_SUMMARY.keyMetrics.map((km, idx) => (
+                    {(OVERALL_SUMMARY?.keyMetrics || OVERALL_SUMMARY?.highlights || []).map((km, idx) => (
                       <div key={idx} className="p-3 bg-white border border-slate-200 rounded-sm shadow-2xs space-y-1">
                         <span className="text-[10px] text-slate-400 block font-medium">{km.label}</span>
                         <span className="text-xs font-extrabold text-slate-900 block font-mono">{km.value}</span>
@@ -907,7 +913,7 @@ export default function ReportReaderPage() {
                   <div className="space-y-1.5 p-3.5 bg-white border border-slate-200 rounded-sm shadow-2xs">
                     <strong className="text-xs font-bold text-slate-900 block mb-1">📑 全景深度研判要点：</strong>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-slate-700 text-[11px]">
-                      {OVERALL_SUMMARY.keyPoints.map((kp, idx) => (
+                      {(OVERALL_SUMMARY?.keyPoints || []).map((kp, idx) => (
                         <div key={idx} className="flex items-start gap-1.5 leading-relaxed">
                           <span className="w-1.5 h-1.5 rounded-full bg-sky-600 shrink-0 mt-1.5"></span>
                           <span>{kp}</span>
