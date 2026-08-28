@@ -295,26 +295,6 @@ export default function TaskCenterPage() {
                   </div>
                 </div>
 
-<<<<<<< HEAD
-                {/* 金税等待授权提示条 */}
-                {task.status === 'waiting_auth' && (
-                  <div className="p-4 rounded-lg bg-amber-50/80 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950">
-                    <div className="flex items-center gap-2">
-                      <QrCode className="w-4 h-4 text-amber-700 shrink-0" />
-                      <span>企业法人金税授权待签署。请将授权二维码发送给企业法人或进行模拟授权。</span>
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={() => handleSimulateAuth(task.id)}
-                      className="px-3 py-1 rounded-md bg-amber-900 hover:bg-amber-950 text-white text-xs font-medium transition-colors shadow-2xs self-start sm:self-auto cursor-pointer"
-                    >
-                      ⚡ 一键模拟法人扫码授权
-                    </button>
-                  </div>
-                )}
-
-=======
->>>>>>> 7ef8882 (feat: 对接微风企真实网关、下架Mock服务、实现前端矢量二维码与自研短链重定向)
                 {/* 进行中状态提示条 */}
                 {(task.status === 'pulling_data' || task.status === 'ai_analyzing') && (
                   <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between text-xs text-slate-900">
