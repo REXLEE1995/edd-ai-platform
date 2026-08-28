@@ -23,6 +23,36 @@ import {
 import { message, Modal } from 'antd';
 import apiClient from '../../api/client';
 
+// 全平台 / 全协议兼容的文本复制工具函数 (解决 Mac Safari 及非 HTTPS 下 navigator.clipboard 为 undefined 的问题)
+const copyToClipboard = async (text) => {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      console.warn("navigator.clipboard API error, fallbacking:", err);
+    }
+  }
+
+  // Fallback: 动态创建隐藏 textarea 使用 execCommand("copy")
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-999999px";
+    textArea.style.top = "-999999px";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand("copy");
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (err) {
+    console.error("execCommand fallback failed:", err);
+    return false;
+  }
+};
+
 export default function TaskCenterPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -450,10 +480,14 @@ export default function TaskCenterPage() {
 
             <div className="pt-2 flex items-center justify-center gap-3">
               <button
-                onClick={() => {
+                onClick={async () => {
                   const targetLink = selectedTaskForAuth.short_url || selectedTaskForAuth.auth_short_url || selectedTaskForAuth.auth_qrcode_url || selectedTaskForAuth.auth_link;
-                  navigator.clipboard.writeText(targetLink);
-                  message.success('极简授权短链已成功复制到剪贴板！');
+                  const ok = await copyToClipboard(targetLink);
+                  if (ok) {
+                    message.success('极简授权短链已成功复制到剪贴板！');
+                  } else {
+                    message.error('复制失败，请手动选择链接复制');
+                  }
                 }}
                 className="px-6 py-2 rounded-sm bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
               >
