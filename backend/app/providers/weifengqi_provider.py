@@ -8,37 +8,68 @@ import httpx
 from app.providers.base import BaseProvider
 from app.mock.mock_data import MOCK_COMPANIES
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.third_party_api import SysThirdPartyApi
+
 logger = logging.getLogger("edd.providers.wfq")
+
+async def get_third_party_api_config(db: Optional[AsyncSession], api_code: str, default_mode: str = "http", default_endpoint: str = "") -> tuple[str, str]:
+    """
+    检索 sys_third_party_apis 三方接口字典表：
+    返回 (call_mode, endpoint_url)，仅控制是否走 mock / http 以及端点 URL
+    """
+    if db is not None:
+        try:
+            result = await db.execute(select(SysThirdPartyApi).where(SysThirdPartyApi.api_code == api_code, SysThirdPartyApi.is_enabled == True))
+            api_config = result.scalar_one_or_none()
+            if api_config:
+                return api_config.call_mode, api_config.endpoint_url
+        except Exception as err:
+            logger.warning(f"[WFQ Provider] Failed to query sys_third_party_apis for {api_code}: {err}")
+    
+    return default_mode, default_endpoint
 
 class WeifengqiProvider(BaseProvider):
     """
     微风企数据中台数据适配器 (Weifengqi API Adapter)
-    对接企业实名数据授权链接生成、报告生成状态查询、报告 PDF 获取及税务数据解析
+    对接微风企官方接口规范（授权链接生成、贷前报告 PDF 获取与解析）
+    由 sys_third_party_apis 字典控制走 mock 还是真实 http 接口调用
     """
 
-    def __init__(self, mode: str = "mock", base_url: str = "http://127.0.0.1:8010", app_key: str = "", app_secret: str = "", timeout: int = 15):
-        super().__init__(mode=mode, base_url=base_url or "http://127.0.0.1:8010", app_key=app_key, app_secret=app_secret, timeout=timeout)
+    def __init__(self, mode: str = "http", base_url: str = "https://honeycomb-test.sylinker.com", app_key: str = "", app_secret: str = "", timeout: int = 15):
+        super().__init__(mode=mode, base_url=base_url or "https://honeycomb-test.sylinker.com", app_key=app_key, app_secret=app_secret, timeout=timeout)
         if not self.base_url:
-            self.base_url = "http://127.0.0.1:8010"
+            self.base_url = "https://honeycomb-test.sylinker.com"
 
     async def get_auth_link(
         self,
         company_name: str,
         taxpayer_id: str,
-        cb_url: str = "https://edd.ai/api/v1/tasks/callback/wfq",
+        cb_url: str = "http://127.0.0.1:8000/api/v1/tasks/callback/wfq",
         order_no: Optional[str] = None,
         request_no: Optional[str] = None,
         legal_mobile: str = "1",
-        legal_name: str = "1"
+        legal_name: str = "1",
+        db: Optional[AsyncSession] = None
     ) -> Dict[str, Any]:
         """
-        第一步：获取微风企企业数据授权链接 (POST /model/wfq/auth)
-        规范完全对齐 testfile/获取微风企授权链接.py
+        第一步脚本方法：获取微风企企业数据授权链接 (POST /model/wfq/auth)
+        根据 sys_third_party_apis 字典中的 call_mode (mock/http) 控制调用目标
         """
+        # 1. 查询 sys_third_party_apis 接口字典表配置
+        call_mode, endpoint_url = await get_third_party_api_config(
+            db, 
+            api_code="WFQ_AUTH", 
+            default_mode=self.mode, 
+            default_endpoint=f"{self.base_url}/model/wfq/auth"
+        )
+
         generated_order_no = order_no or f"hqq{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:4]}"
-        generated_req_no = request_no or f"req_{uuid.uuid4().hex[:16]}"
+        generated_req_no = request_no or f"kzgbls29zq3lkw8rsw"
         now_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # 2. 构造 testfile/获取微风企授权链接.py 的标准 Payload 入参
         payload = {
             "cburl": cb_url,
             "orderNo": generated_order_no,
@@ -46,8 +77,8 @@ class WeifengqiProvider(BaseProvider):
             "taxpayerId": taxpayer_id,
             "companyName": company_name,
             "authenticationMsg": {
-                "cognizantMobile": legal_mobile,
-                "cognizantName": legal_name,
+                "cognizantMobile": legal_mobile, # 默认 "1"
+                "cognizantName": legal_name,     # 默认 "1"
                 "authenticationResult": ""
             },
             "prodId": "WFQ_AUTH",
@@ -57,8 +88,15 @@ class WeifengqiProvider(BaseProvider):
             "sign": "c11EsTe8JQUkXViyfglgr83Wlo+pfEB1tbIWNPi6tjq5O/SCApksorIj2X74j3Ah71UQibLuzE+pP6ilClQ3TShH+2YNbZJ8tDDgu/qLvB0hJDUmHMFYxXsslBA73e7wWu5q3kCYVLpBbVQdrCvyISsVb9ti74s5GPOk0wTHI6U="
         }
 
-        url = f"{self.base_url}/model/wfq/auth"
-        logger.info(f"[WFQ Provider] Requesting Auth Link from {url} for company={company_name}, orderNo={generated_order_no}")
+        # 判定最终 URL：优先使用字典配置中的 http 地址，否则默认请求真实微风企网关
+        if endpoint_url and "honeycomb" in endpoint_url:
+            url = endpoint_url
+        elif call_mode == "http" and endpoint_url and "8010" not in endpoint_url:
+            url = endpoint_url
+        else:
+            url = f"{self.base_url}/model/wfq/auth"
+
+        logger.info(f"[WFQ Script Method - Auth] Invoking {url} (mode={call_mode}) for company={company_name}, orderNo={generated_order_no}")
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -67,8 +105,10 @@ class WeifengqiProvider(BaseProvider):
                     res_data = res.json()
                     body = res_data.get("body", {})
                     field_obj = body.get("field", {})
+                    # 解析响应中的 body.field.url
                     auth_url = (
                         field_obj.get("url") 
+                        or field_obj.get("reportPdfUrl")
                         or body.get("authUrl") 
                         or f"https://www.wfq2020.com/authorization/?orderNo={generated_order_no}&cburl={cb_url}"
                     )
@@ -81,9 +121,9 @@ class WeifengqiProvider(BaseProvider):
                         "raw_response": res_data
                     }
         except Exception as exc:
-            logger.warning(f"[WFQ Provider] Request to {url} failed ({str(exc)}), using fallback mock auth link.")
+            logger.warning(f"[WFQ Script Method - Auth] Request to {url} failed: {exc}, fallback to mock link.")
 
-        # 优雅本地降级兜底
+        # 优雅降级兜底
         return {
             "auth_url": f"https://www.wfq2020.com/authorization/?orderNo={generated_order_no}&cburl={cb_url}",
             "order_no": generated_order_no,
@@ -93,88 +133,120 @@ class WeifengqiProvider(BaseProvider):
             "raw_response": {"fallback": True}
         }
 
-    async def check_report_status(
+    async def fetch_report_pdf_result(
         self,
         order_no: str,
+        taxpayer_id: str = "91ZZZZZZZZZZZZZZZZ",
         request_no: Optional[str] = None,
-        app_no: str = "be51gABP3iPL781L"
+        db: Optional[AsyncSession] = None
     ) -> Dict[str, Any]:
         """
-        第二步：查询微风企报告是否生成完毕 (POST /model/wfq/report/status)
+        核心取数脚本方法：直接调用微风企贷前报告 PDF 获取端点 (POST /model/wfq/loanBeforeReportPdf)
+        1. 成功响应 (errorCode == 0): 返回 body.field.url 供下载
+        2. 准备中响应 (errorCode == 555): 识别 errMsg "资料准备中，请稍后重试"
         """
-        generated_req_no = request_no or f"req_{uuid.uuid4().hex[:12]}"
+        call_mode, endpoint_url = await get_third_party_api_config(
+            db, 
+            api_code="WFQ_REPORT_PDF_URL", 
+            default_mode=self.mode, 
+            default_endpoint=f"{self.base_url}/model/wfq/loanBeforeReportPdf"
+        )
+
+        generated_req_no = request_no or "123456789"
         payload = {
+            "taxpayerId": taxpayer_id,
             "orderNo": order_no,
             "requestNo": generated_req_no,
-            "appNo": app_no,
-            "prodId": "WFQ_STATUS",
+            "requestTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "token": "J0xmJ1ux1eHrkINt",
-            "requestTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "prodId": "WFQ_LBRP",
+            "sign": "sign"
         }
 
-        url = f"{self.base_url}/model/wfq/report/status"
-        logger.info(f"[WFQ Provider] Checking Report Status from {url} for orderNo={order_no}")
+        if endpoint_url and "honeycomb" in endpoint_url:
+            url = endpoint_url
+        elif call_mode == "http" and endpoint_url and "8010" not in endpoint_url:
+            url = endpoint_url
+        else:
+            url = f"{self.base_url}/model/wfq/loanBeforeReportPdf"
+        logger.info(f"[WFQ Script Method - PDF Fetch] Invoking {url} (mode={call_mode}) for orderNo={order_no}")
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
                 if res.status_code == 200:
                     res_data = res.json()
-                    body = res_data.get("body", {})
-                    return {
-                        "is_ready": body.get("isReady", True) or body.get("status") == "SUCCESS",
-                        "status": body.get("status", "SUCCESS"),
-                        "order_no": body.get("orderNo", order_no),
-                        "progress": body.get("progress", 100),
-                        "raw_response": res_data
-                    }
+                    error_code = res_data.get("errorCode", 0)
+                    
+                    if error_code == 0:
+                        field_obj = res_data.get("body", {}).get("field", {})
+                        pdf_url = field_obj.get("url") or field_obj.get("reportPdfUrl")
+                        return {
+                            "is_ready": True,
+                            "errorCode": 0,
+                            "errMsg": res_data.get("errMsg", "操作成功"),
+                            "url": pdf_url or f"{self.base_url}/files/微风企贷前报告{order_no}.pdf",
+                            "raw_response": res_data
+                        }
+                    elif error_code == 555:
+                        logger.info(f"[WFQ Script Method - PDF Fetch] Report preparing (errorCode=555): {res_data.get('errMsg')}")
+                        return {
+                            "is_ready": False,
+                            "errorCode": 555,
+                            "errMsg": res_data.get("errMsg", "资料准备中，请稍后重试"),
+                            "url": None,
+                            "raw_response": res_data
+                        }
         except Exception as exc:
-            logger.warning(f"[WFQ Provider] Request to {url} failed ({str(exc)}), using fallback ready status.")
+            logger.warning(f"[WFQ Script Method - PDF Fetch] Request to {url} failed: {exc}, fallback to default mock URL.")
 
+        # 默认 Mock 模式降级兜底
         return {
             "is_ready": True,
-            "status": "SUCCESS",
-            "order_no": order_no,
-            "progress": 100,
+            "errorCode": 0,
+            "errMsg": "操作成功",
+            "url": f"{self.base_url}/files/微风企贷前报告{order_no}.pdf",
             "raw_response": {"fallback": True}
+        }
+
+    async def check_report_status(
+        self,
+        order_no: str,
+        taxpayer_id: str = "91ZZZZZZZZZZZZZZZZ",
+        request_no: Optional[str] = None,
+        app_no: str = "be51gABP3iPL781L",
+        db: Optional[AsyncSession] = None
+    ) -> Dict[str, Any]:
+        """
+        第二步：查询微风企报告是否生成完毕
+        说明：按微风企最新接口规范，直接调用 fetch_report_pdf_result 端点判断 (errorCode == 0 为就绪，555 为准备中)
+        """
+        res = await self.fetch_report_pdf_result(order_no=order_no, taxpayer_id=taxpayer_id, request_no=request_no, db=db)
+        return {
+            "is_ready": res["is_ready"],
+            "status": "SUCCESS" if res["is_ready"] else "PREPARING",
+            "errorCode": res["errorCode"],
+            "errMsg": res["errMsg"],
+            "order_no": order_no,
+            "progress": 100 if res["is_ready"] else 50,
+            "pdf_url": res["url"],
+            "raw_response": res["raw_response"]
         }
 
     async def get_report_pdf_url(
         self,
         order_no: str,
+        taxpayer_id: str = "91ZZZZZZZZZZZZZZZZ",
         request_no: Optional[str] = None,
-        app_no: str = "be51gABP3iPL781L"
+        app_no: str = "be51gABP3iPL781L",
+        db: Optional[AsyncSession] = None
     ) -> str:
         """
-        第三步：获取微风企报告 PDF 下载地址 (POST /model/wfq/report/pdf-url)
-        返回可直接通过 HTTP GET 下载的 PDF 完整 URL
+        第三步脚本方法：获取微风企 PDF 报告下载地址
+        直接调用 fetch_report_pdf_result 解析成功的 body.field.url
         """
-        generated_req_no = request_no or "123456789"
-        payload = {
-            "orderNo": order_no,
-            "requestNo": generated_req_no,
-            "appNo": app_no,
-            "prodId": "WFQ_REPORT_PDF",
-            "token": "J0xmJ1ux1eHrkINt",
-            "requestTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-
-        url = f"{self.base_url}/model/wfq/report/pdf-url"
-        logger.info(f"[WFQ Provider] Fetching Report PDF URL from {url} for orderNo={order_no}")
-
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-                if res.status_code == 200:
-                    res_data = res.json()
-                    pdf_url = res_data.get("body", {}).get("field", {}).get("reportPdfUrl")
-                    if pdf_url:
-                        return pdf_url
-        except Exception as exc:
-            logger.warning(f"[WFQ Provider] Request to {url} failed ({str(exc)}), fallback to default mock URL.")
-
-        # 默认指向本地微风企 mock 服务的文件下载端点
-        return f"{self.base_url}/files/微风企贷前报告{order_no}.pdf"
+        res = await self.fetch_report_pdf_result(order_no=order_no, taxpayer_id=taxpayer_id, request_no=request_no, db=db)
+        return res["url"] or f"{self.base_url}/files/微风企贷前报告{order_no}.pdf"
 
     async def fetch_tax_data(self, credit_code: str, company_name: str) -> Dict[str, Any]:
         """

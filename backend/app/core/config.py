@@ -2,6 +2,8 @@ import os
 from typing import List
 from pydantic_settings import BaseSettings
 
+db_path_str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'edd_v6.db')).replace('\\', '/')
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EDD AI Platform"
     VERSION: str = "2.1.0"
@@ -9,7 +11,7 @@ class Settings(BaseSettings):
     API_ADMIN_STR: str = "/api/admin"
 
     # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./data/edd_dev.db"
+    DATABASE_URL: str = f"sqlite+aiosqlite:///{db_path_str}"
     DB_ECHO: bool = False
 
     # Cache

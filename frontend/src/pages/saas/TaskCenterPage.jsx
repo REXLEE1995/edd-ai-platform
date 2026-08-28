@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   Clock, 
@@ -294,6 +295,7 @@ export default function TaskCenterPage() {
                   </div>
                 </div>
 
+<<<<<<< HEAD
                 {/* 金税等待授权提示条 */}
                 {task.status === 'waiting_auth' && (
                   <div className="p-4 rounded-lg bg-amber-50/80 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950">
@@ -311,6 +313,8 @@ export default function TaskCenterPage() {
                   </div>
                 )}
 
+=======
+>>>>>>> 7ef8882 (feat: 对接微风企真实网关、下架Mock服务、实现前端矢量二维码与自研短链重定向)
                 {/* 进行中状态提示条 */}
                 {(task.status === 'pulling_data' || task.status === 'ai_analyzing') && (
                   <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between text-xs text-slate-900">
@@ -431,31 +435,32 @@ export default function TaskCenterPage() {
         </div>
       )}
 
-      {/* 扫码授权 Modal */}
-      {selectedTaskForAuth && (
-        <Modal
-          open={!!selectedTaskForAuth}
-          onCancel={() => setSelectedTaskForAuth(null)}
-          footer={null}
-          width={460}
-          centered
-          destroyOnClose
-        >
-          <div className="space-y-5 pt-1">
-            <div className="text-center space-y-1">
-              <h3 className="text-lg font-bold text-slate-950 tracking-tight">企业法人强实名授权</h3>
-              <p className="text-xs text-zinc-500">
-                授权企业：<strong className="text-slate-900 font-semibold">{selectedTaskForAuth.company_name}</strong>
-              </p>
-            </div>
+      {/* 金税授权弹窗 */}
+      <Modal
+        open={!!selectedTaskForAuth}
+        onCancel={() => setSelectedTaskForAuth(null)}
+        footer={null}
+        title={
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <QrCode className="w-4 h-4 text-sky-700" />
+            企业实名数据授权通道
+          </div>
+        }
+        width={480}
+      >
+        {selectedTaskForAuth && (
+          <div className="py-4 text-center space-y-4 text-slate-800">
+            <p className="text-xs text-slate-600">
+              请使用企业法定代表人微信扫描下方二维码或点击复制链接发送给接收人完成实名数据授权：
+            </p>
 
-            <div className="bg-zinc-50 p-6 rounded-xl border border-zinc-200 text-center space-y-3">
-              <div className="w-44 h-44 mx-auto bg-white p-2 border border-zinc-200 rounded-lg shadow-2xs flex items-center justify-center">
-                <QrCode className="w-full h-full text-slate-900" />
-              </div>
-              <p className="text-xs text-zinc-500">请企业法定代表人使用微信扫码确认人脸核验与税务确权</p>
-            </div>
-
+            <div className="inline-block p-3.5 bg-white border border-slate-200 rounded-md shadow-2xs">
+              <QRCodeSVG 
+                value={selectedTaskForAuth.short_url || selectedTaskForAuth.auth_qrcode_url || selectedTaskForAuth.auth_link || ''} 
+                size={200}
+                level="H"
+                includeMargin={true}
+              />
             <div className="space-y-2">
               <button
                 type="button"
@@ -463,6 +468,18 @@ export default function TaskCenterPage() {
                 className="shadcn-button-primary w-full py-2.5 text-xs font-semibold"
               >
                 ⚡ 一键模拟法人授权通过 (开发测试通道)
+=======
+            <div className="pt-2 flex items-center justify-center gap-3">
+              <button
+                onClick={() => {
+                  const targetLink = selectedTaskForAuth.short_url || selectedTaskForAuth.auth_short_url || selectedTaskForAuth.auth_qrcode_url || selectedTaskForAuth.auth_link;
+                  navigator.clipboard.writeText(targetLink);
+                  message.success('极简授权短链已成功复制到剪贴板！');
+                }}
+                className="px-6 py-2 rounded-sm bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+              >
+                复制授权短链
+>>>>>>> 7ef8882 (feat: 对接微风企真实网关、下架Mock服务、实现前端矢量二维码与自研短链重定向)
               </button>
             </div>
           </div>

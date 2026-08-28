@@ -2,8 +2,8 @@ import os
 import sqlite3
 
 TABLE_DDLS = {
-    "users": """-- 表描述: 前台注册用户表（包含额度资产、认证企业与状态）
-CREATE TABLE users (
+    "users": """CREATE TABLE users (
+    -- [表描述] 前台注册用户表（包含额度资产、认证企业与状态）
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 用户唯一标识 UID (UUID)
     phone VARCHAR(20) NOT NULL UNIQUE,                                -- [登录] 注册手机号（主登录账号）
     hashed_password VARCHAR(255),                                     -- [安全] 密码哈希值 (PBKDF2-HMAC-SHA256)
@@ -26,8 +26,8 @@ CREATE TABLE users (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 账户最后更新时间
 )""",
 
-    "admin_users": """-- 表描述: 管理后台管理员账号与RBAC角色权限表
-CREATE TABLE admin_users (
+    "admin_users": """CREATE TABLE admin_users (
+    -- [表描述] 管理后台管理员账号与RBAC角色权限表
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 管理员唯一标识 UID
     username VARCHAR(50) NOT NULL UNIQUE,                             -- [登录] 管理员登录账号 (如 admin, operation)
     hashed_password VARCHAR(255) NOT NULL,                            -- [安全] 密码哈希值 (PBKDF2-HMAC-SHA256)
@@ -39,8 +39,8 @@ CREATE TABLE admin_users (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 账号最后更新时间
 )""",
 
-    "quota_transactions": """-- 表描述: 全生命周期额度变动流水台账表（不可篡改，支持财务对账）
-CREATE TABLE quota_transactions (
+    "quota_transactions": """CREATE TABLE quota_transactions (
+    -- [表描述] 全生命周期额度变动流水台账表（不可篡改，支持财务对账）
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 流水唯一标识 ID
     tx_no VARCHAR(50) NOT NULL UNIQUE,                                -- [单号] 全局唯一流水业务单号 (如 QTX202608250001)
     user_id VARCHAR(36) NOT NULL,                                     -- [关联] 关联用户 UID
@@ -61,8 +61,8 @@ CREATE TABLE quota_transactions (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 最后更新时间
 )""",
 
-    "quota_adjust_records": """-- 表描述: 管理员人工调额工单与凭证审计表
-CREATE TABLE quota_adjust_records (
+    "quota_adjust_records": """CREATE TABLE quota_adjust_records (
+    -- [表描述] 管理员人工调额工单与凭证审计表
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 调额工单主键 ID
     adjust_no VARCHAR(50) NOT NULL UNIQUE,                            -- [单号] 调额工单全局单号 (如 ADJ202608250001)
     user_id VARCHAR(36) NOT NULL,                                     -- [关联] 被调额目标用户 UID
@@ -78,8 +78,8 @@ CREATE TABLE quota_adjust_records (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 最后更新时间
 )""",
 
-    "dd_tasks": """-- 表描述: AI尽调任务表（记录授权状态、清洗步骤与实时思考流日志）
-CREATE TABLE dd_tasks (
+    "dd_tasks": """CREATE TABLE dd_tasks (
+    -- [表描述] AI尽调任务表（记录授权状态、清洗步骤与实时思考流日志）
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 任务唯一主键 ID
     task_no VARCHAR(50) NOT NULL UNIQUE,                              -- [单号] 任务业务单号 (如 TSK202608250001)
     user_id VARCHAR(36) NOT NULL,                                     -- [用户] 发起用户 UID
@@ -107,8 +107,8 @@ CREATE TABLE dd_tasks (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 任务最后更新时间
 )""",
 
-    "dd_reports": """-- 表描述: 尽调报告终态资产表（存储完整看板内容与微风企底稿溯源库）
-CREATE TABLE dd_reports (
+    "dd_reports": """CREATE TABLE dd_reports (
+    -- [表描述] 尽调报告终态资产表（存储完整看板内容与微风企底稿溯源库）
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 报告资产唯一 ID
     report_no VARCHAR(50) NOT NULL UNIQUE,                            -- [单号] 报告全局业务编号 (如 RPT202608250001)
     task_id VARCHAR(36) NOT NULL,                                     -- [溯源] 生成该报告的源尽调任务 ID
@@ -127,8 +127,8 @@ CREATE TABLE dd_reports (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 报告最后更新时间
 )""",
 
-    "orders": """-- 表描述: 额度充值订单表（微信/支付宝线上支付与线下对公记录）
-CREATE TABLE orders (
+    "orders": """CREATE TABLE orders (
+    -- [表描述] 额度充值订单表（微信/支付宝线上支付与线下对公记录）
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 订单唯一主键 ID
     order_no VARCHAR(50) NOT NULL UNIQUE,                             -- [单号] 平台订单业务单号 (如 ORD202608250001)
     user_id VARCHAR(36) NOT NULL,                                     -- [用户] 下单用户 UID
@@ -145,8 +145,8 @@ CREATE TABLE orders (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 订单最后更新时间
 )""",
 
-    "invoices": """-- 表描述: 增值税普通发票与专用发票开具申请表
-CREATE TABLE invoices (
+    "invoices": """CREATE TABLE invoices (
+    -- [表描述] 增值税普通发票与专用发票开具申请表
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 发票申请主键 ID
     invoice_no VARCHAR(50) NOT NULL UNIQUE,                           -- [单号] 发票业务申请单号
     user_id VARCHAR(36) NOT NULL,                                     -- [用户] 申请用户 UID
@@ -162,8 +162,8 @@ CREATE TABLE invoices (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 最后更新时间
 )""",
 
-    "admin_audit_logs": """-- 表描述: 全站管理员高危操作审计日志表（防篡改、安全合规追溯）
-CREATE TABLE admin_audit_logs (
+    "admin_audit_logs": """CREATE TABLE admin_audit_logs (
+    -- [表描述] 全站管理员高危操作审计日志表（防篡改、安全合规追溯）
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 审计日志唯一主键 ID
     admin_id VARCHAR(36) NOT NULL,                                    -- [经办] 操作管理员 UID
     admin_name VARCHAR(50) NOT NULL,                                  -- [经办] 操作管理员姓名
@@ -177,8 +177,8 @@ CREATE TABLE admin_audit_logs (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 最后更新时间
 )""",
 
-    "dd_task_files": """-- 表描述: 任务文件与报告PDF物理存储存证记录表
-CREATE TABLE dd_task_files (
+    "dd_task_files": """CREATE TABLE dd_task_files (
+    -- [表描述] 任务文件与报告PDF物理存储存证记录表
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 文件唯一主键 ID (UUID)
     task_id VARCHAR(36) NOT NULL,                                     -- [关联] 关联的尽调任务 ID
     report_id VARCHAR(36),                                            -- [关联] 关联的尽调报告 ID
@@ -192,8 +192,8 @@ CREATE TABLE dd_task_files (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP           -- [时间] 最后更新时间
 )""",
 
-    "sys_third_party_apis": """-- 表描述: 三方数据源与外部接口字典配置表
-CREATE TABLE sys_third_party_apis (
+    "sys_third_party_apis": """CREATE TABLE sys_third_party_apis (
+    -- [表描述] 三方数据源与外部接口字典配置表
     id VARCHAR(36) PRIMARY KEY,                                      -- [主键] 主键 ID
     api_code VARCHAR(50) NOT NULL UNIQUE,                             -- [代码] 接口全局代码 (如 WFQ_AUTH, WFQ_REPORT_STATUS)
     api_name VARCHAR(100) NOT NULL,                                   -- [名称] 接口名称 (如 微风企获取授权链接接口)
@@ -228,5 +228,4 @@ def update_sqlite_db(db_path):
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    update_sqlite_db(os.path.join(base_dir, "backend", "data", "edd_dev.db"))
-    update_sqlite_db(os.path.join(base_dir, "backend", "edd_platform.db"))
+    update_sqlite_db(os.path.join(base_dir, "backend", "data", "edd_v4.db"))

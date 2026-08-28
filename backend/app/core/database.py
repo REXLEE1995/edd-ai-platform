@@ -18,11 +18,9 @@ from app.models.third_party_api import SysThirdPartyApi
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
-DB_PATH = os.path.join(DATA_DIR, "edd_dev.db")
+DB_PATH = os.path.join(DATA_DIR, "edd_v6.db")
 
 db_url = settings.DATABASE_URL
-if "sqlite" in db_url and not os.path.isabs(db_url.replace("sqlite+aiosqlite:///", "")):
-    db_url = f"sqlite+aiosqlite:///{DB_PATH}"
 
 # 创建异步引擎
 connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}
@@ -56,21 +54,6 @@ async def init_db():
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
-        # 兼容 SQLite 表结构自动升级新增字段
-        migration_sqls = [
-            "ALTER TABLE dd_tasks ADD COLUMN wfq_order_no VARCHAR(100);",
-            "ALTER TABLE dd_tasks ADD COLUMN wfq_request_no VARCHAR(100);",
-            "ALTER TABLE dd_tasks ADD COLUMN wfq_pdf_url VARCHAR(1000);",
-            "ALTER TABLE dd_tasks ADD COLUMN storage_file_id VARCHAR(36);",
-            "ALTER TABLE dd_reports ADD COLUMN storage_file_id VARCHAR(36);",
-            "ALTER TABLE dd_reports ADD COLUMN pdf_file_path VARCHAR(500);"
-        ]
-        for sql in migration_sqls:
-            try:
-                await conn.execute(text(sql))
-            except Exception:
-                pass  # 字段已存在则忽略
     
     async with AsyncSessionLocal() as session:
         # 1. 检查并创建超管账号
@@ -104,8 +87,8 @@ async def init_db():
                     api_code="WFQ_AUTH",
                     api_name="微风企获取法人授权链接接口",
                     provider_name="weifengqi",
-                    call_mode="mock",
-                    endpoint_url="http://127.0.0.1:8010/model/wfq/auth",
+                    call_mode="http",
+                    endpoint_url="https://honeycomb-test.sylinker.com/model/wfq/auth",
                     http_method="POST",
                     lifecycle_type="interactive_interrupt",
                     auth_params={"prodId": "WFQ_AUTH", "token": "J0xmJ1ux1eHrkINt"},
@@ -114,29 +97,15 @@ async def init_db():
                     remark="获取企业专属 H5 实名数据授权页面 URL 及微风企外部单号"
                 ),
                 SysThirdPartyApi(
-                    id="api-wfq-status",
-                    api_code="WFQ_REPORT_STATUS",
-                    api_name="微风企贷前报告生成状态查询接口",
-                    provider_name="weifengqi",
-                    call_mode="mock",
-                    endpoint_url="http://127.0.0.1:8010/model/wfq/report/status",
-                    http_method="POST",
-                    lifecycle_type="direct_fetch",
-                    auth_params={"prodId": "WFQ_STATUS", "token": "J0xmJ1ux1eHrkINt"},
-                    timeout_seconds=15,
-                    is_enabled=True,
-                    remark="轮询或确认微风企贷前报告是否已生成就绪 (isReady=true)"
-                ),
-                SysThirdPartyApi(
                     id="api-wfq-pdf",
                     api_code="WFQ_REPORT_PDF_URL",
                     api_name="微风企贷前报告 PDF 下载地址获取接口",
                     provider_name="weifengqi",
-                    call_mode="mock",
-                    endpoint_url="http://127.0.0.1:8010/model/wfq/report/pdf-url",
+                    call_mode="http",
+                    endpoint_url="https://honeycomb-test.sylinker.com/model/wfq/loanBeforeReportPdf",
                     http_method="POST",
                     lifecycle_type="direct_fetch",
-                    auth_params={"prodId": "WFQ_REPORT_PDF", "token": "J0xmJ1ux1eHrkINt"},
+                    auth_params={"prodId": "WFQ_LBRP", "token": "J0xmJ1ux1eHrkINt"},
                     timeout_seconds=15,
                     is_enabled=True,
                     remark="获取微风企高保真 PDF 报告下载地址，通过文件存储服务持久化存证"

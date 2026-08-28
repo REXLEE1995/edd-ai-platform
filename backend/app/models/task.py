@@ -98,6 +98,17 @@ class DDTask(Base, TimestampMixin):
         nullable=True,
         comment="微风企法人授权专属移动端 H5 链接"
     )
+    short_code: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        index=True,
+        nullable=True,
+        comment="系统自研短链唯一标识码 (如 a8k9z2)"
+    )
+    short_url: Mapped[Optional[str]] = mapped_column(
+        String(200),
+        nullable=True,
+        comment="系统自研短链完整重定向 URL (如 http://127.0.0.1:8000/s/a8k9z2)"
+    )
     
     # AI 实时思考日志列表
     thinking_logs: Mapped[Optional[list]] = mapped_column(

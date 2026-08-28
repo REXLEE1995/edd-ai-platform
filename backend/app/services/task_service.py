@@ -63,20 +63,23 @@ class TaskService:
             # -------------------------------------------------------------
             stored_file = None
             if not is_public_only:
-                # 1.1 查询报告生成状态
-                append_log(f"【微风企·金税中台】企业授权校验通过 -> 正在向微风企网关查询贷前报告生成状态 (单号: {order_no})...")
+                # 1.1 直接发起微风企贷前报告 PDF 获取与状态校验 (POST /model/wfq/loanBeforeReportPdf)
+                append_log(f"【微风企·金税中台】企业授权校验通过 -> 正在向微风企网关拉取贷前报告下载地址 (单号: {order_no})...")
                 await session.commit()
 
-                status_info = await wfq_provider.check_report_status(order_no=order_no)
+                status_info = await wfq_provider.check_report_status(order_no=order_no, taxpayer_id=credit_code, db=session)
                 await asyncio.sleep(0.8)
 
-                append_log(f"【微风企·金税中台】微风企报告已生成完毕 (状态: {status_info.get('status', 'SUCCESS')}, 进度: 100%)。")
-                await session.commit()
+                if not status_info.get("is_ready"):
+                    append_log(f"【微风企·金税中台】报告资料准备中 (errorCode: 555, {status_info.get('errMsg')})，继续轮询中...")
+                    await session.commit()
+                    await asyncio.sleep(1.0)
+                    pdf_download_url = await wfq_provider.get_report_pdf_url(order_no=order_no, taxpayer_id=credit_code, db=session)
+                else:
+                    pdf_download_url = status_info.get("pdf_url") or await wfq_provider.get_report_pdf_url(order_no=order_no, taxpayer_id=credit_code, db=session)
 
-                # 1.2 获取报告 PDF 下载地址
-                pdf_download_url = await wfq_provider.get_report_pdf_url(order_no=order_no)
                 task.wfq_pdf_url = pdf_download_url
-                append_log(f"【微风企·金税中台】成功解析获取微风企贷前报告 PDF 地址 -> {pdf_download_url}")
+                append_log(f"【微风企·金税中台】成功解析获取微风企贷前报告 PDF 下载流地址 -> {pdf_download_url}")
                 await session.commit()
                 await asyncio.sleep(0.8)
 

@@ -29,8 +29,8 @@ class WfqCallbackRequest(BaseModel):
 @router.post("/create")
 async def create_dd_task(
     req: TaskCreateRequest,
-    background_tasks: BackgroundTasks,
     request: Request,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -68,15 +68,17 @@ async def create_dd_task(
         company_name=req.company_name,
         taxpayer_id=req.credit_code,
         cb_url=callback_url,
-        order_no=f"wfq_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        order_no=f"wfq_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
+        db=db
     )
 
     auth_h5_url = auth_res.get("auth_url")
     wfq_order_no = auth_res.get("order_no")
     wfq_req_no = auth_res.get("request_no")
 
-    encoded_auth_url = urllib.parse.quote(auth_h5_url, safe="")
-    auth_qrcode_url = f"https://api.qrserver.com/v1/create-qr-code/?size=240x240&data={encoded_auth_url}"
+    import secrets
+    short_code = secrets.token_urlsafe(5).replace("_", "").replace("-", "")[:6].lower()
+    short_url = f"http://127.0.0.1:8000/s/{short_code}"
 
     task = DDTask(
         id=task_id,
@@ -90,14 +92,16 @@ async def create_dd_task(
         auth_mode="weifengqi_qr",
         status="waiting_auth",
         auth_status="pending",
-        auth_qrcode_url=auth_qrcode_url,
+        auth_qrcode_url=short_url,
         auth_link=auth_h5_url,
+        short_code=short_code,
+        short_url=short_url,
         wfq_order_no=wfq_order_no,
         wfq_request_no=wfq_req_no,
         thinking_logs=[
             {
                 "time": datetime.now().strftime("%H:%M:%S"),
-                "content": f"尽调任务已创建，已生成微风企专属授权链接 (单号: {wfq_order_no})，请法定代表人打开 H5 页面或扫码完成实名数据授权。"
+                "content": f"尽调任务已创建，已生成极简短码 ({short_code}) 与微风企专属授权链接 (单号: {wfq_order_no})，请法定代表人打开 H5 页面或扫码完成实名数据授权。"
             }
         ]
     )
@@ -113,7 +117,8 @@ async def create_dd_task(
             "task_no": task.task_no,
             "wfq_order_no": task.wfq_order_no,
             "status": task.status,
-            "auth_qrcode_url": task.auth_qrcode_url,
+            "auth_qrcode_url": task.short_url,
+            "auth_short_url": task.short_url,
             "auth_link": task.auth_link
         }
     }

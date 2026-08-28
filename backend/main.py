@@ -77,6 +77,39 @@ async def health():
         }
     }
 
+@app.get("/s/{short_code}")
+async def redirect_short_link(short_code: str):
+    """
+    自研本地短链重定向服务 (302 自动跳转至微风企 H5 授权超长地址)
+    解决超长 URL 导致二维码密密麻麻的问题，提供极简大方块二维码与秒级识别率
+    """
+    from fastapi.responses import RedirectResponse, HTMLResponse
+    from sqlalchemy import select
+    from app.core.database import AsyncSessionLocal
+    from app.models.task import DDTask
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(DDTask).where(DDTask.short_code == short_code))
+        task = result.scalar_one_or_none()
+        if task and task.auth_link:
+            return RedirectResponse(url=task.auth_link, status_code=302)
+    
+    return HTMLResponse(
+        content="""
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head><meta charset="utf-8"><title>授权链接已失效</title></head>
+        <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#f8fafc;">
+            <div style="text-align:center;padding:40px;background:white;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+                <h2 style="color:#ef4444;margin-bottom:10px;">⚠️ 授权链接不存在或已失效</h2>
+                <p style="color:#64748b;font-size:14px;">请重新在尽调中心生成新的企业授权二维码。</p>
+            </div>
+        </body>
+        </html>
+        """,
+        status_code=404
+    )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
