@@ -78,7 +78,7 @@ async def create_dd_task(
 
     import secrets
     short_code = secrets.token_urlsafe(5).replace("_", "").replace("-", "")[:6].lower()
-    short_url = f"http://127.0.0.1:8000/s/{short_code}"
+    short_url = f"{base_url}/s/{short_code}"
 
     task = DDTask(
         id=task_id,

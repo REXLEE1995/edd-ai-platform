@@ -46,7 +46,7 @@ class WeifengqiProvider(BaseProvider):
         self,
         company_name: str,
         taxpayer_id: str,
-        cb_url: str = "http://127.0.0.1:8000/api/v1/tasks/callback/wfq",
+        cb_url: str = "",
         order_no: Optional[str] = None,
         request_no: Optional[str] = None,
         legal_mobile: str = "1",
@@ -69,9 +69,9 @@ class WeifengqiProvider(BaseProvider):
         generated_req_no = request_no or f"kzgbls29zq3lkw8rsw"
         now_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # 2. 构造 testfile/获取微风企授权链接.py 的标准 Payload 入参
+        final_cb_url = cb_url or f"{self.base_url}/api/v1/tasks/callback/wfq"
         payload = {
-            "cburl": cb_url,
+            "cburl": final_cb_url,
             "orderNo": generated_order_no,
             "typeWay": 1,
             "taxpayerId": taxpayer_id,
