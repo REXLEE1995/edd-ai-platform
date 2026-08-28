@@ -441,14 +441,13 @@ export default function TaskCenterPage() {
                 level="H"
                 includeMargin={true}
               />
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => handleSimulateAuth(selectedTaskForAuth.id)}
-                className="shadcn-button-primary w-full py-2.5 text-xs font-semibold"
-              >
-                ⚡ 一键模拟法人授权通过 (开发测试通道)
-=======
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-sm border border-slate-200 text-xs text-slate-700 font-mono space-y-1 text-left">
+              <div>授权企业: <strong>{selectedTaskForAuth.company_name}</strong></div>
+              <div>统一代码: <span>{selectedTaskForAuth.credit_code}</span></div>
+            </div>
+
             <div className="pt-2 flex items-center justify-center gap-3">
               <button
                 onClick={() => {
@@ -459,12 +458,11 @@ export default function TaskCenterPage() {
                 className="px-6 py-2 rounded-sm bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
               >
                 复制授权短链
->>>>>>> 7ef8882 (feat: 对接微风企真实网关、下架Mock服务、实现前端矢量二维码与自研短链重定向)
               </button>
             </div>
           </div>
-        </Modal>
-      )}
+        )}
+      </Modal>
 
     </div>
   );
