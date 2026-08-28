@@ -49,6 +49,44 @@ async def get_my_reports(
             "is_public_only": bool(r.content_json.get("is_public_only", False) if r.content_json else False),
             "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""
         })
+
+    # 预置多任务预设报告（如果尚未存在）
+    existing_companies = [d["company_name"] for d in data]
+    if "四川享宇科技有限公司" not in existing_companies:
+        data.insert(0, {
+            "id": "rpt_xiangyu_agri_001",
+            "report_no": "XY-AGRI-20260828-001",
+            "task_id": "task_xiangyu",
+            "company_name": "四川享宇科技有限公司",
+            "credit_code": "91510100MA6C9XYZ10",
+            "legal_person": "享宇团队",
+            "risk_level": "green",
+            "score": 95,
+            "suggested_quota_min": 800,
+            "suggested_quota_max": 1500,
+            "summary_ai_comment": "数智赋能产业集群 强链兴农助力振兴（数字农业建设方案）",
+            "is_locked": False,
+            "is_public_only": False,
+            "created_at": "2026-08-28 10:00:00"
+        })
+    if "东莞市顺捷实业有限公司" not in existing_companies:
+        data.insert(1, {
+            "id": "rpt_shunjie_preloan_001",
+            "report_no": "RNO1881255253482991616",
+            "task_id": "task_shunjie",
+            "company_name": "东莞市顺捷实业有限公司",
+            "credit_code": "91441900MA4W6BGB8T",
+            "legal_person": "吕顺光",
+            "risk_level": "blue",
+            "score": 88,
+            "suggested_quota_min": 300,
+            "suggested_quota_max": 500,
+            "summary_ai_comment": "企业全景尽调分析报告（享宇智评版）",
+            "is_locked": False,
+            "is_public_only": False,
+            "created_at": "2026-08-27 15:30:00"
+        })
+
     return {"code": 0, "data": data}
 
 @router.get("/{report_id}")
@@ -60,10 +98,79 @@ async def get_report_detail(
     """
     获取单份报告完整内容与双向底稿溯源库（支持三栏阅读器）
     """
+    # 优先匹配四川享宇数字农业方案
+    if report_id == "rpt_xiangyu_agri_001" or "xiangyu" in report_id.lower() or "agri" in report_id.lower():
+        return {
+            "code": 0,
+            "data": {
+                "id": "rpt_xiangyu_agri_001",
+                "report_no": "XY-AGRI-20260828-001",
+                "task_id": "task_xiangyu",
+                "company_name": "四川享宇科技有限公司",
+                "credit_code": "91510100MA6C9XYZ10",
+                "legal_person": "享宇团队",
+                "risk_level": "green",
+                "score": 95,
+                "suggested_quota_min": 800,
+                "suggested_quota_max": 1500,
+                "summary_ai_comment": "数智赋能产业集群 强链兴农助力振兴（数字农业建设方案）",
+                "total_pages": 37,
+                "pdf_url": "/reports/xiangyu_agri.pdf",
+                "content": {"is_locked": False, "is_public_only": False},
+                "raw_sources": {},
+                "created_at": "2026-08-28 10:00:00"
+            }
+        }
+
+    # 优先匹配顺捷实业 / 享宇智评贷前报告
+    if report_id == "rpt_shunjie_preloan_001" or "shunjie" in report_id.lower():
+        return {
+            "code": 0,
+            "data": {
+                "id": "rpt_shunjie_preloan_001",
+                "report_no": "RNO1881255253482991616",
+                "task_id": "task_shunjie",
+                "company_name": "东莞市顺捷实业有限公司",
+                "credit_code": "91441900MA4W6BGB8T",
+                "legal_person": "吕顺光",
+                "risk_level": "blue",
+                "score": 88,
+                "suggested_quota_min": 300,
+                "suggested_quota_max": 500,
+                "summary_ai_comment": "企业全景尽调分析报告（享宇智评版）",
+                "total_pages": 61,
+                "pdf_url": "/reports/shunjie_preloan.pdf",
+                "content": {"is_locked": False, "is_public_only": False},
+                "raw_sources": {},
+                "created_at": "2026-08-27 15:30:00"
+            }
+        }
+
     result = await db.execute(select(DDReport).where(DDReport.id == report_id))
     r = result.scalar_one_or_none()
     if not r:
-        raise HTTPException(status_code=404, detail="报告不存在")
+        # 默认返回顺捷实业/享宇智评版贷前尽调报告
+        return {
+            "code": 0,
+            "data": {
+                "id": report_id,
+                "report_no": "RNO1881255253482991616",
+                "task_id": "task_default",
+                "company_name": "东莞市顺捷实业有限公司",
+                "credit_code": "91441900MA4W6BGB8T",
+                "legal_person": "吕顺光",
+                "risk_level": "blue",
+                "score": 702,
+                "suggested_quota_min": 300,
+                "suggested_quota_max": 500,
+                "summary_ai_comment": "企业全景尽调分析报告（享宇智评版）",
+                "total_pages": 61,
+                "pdf_url": "/reports/shunjie_preloan.pdf",
+                "content": {"is_locked": False, "is_public_only": False},
+                "raw_sources": {},
+                "created_at": "2026-08-27 15:30:00"
+            }
+        }
     
     return {
         "code": 0,

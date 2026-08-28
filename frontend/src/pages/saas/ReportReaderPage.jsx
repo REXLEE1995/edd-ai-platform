@@ -47,250 +47,9 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-// 全景综合尽调 AI 总结与研判大纲 (企业全景总括)
-const OVERALL_SUMMARY = {
-  id: 'overall',
-  chapterNo: '全景',
-  title: '企业全景尽调综合研判',
-  subtitle: '东莞市顺捷实业有限公司 · 全景尽调总括报告',
-  scoreTag: '702分 · B+ 信用等级 · 建议授信 500 万',
-  summary: '目标企业经营存续 7.9 年，社保连续缴纳 76 人，近 12 个月实现有效开票营收 4063.73 万元，综合毛利率 24.34%（高于同行业中位值 14.48%）。企业股权穿透清晰（实缴 500 万到位率 100%），司法排查无任何失信或限高记录，36 个月涉税申报矩阵 100% 正常，整体经营与合规基本面扎实，符合信贷支持标准。',
-  highlights: [
-    { label: '综合评分', value: '702 分 (B+级)', desc: '定量多维拟合，居塑料制造细分前 15%' },
-    { label: '年均营收', value: '4063.73 万元', desc: '近3年累计有效开票 1.36 亿元 (899份)' },
-    { label: '综合毛利率', value: '24.34%', desc: '显著高于行业中位值 14.48% (溢价+9.86%)' },
-    { label: '建议授信', value: '¥5,000,000 元', desc: '建议采用实控人无限连带责任保证授信' }
-  ],
-  keyMetrics: [
-    { label: '综合评分', value: '702 分 (B+级)', desc: '定量多维拟合，居塑料制造细分前 15%' },
-    { label: '年均营收', value: '4063.73 万元', desc: '近3年累计有效开票 1.36 亿元 (899份)' },
-    { label: '综合毛利率', value: '24.34%', desc: '显著高于行业中位值 14.48% (溢价+9.86%)' },
-    { label: '建议授信', value: '¥5,000,000 元', desc: '建议采用实控人无限连带责任保证授信' }
-  ],
-  keyPoints: [
-    '【工商与治理】注册与实缴资本 500 万元 100% 实缴到位；法定代表人吕顺光持股 90%、黄月英持股 10%，15 项历史工商变更轨迹真实。',
-    '【经营与供应链】近 3 年销项有效发票 1.36 亿元，红废率仅 0.61%，水电能耗与生产吻合；核心大客户东莞环旭合作黏性强。',
-    '【涉税与合规】36 个月增值税与所得税申报日历 100% 正常；利息保障倍数达 40.71 倍；无失信被执行记录，2起历史行政处罚均已办结。'
-  ]
-};
-
-// 享宇智评各章节 AI 深度总结与关键指标提炼
-const AI_CHAPTER_INSIGHTS = {
-  'overall': OVERALL_SUMMARY,
-  'sec-ch1': {
-    chapterNo: '01',
-    title: '信用等级及风险提示',
-    subtitle: '享宇智评综合评分与信贷决策指引',
-    scoreTag: '702分 · B+级',
-    summary: '该企业综合评分 702 分，处于 B+ 信用评级区间，属于信贷支持类客户。整体履约合规性极强，生产经营稳定，建议给予 ¥500.00 万元预授信额度。',
-    highlights: [
-      { label: '综合评级', value: '702分 (B+级)', desc: '定量评分结合专家经验，评级居同行业前 15%' },
-      { label: '建议额度', value: '¥5,000,000 元', desc: '基于 4063 万年开票与净资产综合拟合' },
-      { label: '履约合规', value: '92 分', desc: '无失信被执行记录，无未结案被执行事项' },
-      { label: '盈利能力', value: '86 分', desc: '近12个月综合毛利率 24.34%，高于行业中位值' }
-    ]
-  },
-  'sec-ch2': {
-    chapterNo: '02',
-    title: '企业信用风险概览',
-    subtitle: '四大维度 20+ 项宏观风控关键指标穿透',
-    scoreTag: '四维稳健 · 风险可控',
-    summary: '企业基本面极其扎实，经营存续 7.9 年，社保连续缴纳 76 人，纳税信用等级 A 级。进销项发票流水与用电能耗真实匹配，无欠税与失信记录。',
-    highlights: [
-      { label: '经营稳定性', value: '7.9 年', desc: '24 个月内法定代表人与股东 0 变更' },
-      { label: '社保用工', value: '76 人', desc: '连续在保员工 76 人，用工规模真实' },
-      { label: '进销项匹配', value: '92.32%', desc: '进销比健康，不存在异常虚开发票特征' },
-      { label: '红废发票率', value: '0.61%', desc: '远低于行业 3% 风险预警红线' }
-    ]
-  },
-  'sec-ch3': {
-    chapterNo: '03',
-    title: '企业基本信息与治理',
-    subtitle: '市监工商照面、股权穿透与 15 条历史变更轨迹',
-    scoreTag: '股权清晰 · 权责明确',
-    summary: '企业股权结构高度集中且穿透清晰，实缴出资到位率 100%。管理层结构稳定，历史变更记录真实体现了企业由初创到规模化经营的演进历程。',
-    highlights: [
-      { label: '注册与实缴', value: '500.00 万元', desc: '注册资本 500 万，实缴 500 万 (100%到位)' },
-      { label: '核心控股人', value: '吕顺光 (90%)', desc: '执行董事兼总经理，实际控制人' },
-      { label: '少数股东', value: '黄月英 (10%)', desc: '持股 10%，出资 50 万元' },
-      { label: '历史变更', value: '15 项', desc: '增资、迁址与范围变更轨迹清晰连续' }
-    ]
-  },
-  'sec-ch4': {
-    chapterNo: '04',
-    title: '行业环境及产业链',
-    subtitle: '行业基尼系数集中度与 12 季度毛利率对标',
-    scoreTag: '毛利溢价 · 议价强',
-    summary: '企业所处塑料制品与精密模具制造行业，主营产品占比达 85.57% 以上。近 12 个季度毛利率均值显著高于同行业中位值，展现较强的成本控制与产品溢价能力。',
-    highlights: [
-      { label: '主营业务占比', value: '85.57%', desc: '塑料制品及配件，业务聚焦度高' },
-      { label: '最新季度毛利', value: '24.34%', desc: '2024Q4 综合毛利率达 24.34%' },
-      { label: '行业毛利中位', value: '14.48%', desc: '同行业可比企业中位值为 14.48%' },
-      { label: '毛利超额溢价', value: '+9.86%', desc: '产品附加值与工艺壁垒带来稳定溢价' }
-    ]
-  },
-  'sec-ch5': {
-    chapterNo: '05',
-    title: '企业经营情况 (开票与客商)',
-    subtitle: '1.36 亿开票流水、客商结构与真实能耗拟合',
-    scoreTag: '4063万/年 · 经营活跃',
-    summary: '近 3 年有效开票总额 1.36 亿元，进项采购 1.18 亿元。主要客户合作稳定，前十大客户年贡献营收 3693 万元；生产用电与租金支出真实印证实体生产。',
-    highlights: [
-      { label: '年均销售收入', value: '4063.73 万元', desc: '近12个月有效开票，营收规模扎实' },
-      { label: '年均采购进项', value: '3751.61 万元', desc: '原料采购与外协加工流水充沛' },
-      { label: '第一大客户', value: '东莞环旭 (78.72%)', desc: '长期核心合作伙伴，合作金额超 3199 万元' },
-      { label: '实体能耗支出', value: '381.91 万元', desc: '东莞供电局电费支出占比 10.18%，生产真实' }
-    ]
-  },
-  'sec-ch6': {
-    chapterNo: '06',
-    title: '企业财务分析 (8大预警)',
-    subtitle: '36 个月申报矩阵与企业偿债营运预警检测',
-    scoreTag: '合规申报 · 偿债充足',
-    summary: '近 36 个月增值税与所得税申报日历矩阵 100% 正常。利息保障倍数达 40.71 倍，偿付利息能力极高。动态财务预警中主要关注短期借款到期匹配。',
-    highlights: [
-      { label: '纳税申报合规', value: '100% 正常', desc: '36 个月申报代码矩阵均为正常申报 (*)' },
-      { label: '利息保障倍数', value: '40.71 倍', desc: '息税前利润充沛，债务偿付安全性极高' },
-      { label: '流动比率', value: '1.04', desc: '流动资产足以覆盖短期流动负债' },
-      { label: '资产周转效率', value: '正常', desc: '应收账款与存货周转处于制造业合理区间' }
-    ]
-  },
-  'sec-ch7': {
-    chapterNo: '07',
-    title: '企业信用情况 (司法合规)',
-    subtitle: '涉诉裁判分类、失信被执行与行政监管全景穿透',
-    scoreTag: '司法清洁 · 无失信执行',
-    summary: '全网司法涉诉深度排查显示，企业当前无任何未结案被告涉诉记录，无失信被执行、限制高消费等严重违法记录。历史诉讼多为维权起诉，行政处罚均已办结。',
-    highlights: [
-      { label: '失信被执行人', value: '0 起', desc: '未被列入全国失信被执行人名录' },
-      { label: '限制高消费令', value: '0 起', desc: '法人与企业均未受任何限高制约' },
-      { label: '未结被告案件', value: '0 起', desc: '当前无任何处于审理或执行中的被告诉讼' },
-      { label: '历史诉讼结案', value: '22 起全部结案', desc: '历史劳动与买卖纠纷已全部履行归档' }
-    ]
-  },
-  'sec-ch8': {
-    chapterNo: '08',
-    title: '附件 (原始明细底册)',
-    subtitle: '三年一期财务大表、发票明细流水与社保凭证',
-    scoreTag: '底册完整 · 存证可溯',
-    summary: '本附件包含 7 组原始数据底册，包括近三年资产负债表与利润表科目明细、48 个月增值税发票月度流水、月度能耗三费与社保月度缴费明细，作为全景尽调核验底稿。',
-    highlights: [
-      { label: '财务底册', value: '三年一期', desc: '资产负债表与利润表全部科目明细' },
-      { label: '发票明细', value: '48 个月', desc: '连续 48 个月进销项开票流水总览' },
-      { label: '能耗凭据', value: '水电运费', desc: '月度开票销售额与生产能耗真实匹配' },
-      { label: '社保明细', value: '月度参保', desc: '连续在保员工人数及社保缴纳档案' }
-    ]
-  }
-};
-
-// PDF 完整目录大纲与真实物理起始页码映射 (共 61 页)
-const PDF_TOC_CATALOG = [
-  {
-    id: 'sec-cover',
-    title: '报告封面与声明',
-    page: 1,
-    children: [
-      { id: 'sec-cover-1', title: '报告首页', page: 1 },
-      { id: 'sec-cover-statement', title: '声明与名词释义', page: 2 },
-      { id: 'sec-cover-catalogue', title: '报告目录索引', page: 3 }
-    ]
-  },
-  {
-    id: 'sec-ch1',
-    title: '01 信用等级及风险提示',
-    page: 6,
-    icon: Award,
-    children: [
-      { id: 'sec-1-1', title: '1.1 模型说明与评分卡 (325~900分)', page: 6 }
-    ]
-  },
-  {
-    id: 'sec-ch2',
-    title: '02 企业信用风险概览',
-    page: 7,
-    icon: Activity,
-    children: [
-      { id: 'sec-2-1', title: '2.1 基本情况 (7.9年/76人/纳税A级)', page: 7 },
-      { id: 'sec-2-2', title: '2.2 经营风险 (连续性好/集中I型)', page: 7 },
-      { id: 'sec-2-3', title: '2.3 财务风险 (总资产5337万/负债87%)', page: 8 },
-      { id: 'sec-2-4', title: '2.4 信用风险 (欠税0元/处罚2次/无失信)', page: 8 }
-    ]
-  },
-  {
-    id: 'sec-ch3',
-    title: '03 企业基本信息',
-    page: 9,
-    icon: Building2,
-    children: [
-      { id: 'sec-3-1', title: '3.1 工商基础信息 (照面详情)', page: 9 },
-      { id: 'sec-3-2', title: '3.2 股权结构 (90%/10% 出资穿透)', page: 10 },
-      { id: 'sec-3-3', title: '3.3 主要管理人员 (董监高)', page: 11 },
-      { id: 'sec-3-4', title: '3.4 关联企业情况', page: 11 },
-      { id: 'sec-3-5', title: '3.5 分支机构', page: 11 },
-      { id: 'sec-3-6', title: '3.6 变更信息 (15条完整时间轴)', page: 12 }
-    ]
-  },
-  {
-    id: 'sec-ch4',
-    title: '04 行业环境及产业链',
-    page: 14,
-    icon: TrendingUp,
-    children: [
-      { id: 'sec-4-1', title: '4.1.1 行业销售额基尼系数 (0.70~0.78)', page: 14 },
-      { id: 'sec-4-2', title: '4.1.2 Top3 主营商品走势 (塑料/模具)', page: 14 },
-      { id: 'sec-4-3', title: '4.1.3 近12季度毛利率 vs 行业中位对标', page: 15 }
-    ]
-  },
-  {
-    id: 'sec-ch5',
-    title: '05 企业经营情况',
-    page: 17,
-    icon: BarChart3,
-    children: [
-      { id: 'sec-5-1', title: '5.1 经营概览 (断票27天/红废0.61%)', page: 17 },
-      { id: 'sec-5-2', title: '5.2 销售情况分析 (Top10客户/地域分布)', page: 20 },
-      { id: 'sec-5-3', title: '5.3 采购情况分析 (Top10供应商/原材料)', page: 24 },
-      { id: 'sec-5-4', title: '5.4 纳税情况分析 (三年走势/税收强拟合)', page: 31 }
-    ]
-  },
-  {
-    id: 'sec-ch6',
-    title: '06 企业财务分析',
-    page: 33,
-    icon: DollarSign,
-    children: [
-      { id: 'sec-6-1', title: '6.1 财务规范性 (36个月申报代码矩阵*)', page: 33 },
-      { id: 'sec-6-2', title: '6.2 近3年度主要财务指标大表', page: 34 },
-      { id: 'sec-6-3', title: '6.3 动态财务预警检测 (8项指标信号灯)', page: 35 }
-    ]
-  },
-  {
-    id: 'sec-ch7',
-    title: '07 企业信用情况',
-    page: 37,
-    icon: Scale,
-    children: [
-      { id: 'sec-7-1', title: '7.1 36个月内负面信息概述', page: 37 },
-      { id: 'sec-7-6', title: '7.6 行政处罚明细 (消防1万+应急2万)', page: 38 },
-      { id: 'sec-7-10', title: '7.10 司法裁判与立案记录 (22起已结案)', page: 39 },
-      { id: 'sec-7-11', title: '7.11 环保处罚信息', page: 51 }
-    ]
-  },
-  {
-    id: 'sec-ch8',
-    title: '08 附件 (原始明细底册)',
-    page: 51,
-    icon: Paperclip,
-    children: [
-      { id: 'sec-att-1', title: '附件一：三年一期重点科目总览 (资产负债/利润表)', page: 51 },
-      { id: 'sec-att-2', title: '附件二：企业经营月报总览 (48个月发票流水)', page: 53 },
-      { id: 'sec-att-3', title: '附件三：月开票销售额与水电燃气运费', page: 56 },
-      { id: 'sec-att-4', title: '附件四：社保信息汇总表 (三年一期汇总)', page: 57 },
-      { id: 'sec-att-5', title: '附件五：月社保信息明细表', page: 59 },
-      { id: 'sec-att-6', title: '附件六/七：关联企业与变更完整底册', page: 60 }
-    ]
-  }
-];
+import reportXiangyuData from '../../mock/report_xiangyu_agri.json';
+import reportShunjieData from '../../mock/report_shunjie_preloan.json';
+import reportArchiveData from '../../mock/report_catalog_archive.json';
 
 // 极简微核 HTML5 Canvas 逐页流式渲染组件 (纯矢量直接从 sample_report.pdf 读取，0 图片依赖)
 function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
@@ -455,32 +214,61 @@ export default function ReportReaderPage() {
   const sidebarNavRef = useRef(null);
   const chatBottomRef = useRef(null);
 
-  // 异步流式加载 PDF 原生文件 (带单例缓存，确保全局只请求 1 次)
+  // 核心判断：当前任务是否为四川享宇科技有限公司任务
+  const isXiangyuReport = useMemo(() => {
+    const idStr = String(reportId || '').toLowerCase();
+    const compStr = String(report?.company_name || '').toLowerCase();
+    return idStr.includes('xiangyu') || idStr.includes('agri') || compStr.includes('享宇科技') || compStr.includes('xiangyu');
+  }, [reportId, report?.company_name]);
+
+  // 根据任务类型动态选择对应的结构化 JSON 单一事实源
+  const activeArchiveData = useMemo(() => {
+    return isXiangyuReport ? reportXiangyuData : reportShunjieData;
+  }, [isXiangyuReport]);
+
+  const DEFAULT_REPORT_META = activeArchiveData.report_meta;
+  const OVERALL_SUMMARY = activeArchiveData.overall_ai_summary;
+  const PDF_TOC_CATALOG = activeArchiveData.toc_catalog;
+  const targetPdfUrl = isXiangyuReport ? '/reports/xiangyu_agri.pdf' : '/reports/shunjie_preloan.pdf';
+
+  // 动态构建各章节 AI 深度研判字典
+  const AI_CHAPTER_INSIGHTS = useMemo(() => ({
+    'overall': OVERALL_SUMMARY,
+    ...Object.fromEntries(
+      PDF_TOC_CATALOG
+        .filter(item => item.has_ai_summary && item.ai_insight)
+        .map(item => [item.id, item.ai_insight])
+    )
+  }), [OVERALL_SUMMARY, PDF_TOC_CATALOG]);
+
+  // 异步流式加载 PDF 原生文件 (带单例缓存，按任务 PDF 路径分发)
   useEffect(() => {
     let isMounted = true;
-    getCachedPdfDocument('/sample_report.pdf')
+    setPdfDoc(null);
+    getCachedPdfDocument(targetPdfUrl)
       .then((doc) => {
         if (isMounted) {
           setPdfDoc(doc);
         }
       })
       .catch((err) => {
-        console.error('Failed to load /sample_report.pdf via pdfjs:', err);
+        console.error(`Failed to load ${targetPdfUrl} via pdfjs:`, err);
       });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [targetPdfUrl]);
 
-  // 对话历史记录 (仅包含用户点击特定板块的 AI 总结流，不包含全景总括)
+  // 对话历史记录
   const [chatMessages, setChatMessages] = useState([]);
 
   const handleOpenAiChapter = (chapterId) => {
     setSelectedAiChapterId(chapterId);
     const insight = AI_CHAPTER_INSIGHTS[chapterId];
     if (!insight) return;
-    const userPrompt = `请帮我针对【${insight.chapterNo} ${insight.title}】板块进行深度总结与关键指标提炼。`;
+    const chNum = insight.chapter_no || insight.chapterNo || '';
+    const userPrompt = `请帮我针对【${chNum ? chNum + ' ' : ''}${insight.title}】板块进行深度总结与关键指标提炼。`;
 
     setChatMessages(prev => [
       ...prev,
@@ -523,12 +311,14 @@ export default function ReportReaderPage() {
     'sec-ch8': true
   });
 
-  const totalPages = 61;
-  const pagesArray = Array.from({ length: totalPages }, (_, i) => i + 1);
+  const totalPages = report?.total_pages || DEFAULT_REPORT_META?.total_pages || (isXiangyuReport ? 37 : 61);
+  const pagesArray = useMemo(() => Array.from({ length: totalPages }, (_, i) => i + 1), [totalPages]);
 
   useEffect(() => {
     if (reportId) {
       fetchReportDetail();
+    } else {
+      setLoading(false);
     }
   }, [reportId]);
 
@@ -538,16 +328,30 @@ export default function ReportReaderPage() {
       const res = await apiClient.get(`/v1/reports/${reportId}`);
       setReport(res.data || res);
     } catch (err) {
-      // 缺省回退到顺捷实业高保真实时默认数据
-      setReport({
-        id: reportId || 'rep_mock_shunjie',
-        company_name: '东莞市顺捷实业有限公司',
-        credit_code: '91441900MA4W6BGB8T',
-        report_no: 'RNO1881255253482991616',
-        score: 702,
-        risk_level: 'B+',
-        content: { is_locked: false, is_public_only: false }
-      });
+      // 缺省回退
+      if (String(reportId).includes('xiangyu') || String(reportId).includes('agri')) {
+        setReport({
+          id: reportId || 'rpt_xiangyu_agri_001',
+          company_name: '四川享宇科技有限公司',
+          credit_code: '91510100MA6C9XYZ10',
+          report_no: 'XY-AGRI-20260828-001',
+          score: 95,
+          risk_level: 'green',
+          total_pages: 37,
+          content: { is_locked: false, is_public_only: false }
+        });
+      } else {
+        setReport({
+          id: reportId || 'rpt_shunjie_preloan_001',
+          company_name: '东莞市顺捷实业有限公司',
+          credit_code: '91441900MA4W6BGB8T',
+          report_no: 'RNO1881255253482991616',
+          score: 702,
+          risk_level: 'B+',
+          total_pages: 61,
+          content: { is_locked: false, is_public_only: false }
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -599,7 +403,7 @@ export default function ReportReaderPage() {
 
     const targetEl = document.getElementById(`pdf-page-${p}`);
     if (targetEl) {
-      const headerOffset = 135; // 顶部全局导航(64px) + 报告状态栏(56px) + 边距偏移
+      const headerOffset = isOverallAiSummaryOpen ? 240 : 185; // 顶部全局导航(64px) + 报告状态栏(56px) + 吸顶AI智能总结条 + 边距偏移
       const elementPosition = targetEl.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
 
@@ -708,7 +512,7 @@ export default function ReportReaderPage() {
           {/* 右侧：仅保留下载 PDF 原件按钮 */}
           <div className="flex items-center gap-2 shrink-0">
             <a 
-              href="/sample_report.pdf"
+              href={targetPdfUrl}
               download={`${report?.company_name || '企业尽调报告'}.pdf`}
               className="px-4 py-2 rounded-sm bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors whitespace-nowrap cursor-pointer"
             >
@@ -722,33 +526,35 @@ export default function ReportReaderPage() {
       {/* 核心工作台容器 (左侧大纲树 + 右侧高保真无缝文档流，与顶栏严格对齐) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        {/* 左栏：PDF 目录大纲树状导航 (Col 3, 紧凑型 Sticky 侧边栏，支持全区间关联高亮与自动随动) */}
+        {/* 左栏：PDF 目录大纲树状导航 (Col 3, 紧凑型 Sticky 侧边栏，顶部大纲与搜索固定，目录独立滚动) */}
         <aside 
           ref={sidebarNavRef}
-          className="hidden lg:block lg:col-span-3 xl:col-span-3 sticky top-36 bg-white rounded-sm border border-slate-300 shadow-2xs p-3 space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto scroll-smooth"
+          className="hidden lg:flex lg:flex-col lg:col-span-3 xl:col-span-3 sticky top-[125px] bg-white rounded-sm border border-slate-300 shadow-2xs p-3 h-[calc(100vh-145px)] z-20"
         >
-          
-          <div className="pb-2.5 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <Bookmark className="w-4 h-4 text-sky-700" />
-              <span>报告大纲</span>
-            </h3>
+          {/* 1. 固定在顶部的 报告大纲标题 + 搜索章节输入框 */}
+          <div className="shrink-0 space-y-2.5 pb-2.5 border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Bookmark className="w-4 h-4 text-sky-700" />
+                <span>报告大纲</span>
+              </h3>
+            </div>
+
+            {/* 搜索框 */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="搜索章节..."
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-sm focus:outline-none focus:border-sky-600 focus:bg-white transition-colors"
+              />
+            </div>
           </div>
 
-          {/* 搜索框 */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="搜索章节..."
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-sm focus:outline-none focus:border-sky-600 focus:bg-white transition-colors"
-            />
-          </div>
-
-          {/* 目录项列表 */}
-          <nav className="space-y-1 text-xs">
+          {/* 2. 目录项列表 (独立纵向平滑滚动) */}
+          <nav className="flex-1 overflow-y-auto py-2 space-y-1 text-xs scroll-smooth pr-1">
             {PDF_TOC_CATALOG.map((item) => {
               const isExpanded = Boolean(expandedSections[item.id]);
               const isParentActive = activeChapterId === item.id;
@@ -787,7 +593,7 @@ export default function ReportReaderPage() {
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {AI_CHAPTER_INSIGHTS[item.id] && (
+                      {item.has_ai_summary && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -836,9 +642,9 @@ export default function ReportReaderPage() {
             })}
           </nav>
 
-          {/* 底部展开/折叠全部 */}
-          <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-[11px] text-slate-500">
-            <span>共 61 页</span>
+          {/* 3. 固定在底部的 展开/折叠全部 */}
+          <div className="shrink-0 pt-2 border-t border-slate-200 flex justify-between items-center text-[11px] text-slate-500">
+            <span>共 {totalPages} 页</span>
             <button
               onClick={() => {
                 const allOpen = {};
@@ -858,13 +664,13 @@ export default function ReportReaderPage() {
           
           <div className="w-full max-w-[1020px] space-y-6">
             
-            {/* 全景综合尽调 AI 智能总结卡片 (默认收起状态，支持展开查看全景总结与历史记录) */}
-            <div className="bg-white rounded-sm border border-slate-300 shadow-2xs overflow-hidden transition-all">
+            {/* 全景综合尽调 AI 智能总结卡片 (吸顶固定 sticky top-[125px]，支持展开/收起) */}
+            <div className="sticky top-[125px] z-30 bg-white rounded-sm border border-slate-300 shadow-2xs overflow-hidden transition-all">
               
               {/* 顶栏收起/展开控制条 */}
               <div 
                 onClick={() => setIsOverallAiSummaryOpen(!isOverallAiSummaryOpen)}
-                className="px-4 py-3 bg-gradient-to-r from-sky-50 via-white to-sky-50/50 hover:bg-sky-100/50 flex items-center justify-between cursor-pointer border-b border-slate-200 transition-colors"
+                className="px-4 py-2.5 bg-gradient-to-r from-sky-50 via-white to-sky-50/50 hover:bg-sky-100/50 flex items-center justify-between cursor-pointer border-b border-slate-200 transition-colors select-none"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-6 h-6 rounded-xs bg-sky-700 text-white flex items-center justify-center shadow-2xs shrink-0">
@@ -883,9 +689,9 @@ export default function ReportReaderPage() {
                 </div>
               </div>
 
-              {/* 展开后的全景总结内容 (结构化提炼) */}
+              {/* 展开后的全景总结内容 (结构化提炼，支持限制高度并内部滚动) */}
               {isOverallAiSummaryOpen && (
-                <div className="p-5 bg-slate-50/50 space-y-4 text-xs">
+                <div className="p-5 bg-slate-50/50 space-y-4 text-xs max-h-[calc(100vh-220px)] overflow-y-auto">
                   
                   {/* 核心总括 */}
                   <div className="p-3.5 bg-white border border-sky-200 rounded-sm shadow-2xs space-y-1.5">
