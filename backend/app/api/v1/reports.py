@@ -52,19 +52,19 @@ async def get_my_reports(
 
     # 预置多任务预设报告（如果尚未存在）
     existing_companies = [d["company_name"] for d in data]
-    if "四川享宇科技有限公司" not in existing_companies:
+    if "杭州高新智能科技股份有限公司" not in existing_companies:
         data.insert(0, {
-            "id": "rpt_xiangyu_agri_001",
-            "report_no": "XY-AGRI-20260828-001",
-            "task_id": "task_xiangyu",
-            "company_name": "四川享宇科技有限公司",
-            "credit_code": "91510100MA6C9XYZ10",
-            "legal_person": "享宇团队",
+            "id": "rpt_hangzhou_preloan_001",
+            "report_no": "RPT-39P-16320551",
+            "task_id": "task_hangzhou",
+            "company_name": "杭州高新智能科技股份有限公司",
+            "credit_code": "91330100MA28T4998L",
+            "legal_person": "张立明",
             "risk_level": "green",
-            "score": 95,
-            "suggested_quota_min": 800,
-            "suggested_quota_max": 1500,
-            "summary_ai_comment": "数智赋能产业集群 强链兴农助力振兴（数字农业建设方案）",
+            "score": 92,
+            "suggested_quota_min": 600,
+            "suggested_quota_max": 1000,
+            "summary_ai_comment": "贷前综合分析尽调报告（享宇智评版）",
             "is_locked": False,
             "is_public_only": False,
             "created_at": "2026-08-28 10:00:00"
@@ -98,31 +98,31 @@ async def get_report_detail(
     """
     获取单份报告完整内容与双向底稿溯源库（支持三栏阅读器）
     """
-    # 优先匹配四川享宇数字农业方案
-    if report_id == "rpt_xiangyu_agri_001" or "xiangyu" in report_id.lower() or "agri" in report_id.lower():
+    # 优先匹配杭州贷前综合分析报告 (39页)
+    if report_id == "rpt_hangzhou_preloan_001" or "hangzhou" in report_id.lower() or "04182501" in report_id.lower() or "16320551" in report_id.lower():
         return {
             "code": 0,
             "data": {
-                "id": "rpt_xiangyu_agri_001",
-                "report_no": "XY-AGRI-20260828-001",
-                "task_id": "task_xiangyu",
-                "company_name": "四川享宇科技有限公司",
-                "credit_code": "91510100MA6C9XYZ10",
-                "legal_person": "享宇团队",
+                "id": "rpt_hangzhou_preloan_001",
+                "report_no": "RPT-39P-16320551",
+                "task_id": "task_hangzhou",
+                "company_name": "杭州高新智能科技股份有限公司",
+                "credit_code": "91330100MA28T4998L",
+                "legal_person": "张立明",
                 "risk_level": "green",
-                "score": 95,
-                "suggested_quota_min": 800,
-                "suggested_quota_max": 1500,
-                "summary_ai_comment": "数智赋能产业集群 强链兴农助力振兴（数字农业建设方案）",
-                "total_pages": 37,
-                "pdf_url": "/reports/xiangyu_agri.pdf",
+                "score": 92,
+                "suggested_quota_min": 600,
+                "suggested_quota_max": 1000,
+                "summary_ai_comment": "贷前综合分析尽调报告（享宇智评版）",
+                "total_pages": 39,
+                "pdf_url": "/reports/hangzhou_preloan.pdf",
                 "content": {"is_locked": False, "is_public_only": False},
                 "raw_sources": {},
                 "created_at": "2026-08-28 10:00:00"
             }
         }
 
-    # 优先匹配顺捷实业 / 享宇智评贷前报告
+    # 优先匹配顺捷实业 / 享宇智评贷前报告 (61页)
     if report_id == "rpt_shunjie_preloan_001" or "shunjie" in report_id.lower():
         return {
             "code": 0,

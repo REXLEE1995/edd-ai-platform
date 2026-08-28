@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, Search, Filter, RefreshCw, CreditCard } from 'lucide-react';
+import { Receipt, Search, RefreshCw } from 'lucide-react';
 import { message } from 'antd';
 import apiClient from '../../api/client';
 
@@ -39,100 +39,108 @@ export default function AdminOrdersPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
       
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-300">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-200">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2 tracking-tight">
-            <Receipt className="w-6 h-6 text-teal-700" />
+          <h1 className="text-2xl font-bold text-slate-950 flex items-center gap-2 tracking-tight">
+            <Receipt className="w-5 h-5 text-slate-800" />
             线上订单与财务对账
           </h1>
-          <p className="mt-1 text-xs text-slate-500 font-medium">
+          <p className="mt-1 text-xs sm:text-sm text-zinc-500">
             微信/支付宝线上支付流水监控与大客户线下对公转账核销
           </p>
         </div>
 
         <button
+          type="button"
           onClick={fetchOrders}
-          className="p-1.5 rounded-sm bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 border border-slate-300 transition-all shadow-2xs self-start sm:self-auto"
+          className="p-2 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 hover:text-slate-900 transition-colors shadow-2xs self-start sm:self-auto"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
       {/* 检索过滤 */}
-      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white rounded-sm p-3 border border-slate-300 shadow-2xs">
-        <form onSubmit={handleSearch} className="flex items-center w-full sm:w-80 bg-slate-50 rounded-sm px-3 py-2 border border-slate-200 focus-within:border-sky-500 focus-within:bg-white">
-          <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadcn-card bg-white p-3 border border-zinc-200">
+        <form onSubmit={handleSearch} className="flex items-center w-full sm:w-80 bg-white rounded-md px-3 py-2 border border-zinc-200 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10">
+          <Search className="w-4 h-4 text-zinc-400 mr-2 shrink-0" />
           <input
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜索订单号、手机号..."
-            className="w-full bg-transparent border-0 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+            className="w-full bg-transparent border-0 text-xs text-slate-900 placeholder:text-zinc-400 focus:outline-none"
           />
         </form>
 
         <div className="flex items-center space-x-2">
-          <span className="text-xs text-slate-500 font-medium">状态:</span>
-          {['', 'paid', 'pending'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1 rounded-sm text-xs font-bold border transition-all ${
-                statusFilter === st
-                  ? 'bg-sky-50 text-sky-800 border-sky-300'
-                  : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
-              }`}
-            >
-              {st === '' ? '全部' : (st === 'paid' ? '已支付' : '待支付')}
-            </button>
-          ))}
+          <span className="text-xs text-zinc-500 font-medium">状态:</span>
+          <div className="bg-zinc-100 p-1 rounded-lg flex items-center gap-1 border border-zinc-200/80">
+            {['', 'paid', 'pending'].map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setStatusFilter(st)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                  statusFilter === st
+                    ? 'bg-white text-slate-950 font-semibold shadow-xs'
+                    : 'text-zinc-600 hover:text-slate-900'
+                }`}
+              >
+                {st === '' ? '全部' : (st === 'paid' ? '已支付' : '待支付')}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* 订单表格 */}
-      <div className="mt-6 bg-white rounded-sm border border-slate-300 overflow-hidden shadow-2xs">
+      <div className="mt-6 shadcn-card bg-white border border-zinc-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left text-slate-700">
-            <thead className="text-[11px] text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+          <table className="w-full text-xs text-left">
+            <thead className="text-[11px] text-zinc-500 uppercase bg-zinc-50 border-b border-zinc-200 font-semibold tracking-wider">
               <tr>
                 <th className="py-3 px-4">订单号</th>
                 <th className="py-3 px-4">用户手机号</th>
-                <th className="py-3 px-4">套餐名称</th>
-                <th className="py-3 px-4">支付金额</th>
-                <th className="py-3 px-4">点数</th>
-                <th className="py-3 px-4">支付渠道</th>
-                <th className="py-3 px-4">状态</th>
+                <th className="py-3 px-4">购买套餐</th>
+                <th className="py-3 px-4">金额</th>
+                <th className="py-3 px-4">支付方式</th>
+                <th className="py-3 px-4">订单状态</th>
                 <th className="py-3 px-4">下单时间</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-zinc-100">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-slate-400">正在加载订单数据...</td>
+                  <td colSpan="7" className="py-12 text-center text-zinc-400">正在加载订单...</td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-slate-400">暂无订单数据</td>
+                  <td colSpan="7" className="py-12 text-center text-zinc-400">暂无订单数据</td>
                 </tr>
               ) : (
-                orders.map((ord) => (
-                  <tr key={ord.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                    <td className="py-3.5 px-4 font-mono text-slate-500">{ord.order_no}</td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">{ord.user_phone}</td>
-                    <td className="py-3.5 px-4 font-semibold text-slate-800">{ord.package_name}</td>
-                    <td className="py-3.5 px-4 font-mono text-teal-700 font-extrabold text-sm">¥ {ord.amount.toFixed(2)}</td>
-                    <td className="py-3.5 px-4 font-mono text-sky-700 font-bold">+{ord.quota_points} 次</td>
-                    <td className="py-3.5 px-4 text-slate-600">{ord.pay_type === 'wechat' ? '微信支付' : '支付宝'}</td>
+                orders.map((o) => (
+                  <tr key={o.id} className="hover:bg-zinc-50/70 transition-colors">
+                    <td className="py-3.5 px-4 font-mono text-zinc-600">{o.order_no}</td>
+                    <td className="py-3.5 px-4 font-mono text-slate-900 font-medium">{o.user_phone}</td>
+                    <td className="py-3.5 px-4 font-medium text-slate-950">
+                      {o.package_name} (+{o.quota_points || o.quota_count}次)
+                    </td>
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-950">¥{o.amount_cny || o.amount}</td>
+                    <td className="py-3.5 px-4 text-zinc-600">
+                      {o.pay_type === 'wechat' ? '微信支付' : (o.pay_type === 'alipay' ? '支付宝' : '对公转账')}
+                    </td>
                     <td className="py-3.5 px-4">
-                      <span className={`px-2 py-0.5 rounded-xs text-[10px] font-bold ${
-                        ord.status === 'paid' ? 'bg-teal-50 text-teal-800 border border-teal-300' : 'bg-amber-50 text-amber-800 border border-amber-300'
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+                        o.status === 'paid'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {ord.status === 'paid' ? '已支付' : '待支付'}
+                        {o.status === 'paid' ? '已支付' : '待付款'}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">{ord.created_at}</td>
+                    <td className="py-3.5 px-4 font-mono text-zinc-400">{o.created_at}</td>
                   </tr>
                 ))
               )}

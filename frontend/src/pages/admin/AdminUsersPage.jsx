@@ -2,20 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Search, 
-  Filter, 
-  ShieldAlert, 
+  ShieldCheck, 
   Lock, 
   Unlock, 
   KeyRound, 
   Clock, 
-  FileText, 
   Zap, 
-  ArrowRight, 
-  CreditCard, 
-  Building, 
-  Tag
+  CreditCard
 } from 'lucide-react';
-import { message, Drawer, Modal, Input, Select } from 'antd';
+import { message, Drawer, Modal } from 'antd';
 import apiClient from '../../api/client';
 
 export default function AdminUsersPage() {
@@ -154,61 +149,64 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
       
       {/* 头部 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-300">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-200">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2 tracking-tight">
-            <Users className="w-6 h-6 text-sky-700" />
+          <h1 className="text-2xl font-bold text-slate-950 flex items-center gap-2 tracking-tight">
+            <Users className="w-5 h-5 text-slate-800" />
             注册用户全景管理
           </h1>
-          <p className="mt-1 text-xs text-slate-500 font-medium">
+          <p className="mt-1 text-xs sm:text-sm text-zinc-500">
             查看用户画像与资产、调阅历史尽调任务、精准控制额度与账号状态管控
           </p>
         </div>
 
-        <div className="text-xs text-slate-500 font-medium">
-          共收录注册用户: <strong className="text-slate-900 font-mono text-sm font-bold">{total}</strong> 名
+        <div className="text-xs text-zinc-500">
+          共收录注册用户: <strong className="text-slate-950 font-mono text-sm font-bold">{total}</strong> 名
         </div>
       </div>
 
       {/* 检索过滤栏 */}
-      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white rounded-sm p-3 border border-slate-300 shadow-2xs">
-        <form onSubmit={handleSearch} className="flex items-center w-full sm:w-80 bg-slate-50 rounded-sm px-3 py-2 border border-slate-200 focus-within:border-sky-500 focus-within:bg-white">
-          <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadcn-card bg-white p-3 border border-zinc-200">
+        <form onSubmit={handleSearch} className="flex items-center w-full sm:w-80 bg-white rounded-md px-3 py-2 border border-zinc-200 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10">
+          <Search className="w-4 h-4 text-zinc-400 mr-2 shrink-0" />
           <input
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜索手机号、企业主体、UID..."
-            className="w-full bg-transparent border-0 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+            className="w-full bg-transparent border-0 text-xs text-slate-900 placeholder:text-zinc-400 focus:outline-none"
           />
         </form>
 
         <div className="flex items-center space-x-2">
-          <span className="text-xs text-slate-500 shrink-0 font-medium">账号状态:</span>
-          {['', 'active', 'frozen'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1 rounded-sm text-xs font-bold border transition-all ${
-                statusFilter === st
-                  ? 'bg-sky-50 text-sky-800 border-sky-300'
-                  : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
-              }`}
-            >
-              {st === '' ? '全部' : (st === 'active' ? '正常' : '已冻结')}
-            </button>
-          ))}
+          <span className="text-xs text-zinc-500 shrink-0 font-medium">账号状态:</span>
+          <div className="bg-zinc-100 p-1 rounded-lg flex items-center gap-1 border border-zinc-200/80">
+            {['', 'active', 'frozen'].map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setStatusFilter(st)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                  statusFilter === st
+                    ? 'bg-white text-slate-950 font-semibold shadow-xs'
+                    : 'text-zinc-600 hover:text-slate-900'
+                }`}
+              >
+                {st === '' ? '全部' : (st === 'active' ? '正常' : '已冻结')}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* 用户列表表格 */}
-      <div className="mt-6 bg-white rounded-sm border border-slate-300 overflow-hidden shadow-2xs">
+      <div className="mt-6 shadcn-card bg-white border border-zinc-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left text-slate-700">
-            <thead className="text-[11px] text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+          <table className="w-full text-xs text-left">
+            <thead className="text-[11px] text-zinc-500 uppercase bg-zinc-50 border-b border-zinc-200 font-semibold tracking-wider">
               <tr>
                 <th className="py-3 px-4">用户主体 / 手机号</th>
                 <th className="py-3 px-4">认证状态 / 属性</th>
@@ -219,71 +217,77 @@ export default function AdminUsersPage() {
                 <th className="py-3 px-4 text-right">操作</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-zinc-100">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-400">正在加载用户数据...</td>
+                  <td colSpan="7" className="py-12 text-center text-zinc-400">正在加载用户数据...</td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-400">未找到符合条件的用户</td>
+                  <td colSpan="7" className="py-12 text-center text-zinc-400">未找到符合条件的用户</td>
                 </tr>
               ) : (
                 users.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                  <tr key={u.id} className="hover:bg-zinc-50/70 transition-colors">
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-900 font-mono">{u.phone}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{u.id}</div>
+                      <div className="font-bold text-slate-950 font-mono">{u.phone}</div>
+                      <div className="text-[10px] text-zinc-400 font-mono">{u.id}</div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-medium text-slate-800">
+                      <div className="font-medium text-slate-900">
                         {u.is_real_name_verified !== false ? '个人实名用户' : '普通注册用户'}
                       </div>
                       <div className="flex gap-1 mt-1">
-                        <span className={`text-[9px] px-1.5 py-0.2 rounded-xs border ${
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
                           u.is_real_name_verified !== false 
-                            ? 'bg-teal-50 text-teal-800 border-teal-300 font-semibold' 
-                            : 'bg-amber-50 text-amber-800 border-amber-300'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold' 
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
                         }`}>
                           {u.is_real_name_verified !== false ? '公安实名通过' : '未实名'}
                         </span>
-                        {u.tags?.map((t, tidx) => (
-                          <span key={tidx} className="text-[9px] px-1.5 py-0.2 rounded-xs bg-slate-100 text-slate-600 border border-slate-200">
-                            {t}
-                          </span>
-                        ))}
                       </div>
                     </td>
-                    <td className="py-3.5 px-4">
-                      <span className="font-mono text-sm font-extrabold text-sky-700">{u.balance_quota}</span>
-                      <span className="text-[10px] text-slate-500 ml-1">次</span>
+                    <td className="py-3.5 px-4 font-mono">
+                      <span className="text-base font-bold text-slate-950">{u.balance_quota}</span>
+                      <span className="text-[11px] text-zinc-500 ml-1">次</span>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-500">
-                      <div>充: <strong className="text-teal-700 font-mono font-semibold">+{u.total_recharge_quota}</strong></div>
-                      <div>耗: <strong className="text-slate-700 font-mono font-semibold">{u.total_consumed_quota}</strong></div>
+                    <td className="py-3.5 px-4 font-mono text-[11px] text-zinc-600">
+                      <div>充值: <strong className="text-slate-900">+{u.total_recharge_quota}</strong></div>
+                      <div>消耗: <strong className="text-zinc-500">-{u.total_consumed_quota}</strong></div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`px-2 py-0.5 rounded-xs text-[10px] font-bold ${
-                        u.status === 'active' 
-                          ? 'bg-teal-50 text-teal-800 border border-teal-300' 
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+                        u.status === 'active'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-rose-50 text-rose-800 border-rose-200'
                       }`}>
-                        {u.status === 'active' ? '正常' : '已冻结'}
+                        {u.status === 'active' ? '正常运行' : '已被冻结'}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-400 font-mono">{u.created_at}</td>
+                    <td className="py-3.5 px-4 font-mono text-[11px] text-zinc-500">
+                      {u.created_at}
+                    </td>
                     <td className="py-3.5 px-4 text-right space-x-2">
                       <button
+                        type="button"
                         onClick={() => handleOpenDetail(u.id)}
-                        className="px-2.5 py-1 rounded-sm bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-semibold transition-all shadow-2xs"
+                        className="shadcn-button-outline text-xs py-1 px-2.5"
                       >
-                        详情画像
+                        详情
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleOpenAdjustModal(u)}
-                        className="px-2.5 py-1 rounded-sm bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold transition-all shadow-2xs"
+                        className="shadcn-button-primary text-xs py-1 px-2.5"
                       >
                         调额
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFreeze(u.id, u.status)}
+                        className="shadcn-button-outline text-xs py-1 px-2.5 text-rose-700 hover:bg-rose-50"
+                      >
+                        {u.status === 'active' ? '冻结' : '解冻'}
                       </button>
                     </td>
                   </tr>
@@ -294,255 +298,126 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* 用户 360° 详情抽屉 */}
-      <Drawer
-        open={detailDrawerOpen}
-        onClose={() => setDetailDrawerOpen(false)}
-        width={720}
-        title={
-          <span className="text-slate-900 font-extrabold flex items-center gap-2">
-            <Users className="w-5 h-5 text-sky-700" />
-            用户 360° 全景画像与管控
-          </span>
-        }
-      >
-        {selectedUserDetail && (
-          <div className="space-y-6 text-xs text-slate-700 pb-8">
-            
-            {/* 1. 基础档案卡 */}
-            <div className="p-4 rounded-sm bg-slate-50 border border-slate-300 space-y-2 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-900 font-mono">{selectedUserDetail.profile.phone}</span>
-                <span className={`px-2 py-0.5 rounded-xs text-[10px] font-bold ${
-                  selectedUserDetail.profile.status === 'active' ? 'bg-teal-50 text-teal-800 border border-teal-300' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                }`}>
-                  {selectedUserDetail.profile.status === 'active' ? '正常在用' : '已冻结'}
-                </span>
-              </div>
-              <p className="text-slate-500">UID: <span className="font-mono text-slate-800 font-semibold">{selectedUserDetail.profile.id}</span></p>
-              <p className="text-slate-500">实名核验: <span className="text-slate-800 font-semibold">{selectedUserDetail.profile.is_real_name_verified !== false ? '已通过公安个人实名认证 (赠送1次额度)' : '未实名认证'}</span></p>
-              <p className="text-slate-500">注册时间: <span className="text-slate-800 font-mono">{selectedUserDetail.profile.created_at}</span></p>
-            </div>
-
-            {/* 2. 额度资产卡片 */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3.5 rounded-sm bg-sky-50 border border-sky-300 text-center shadow-2xs">
-                <span className="text-slate-500 block text-[11px] font-medium">当前可用额度</span>
-                <span className="text-2xl font-extrabold text-sky-800 font-mono mt-1 block">
-                  {selectedUserDetail.profile.balance_quota} <span className="text-xs font-normal text-slate-400">次</span>
-                </span>
-              </div>
-              <div className="p-3.5 rounded-sm bg-slate-50 border border-slate-300 text-center shadow-2xs">
-                <span className="text-slate-500 block text-[11px] font-medium">累计充值额度</span>
-                <span className="text-xl font-extrabold text-slate-800 font-mono mt-1 block">
-                  {selectedUserDetail.profile.total_recharge_quota} 次
-                </span>
-              </div>
-              <div className="p-3.5 rounded-sm bg-slate-50 border border-slate-300 text-center shadow-2xs">
-                <span className="text-slate-500 block text-[11px] font-medium">累计尽调消耗</span>
-                <span className="text-xl font-extrabold text-slate-800 font-mono mt-1 block">
-                  {selectedUserDetail.profile.total_consumed_quota} 次
-                </span>
-              </div>
-            </div>
-
-            {/* 3. 快捷状态管控操作栏 */}
-            <div className="p-4 rounded-sm bg-slate-50 border border-slate-300 flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleToggleFreeze(selectedUserDetail.profile.id, selectedUserDetail.profile.status)}
-                  className={`px-3 py-1.5 rounded-sm text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs ${
-                    selectedUserDetail.profile.status === 'active'
-                      ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
-                      : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-300'
-                  }`}
-                >
-                  {selectedUserDetail.profile.status === 'active' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                  {selectedUserDetail.profile.status === 'active' ? '一键冻结账户' : '一键解除冻结'}
-                </button>
-
-                <button
-                  onClick={() => handleResetPassword(selectedUserDetail.profile.id)}
-                  className="px-3 py-1.5 rounded-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  重置密码
-                </button>
-              </div>
-
-              <button
-                onClick={() => handleOpenAdjustModal(selectedUserDetail.profile)}
-                className="px-3.5 py-1.5 rounded-sm bg-sky-700 text-white hover:bg-sky-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                手动调额
-              </button>
-            </div>
-
-            {/* 4. 该用户关联发起的尽调任务 */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-900 mb-2 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-sky-700" />
-                该用户发起的尽调任务 ({selectedUserDetail.tasks?.length || 0})
-              </h4>
-              <div className="space-y-2">
-                {selectedUserDetail.tasks?.length === 0 ? (
-                  <div className="p-4 bg-slate-50 rounded-sm border border-slate-200 text-center text-slate-400">暂无任务记录</div>
-                ) : (
-                  selectedUserDetail.tasks.map((t) => (
-                    <div key={t.id} className="p-3 rounded-sm bg-white border border-slate-300 flex items-center justify-between shadow-2xs">
-                      <div>
-                        <div className="font-bold text-slate-900">{t.company_name}</div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                          {t.task_no} · {t.created_at}
-                        </div>
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-xs font-bold bg-teal-50 text-teal-800 border border-teal-300">
-                        {t.status === 'completed' ? '已生成报告' : t.status}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* 5. 最近额度变动流水 */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-900 mb-2 flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-teal-700" />
-                最近额度变动流水 (前10条)
-              </h4>
-              <div className="space-y-1.5">
-                {selectedUserDetail.recent_transactions?.map((tx) => (
-                  <div key={tx.id} className="p-2.5 rounded-sm bg-white border border-slate-300 text-[11px] flex items-center justify-between shadow-2xs">
-                    <div>
-                      <span className="text-slate-800 font-semibold">{tx.remark}</span>
-                      <span className="text-slate-400 ml-2 font-mono">[{tx.operator_name}]</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`font-mono font-bold ${tx.amount > 0 ? 'text-teal-700' : 'text-rose-600'}`}>
-                        {tx.amount > 0 ? `+${tx.amount}` : tx.amount}
-                      </span>
-                      <span className="text-slate-500 font-mono">({tx.balance_after}次)</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        )}
-      </Drawer>
-
-      {/* 人工调额弹窗 */}
+      {/* 调额弹窗 (shadcn Dialog) */}
       <Modal
         open={adjustModalOpen}
         onCancel={() => setAdjustModalOpen(false)}
         footer={null}
-        title={
-          <span className="text-slate-900 font-bold flex items-center gap-2">
-            <Zap className="w-4 h-4 text-sky-700" />
-            管理员人工精准调额 (带凭证审计)
-          </span>
-        }
+        width={480}
+        centered
+        destroyOnClose
       >
         {adjustingUser && (
-          <div className="py-4 space-y-4 text-xs text-slate-700">
-            <div className="p-3 rounded-sm bg-slate-50 border border-slate-300 flex justify-between items-center shadow-2xs">
-              <div>
-                <span className="text-slate-500 block font-medium">调额目标用户:</span>
-                <span className="text-sm font-bold text-slate-900 font-mono">{adjustingUser.phone}</span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-500 block font-medium">当前可用额度:</span>
-                <span className="text-base font-extrabold text-sky-700 font-mono">{adjustingUser.balance_quota} 次</span>
-              </div>
+          <div className="space-y-4 pt-1">
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-bold text-slate-950 tracking-tight">人工精准调额</h3>
+              <p className="text-xs text-zinc-500">
+                目标账号: <strong className="font-mono text-slate-900">{adjustingUser.phone}</strong> (当前结余: {adjustingUser.balance_quota} 次)
+              </p>
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">调额方式</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { key: 'add', label: '增加额度 (+)' },
-                  { key: 'sub', label: '核减额度 (-)' },
-                  { key: 'set', label: '重置为指定值 (=)' }
-                ].map((m) => (
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-medium text-slate-700">调额方向</label>
+                <div className="grid grid-cols-2 gap-2">
                   <button
-                    key={m.key}
                     type="button"
-                    onClick={() => setAdjustType(m.key)}
-                    className={`py-2 rounded-sm font-bold border transition-all ${
-                      adjustType === m.key
-                        ? 'bg-sky-50 text-sky-800 border-sky-300'
-                        : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                    onClick={() => setAdjustType('add')}
+                    className={`py-2 rounded-md font-semibold border transition-all ${
+                      adjustType === 'add' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-zinc-200'
                     }`}
                   >
-                    {m.label}
+                    增加额度 (+)
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setAdjustType('deduct')}
+                    className={`py-2 rounded-md font-semibold border transition-all ${
+                      adjustType === 'deduct' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-zinc-200'
+                    }`}
+                  >
+                    扣减额度 (-)
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">变动数值 (点数/次)</label>
-              <input
-                type="number"
-                min="1"
-                value={adjustAmount}
-                onChange={(e) => setAdjustAmount(e.target.value)}
-                className="w-full bg-slate-50 rounded-sm px-3 py-2 border border-slate-300 text-sm text-slate-900 font-mono focus:outline-none focus:border-sky-500 focus:bg-white"
-              />
-            </div>
+              <div className="space-y-1">
+                <label className="font-medium text-slate-700">变动点数 (次)</label>
+                <input
+                  type="number"
+                  value={adjustAmount}
+                  onChange={(e) => setAdjustAmount(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 text-xs font-mono font-bold"
+                  min={1}
+                />
+              </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">调额原因分类 (必选)</label>
-              <select
-                value={adjustReasonCategory}
-                onChange={(e) => setAdjustReasonCategory(e.target.value)}
-                className="w-full bg-slate-50 rounded-sm px-3 py-2 border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-sky-500 focus:bg-white"
-              >
-                <option value="offline_payment">线下对公打款入账</option>
-                <option value="business_gift">商务大客户合作赠送</option>
-                <option value="customer_compensation">系统异常客诉补偿</option>
-                <option value="manual_correction">误操作调账核减</option>
-                <option value="internal_test">内部联调测试</option>
-              </select>
-            </div>
+              <div className="space-y-1">
+                <label className="font-medium text-slate-700">调额背景及原因</label>
+                <textarea
+                  rows={3}
+                  value={adjustRemark}
+                  onChange={(e) => setAdjustRemark(e.target.value)}
+                  placeholder="请详细说明调额背景（如：对公汇款核销、客诉补偿）..."
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 text-xs"
+                />
+              </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">关联打款流水号 / 合同号凭证 (选填)</label>
-              <input
-                type="text"
-                value={adjustProofNo}
-                onChange={(e) => setAdjustProofNo(e.target.value)}
-                placeholder="如银行回单号：招行99882312、合同编号"
-                className="w-full bg-slate-50 rounded-sm px-3 py-2 border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-sky-500 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">详细调额背景与说明 (不少于5字)</label>
-              <textarea
-                rows="3"
-                value={adjustRemark}
-                onChange={(e) => setAdjustRemark(e.target.value)}
-                placeholder="请详述本次人工调额的原因背景..."
-                className="w-full bg-slate-50 rounded-sm p-3 border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-sky-500 focus:bg-white"
-              />
-            </div>
-
-            <div className="pt-3">
               <button
-                onClick={handleSubmitAdjust}
+                type="button"
                 disabled={submittingAdjust}
-                className="w-full py-2.5 rounded-sm bg-sky-700 hover:bg-sky-800 text-xs font-bold text-white shadow-2xs transition-all disabled:opacity-50"
+                onClick={handleSubmitAdjust}
+                className="shadcn-button-primary w-full py-2.5 text-xs font-semibold mt-2"
               >
-                {submittingAdjust ? '提交审核调额中...' : '确认执行人工调额'}
+                {submittingAdjust ? '提交调额事务中...' : '确认执行调额'}
               </button>
             </div>
           </div>
         )}
       </Modal>
+
+      {/* 用户 360° 详情抽屉 (shadcn Sheet) */}
+      <Drawer
+        open={detailDrawerOpen}
+        onClose={() => setDetailDrawerOpen(false)}
+        width={540}
+        title={
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <Users className="w-4 h-4 text-slate-800" />
+            用户 360° 全景资产与画像
+          </div>
+        }
+      >
+        {selectedUserDetail && (
+          <div className="space-y-6 text-xs text-slate-900">
+            <div className="shadcn-card bg-zinc-50 p-4 space-y-2 border border-zinc-200">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-slate-950">{selectedUserDetail.user.phone}</span>
+                <span className="shadcn-badge-secondary">{selectedUserDetail.user.id}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-zinc-600">
+                <div>可用额度: <strong className="text-slate-950 font-mono">{selectedUserDetail.user.balance_quota} 次</strong></div>
+                <div>累计充值: <strong className="text-slate-950 font-mono">{selectedUserDetail.user.total_recharge_quota} 次</strong></div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-bold text-slate-900">历史尽调任务 ({selectedUserDetail.tasks?.length || 0})</h4>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {selectedUserDetail.tasks?.map((t) => (
+                  <div key={t.id} className="p-3 bg-white border border-zinc-200 rounded-lg space-y-1">
+                    <div className="font-semibold text-slate-950">{t.company_name}</div>
+                    <div className="flex justify-between text-zinc-500 font-mono text-[11px]">
+                      <span>状态: {t.status}</span>
+                      <span>{t.created_at}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Drawer>
 
     </div>
   );
