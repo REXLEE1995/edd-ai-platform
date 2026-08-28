@@ -11,6 +11,8 @@ from app.models.quota import QuotaTransaction
 from app.models.task import DDTask
 from app.models.report import DDReport
 from app.models.order import Order
+from app.models.file_record import TaskFile
+from app.models.third_party_api import SysThirdPartyApi
 
 # 确保 SQLite 本地数据目录存在并使用绝对路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -46,12 +48,29 @@ async def get_db():
         finally:
             await session.close()
 
+from sqlalchemy import text
+
 async def init_db():
     """
     初始化数据库表结构与预置种子数据 (仅在首次启动时执行)
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # 兼容 SQLite 表结构自动升级新增字段
+        migration_sqls = [
+            "ALTER TABLE dd_tasks ADD COLUMN wfq_order_no VARCHAR(100);",
+            "ALTER TABLE dd_tasks ADD COLUMN wfq_request_no VARCHAR(100);",
+            "ALTER TABLE dd_tasks ADD COLUMN wfq_pdf_url VARCHAR(1000);",
+            "ALTER TABLE dd_tasks ADD COLUMN storage_file_id VARCHAR(36);",
+            "ALTER TABLE dd_reports ADD COLUMN storage_file_id VARCHAR(36);",
+            "ALTER TABLE dd_reports ADD COLUMN pdf_file_path VARCHAR(500);"
+        ]
+        for sql in migration_sqls:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass  # 字段已存在则忽略
     
     async with AsyncSessionLocal() as session:
         # 1. 检查并创建超管账号
@@ -75,6 +94,85 @@ async def init_db():
             session.add_all([super_admin, op_admin])
             await session.commit()
             print(">>> [DB Init] 预置管理后台账号: admin / admin123")
+
+        # 1.1 检查并初始化三方接口字典表 (SysThirdPartyApi)
+        res_api = await session.execute(select(SysThirdPartyApi).limit(1))
+        if not res_api.scalar_one_or_none():
+            default_apis = [
+                SysThirdPartyApi(
+                    id="api-wfq-auth",
+                    api_code="WFQ_AUTH",
+                    api_name="微风企获取法人授权链接接口",
+                    provider_name="weifengqi",
+                    call_mode="mock",
+                    endpoint_url="http://127.0.0.1:8010/model/wfq/auth",
+                    http_method="POST",
+                    lifecycle_type="interactive_interrupt",
+                    auth_params={"prodId": "WFQ_AUTH", "token": "J0xmJ1ux1eHrkINt"},
+                    timeout_seconds=15,
+                    is_enabled=True,
+                    remark="获取企业专属 H5 实名数据授权页面 URL 及微风企外部单号"
+                ),
+                SysThirdPartyApi(
+                    id="api-wfq-status",
+                    api_code="WFQ_REPORT_STATUS",
+                    api_name="微风企贷前报告生成状态查询接口",
+                    provider_name="weifengqi",
+                    call_mode="mock",
+                    endpoint_url="http://127.0.0.1:8010/model/wfq/report/status",
+                    http_method="POST",
+                    lifecycle_type="direct_fetch",
+                    auth_params={"prodId": "WFQ_STATUS", "token": "J0xmJ1ux1eHrkINt"},
+                    timeout_seconds=15,
+                    is_enabled=True,
+                    remark="轮询或确认微风企贷前报告是否已生成就绪 (isReady=true)"
+                ),
+                SysThirdPartyApi(
+                    id="api-wfq-pdf",
+                    api_code="WFQ_REPORT_PDF_URL",
+                    api_name="微风企贷前报告 PDF 下载地址获取接口",
+                    provider_name="weifengqi",
+                    call_mode="mock",
+                    endpoint_url="http://127.0.0.1:8010/model/wfq/report/pdf-url",
+                    http_method="POST",
+                    lifecycle_type="direct_fetch",
+                    auth_params={"prodId": "WFQ_REPORT_PDF", "token": "J0xmJ1ux1eHrkINt"},
+                    timeout_seconds=15,
+                    is_enabled=True,
+                    remark="获取微风企高保真 PDF 报告下载地址，通过文件存储服务持久化存证"
+                ),
+                SysThirdPartyApi(
+                    id="api-ic-data",
+                    api_code="IC_ENTERPRISE",
+                    api_name="企业工商全息数据中台接口",
+                    provider_name="enterprise_ic",
+                    call_mode="mock",
+                    endpoint_url="https://api.enterprise-data.com/ic/v1",
+                    http_method="GET",
+                    lifecycle_type="direct_fetch",
+                    auth_params={"appKey": "your_ic_data_app_key"},
+                    timeout_seconds=15,
+                    is_enabled=True,
+                    remark="获取企业照面、股东股权穿透、董监高与15项变更轨迹"
+                ),
+                SysThirdPartyApi(
+                    id="api-risk-data",
+                    api_code="RISK_RADAR",
+                    api_name="企业经营与司法合规风险雷达接口",
+                    provider_name="risk_radar",
+                    call_mode="mock",
+                    endpoint_url="https://api.risk-radar.com/v1",
+                    http_method="GET",
+                    lifecycle_type="direct_fetch",
+                    auth_params={"appKey": "your_risk_radar_app_key"},
+                    timeout_seconds=15,
+                    is_enabled=True,
+                    remark="全网排查司法涉诉、失信被执行人黑名单一票否决与行政处罚"
+                ),
+            ]
+            session.add_all(default_apis)
+            await session.commit()
+            print(">>> [DB Init] 预置三方接口字典表 (微风企授权/状态/PDF、工商中台、风险雷达)！")
 
         # 2. 检查并创建默认演示前台注册用户
         result_user = await session.execute(select(User).where(User.phone == "13800138000"))

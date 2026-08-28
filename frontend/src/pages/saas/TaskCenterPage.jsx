@@ -419,7 +419,7 @@ export default function TaskCenterPage() {
         title={
           <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
             <QrCode className="w-4 h-4 text-sky-700" />
-            企业金税发票与财税申报授权通道
+            企业实名数据授权通道
           </div>
         }
         width={480}
@@ -427,13 +427,13 @@ export default function TaskCenterPage() {
         {selectedTaskForAuth && (
           <div className="py-4 text-center space-y-4 text-slate-800">
             <p className="text-xs text-slate-600">
-              请使用企业法定代表人微信扫描下方二维码完成实名认证与金税授权：
+              请使用企业法定代表人微信扫描下方二维码或点击复制链接发送给接收人完成实名数据授权：
             </p>
 
             <div className="inline-block p-3 bg-white border border-slate-300 rounded-sm shadow-2xs">
               <img 
                 src={selectedTaskForAuth.auth_qrcode_url} 
-                alt="企业金税授权二维码"
+                alt="企业数据授权二维码"
                 className="w-48 h-48 mx-auto" 
               />
             </div>
@@ -449,16 +449,16 @@ export default function TaskCenterPage() {
                   navigator.clipboard.writeText(selectedTaskForAuth.auth_link);
                   message.success('授权链接已复制！');
                 }}
-                className="px-4 py-2 rounded-sm bg-white border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                className="px-4 py-2 rounded-sm bg-white border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 复制授权链接
               </button>
 
               <button
                 onClick={() => handleSimulateAuth(selectedTaskForAuth.id)}
-                className="px-4 py-2 rounded-sm bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold transition-colors shadow-2xs"
+                className="px-4 py-2 rounded-sm bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
               >
-                模拟法人一键授权通过
+                一键确认授权通过
               </button>
             </div>
           </div>

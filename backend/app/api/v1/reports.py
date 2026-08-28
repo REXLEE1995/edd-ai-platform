@@ -126,19 +126,62 @@ async def unlock_report_with_quota(
     }
 
 
+import os
+import urllib.parse
+from app.services.file_storage_service import FileStorageService
+
 @router.get("/{report_id}/pdf")
 async def get_report_pdf_file(
     report_id: str,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    获取或在线预览对应尽调报告的原始高保真 PDF 文件
+    获取或在线预览对应尽调报告的原始高保真 PDF 文件 (从文件存储服务安全调取)
     """
-    pdf_sample_path = "/Users/barry/Desktop/Obsidian/XYSY/ai-report/贷前报告样例-新.pdf"
-    if os.path.exists(pdf_sample_path):
+    # 1. 查询报告记录
+    result = await db.execute(
+        select(DDReport).where((DDReport.id == report_id) | (DDReport.report_no == report_id))
+    )
+    r = result.scalar_one_or_none()
+
+    target_pdf_path = None
+    display_filename = f"微风企尽调报告_{report_id}.pdf"
+
+    if r:
+        display_filename = f"微风企贷前报告_{r.company_name}.pdf"
+        if r.pdf_file_path and os.path.exists(r.pdf_file_path):
+            target_pdf_path = r.pdf_file_path
+        elif r.storage_file_id:
+            file_rec = await FileStorageService.get_file_by_id(db, r.storage_file_id)
+            if file_rec and os.path.exists(file_rec.file_path):
+                target_pdf_path = file_rec.file_path
+        
+        if not target_pdf_path and r.task_id:
+            file_rec = await FileStorageService.get_file_by_task_id(db, r.task_id)
+            if file_rec and os.path.exists(file_rec.file_path):
+                target_pdf_path = file_rec.file_path
+
+    # 2. 兜底策略：查找工程内内置样本 PDF
+    if not target_pdf_path or not os.path.exists(target_pdf_path):
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        candidates = [
+            os.path.join(base_dir, "wfqmockserver", "贷前报告样例-享宇智评版.pdf"),
+            os.path.join(base_dir, "frontend", "public", "sample_report.pdf"),
+        ]
+        for c_path in candidates:
+            if os.path.exists(c_path):
+                target_pdf_path = c_path
+                break
+
+    if target_pdf_path and os.path.exists(target_pdf_path):
+        encoded_filename = urllib.parse.quote(display_filename)
         return FileResponse(
-            pdf_sample_path, 
-            media_type="application/pdf", 
-            filename=f"享宇智评尽调报告_{report_id}.pdf"
+            path=target_pdf_path,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Allow-Origin": "*"
+            }
         )
-    raise HTTPException(status_code=404, detail="PDF 文件不存在")
+
+    raise HTTPException(status_code=404, detail="PDF 报告存证文件不存在")
