@@ -97,3 +97,15 @@ class DDReport(Base, TimestampMixin):
         nullable=False,
         comment="微风企税务纳税申报表、发票抽样明细与多头借贷征信原始申报底稿溯源库 JSON"
     )
+
+    # 关联物理文件存储
+    storage_file_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        nullable=True,
+        comment="关联的文件服务记录 ID (TaskFile.id)"
+    )
+    pdf_file_path: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="报告 PDF 本地持久化文件路径"
+    )

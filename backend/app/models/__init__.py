@@ -6,6 +6,8 @@ from app.models.task import DDTask
 from app.models.report import DDReport
 from app.models.order import Order, Invoice
 from app.models.audit import AdminAuditLog
+from app.models.file_record import TaskFile
+from app.models.third_party_api import SysThirdPartyApi
 
 __all__ = [
     "Base",
@@ -18,4 +20,6 @@ __all__ = [
     "Order",
     "Invoice",
     "AdminAuditLog",
+    "TaskFile",
+    "SysThirdPartyApi",
 ]

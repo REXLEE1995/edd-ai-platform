@@ -21,9 +21,9 @@ class Settings(BaseSettings):
     # 模式可选: "mock" (本地多场景拟真) | "http" (真实三方接口发起网络调用)
     # ==========================================
     
-    # 1. 微风企数据接口 (Weifengqi API - 税务申报、发票切片)
+    # 1. 微风企数据接口 (Weifengqi API - 授权、状态、PDF与税务底稿)
     WEIFENGQI_MODE: str = "mock"
-    WEIFENGQI_BASE_URL: str = "https://api.weifengqi.com/v1"
+    WEIFENGQI_BASE_URL: str = "http://127.0.0.1:8010"
     WEIFENGQI_APP_KEY: str = ""
     WEIFENGQI_APP_SECRET: str = ""
     WEIFENGQI_TIMEOUT_SECONDS: int = 15

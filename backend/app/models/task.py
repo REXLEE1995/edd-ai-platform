@@ -79,10 +79,14 @@ class DDTask(Base, TimestampMixin):
         comment="任务生命周期状态: waiting_auth(等待法人授权) / pulling_data(拉取数据中) / ai_analyzing(AI大模型推理中) / completed(已完成) / failed(异常终止) / cancelled(已取消)"
     )
     auth_status: Mapped[str] = mapped_column(
-        String(30), 
+        String(50), 
         default="pending", 
-        nullable=False,
-        comment="微风企法人授权状态: pending(待签署) / authorized(已授权签署) / expired(已超时)"
+        comment="授权状态: pending (待授权) / authorized (已完成授权)"
+    )
+    authorized_at: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="法人首次完成实名授权的时间戳字符串 (如 2026-08-28 14:16:30)"
     )
     auth_qrcode_url: Mapped[Optional[str]] = mapped_column(
         String(500), 
@@ -119,6 +123,29 @@ class DDTask(Base, TimestampMixin):
         nullable=True,
         comment="若任务异常终止时的错误原因详情"
     )
+    # 微风企接口单号与取数关联
+    wfq_order_no: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="微风企外部业务订单号 (orderNo)"
+    )
+    wfq_request_no: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="微风企外部请求流水号 (requestNo)"
+    )
+    wfq_pdf_url: Mapped[Optional[str]] = mapped_column(
+        String(1000),
+        nullable=True,
+        comment="微风企返回的原始远程报告 PDF 下载地址"
+    )
+    storage_file_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        nullable=True,
+        comment="文件服务中存储的 PDF 文件 ID (TaskFile.id)"
+    )
+
     completed_at: Mapped[Optional[str]] = mapped_column(
         String(50), 
         nullable=True,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -23,7 +23,10 @@ import {
   Truck,
   BarChart3,
   Users,
-  Bookmark
+  Bookmark,
+  Edit3,
+  Hash,
+  UserCheck
 } from 'lucide-react';
 import { message } from 'antd';
 import apiClient from '../../api/client';
@@ -36,8 +39,6 @@ export default function DDHomePage() {
 
   const [companyName, setCompanyName] = useState('');
   const [creditCode, setCreditCode] = useState('');
-  const [legalPerson, setLegalPerson] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -45,35 +46,20 @@ export default function DDHomePage() {
       const p = location.state.prefillCompany;
       setCompanyName(p.company_name || '');
       setCreditCode(p.credit_code || '91440300MA5EXXXX99');
-      setLegalPerson(p.legal_person || '法定代表人');
     }
   }, [location.state]);
 
-  const handleSearchChange = async (e) => {
-    const val = e.target.value;
-    setCompanyName(val);
-    if (val.trim().length >= 1) {
-      try {
-        const res = await apiClient.get(`/v1/search/companies?keyword=${encodeURIComponent(val)}`);
-        setSearchResults(res.data || []);
-      } catch (err) {
-        console.error(err);
-      }
-    } else {
-      setSearchResults([]);
-    }
-  };
-
-  const handleSelectCompany = (comp) => {
-    setCompanyName(comp.company_name);
-    setCreditCode(comp.credit_code);
-    setLegalPerson(comp.legal_person);
-    setSearchResults([]);
-  };
-
   const handleStartDD = async () => {
-    if (!companyName.trim()) {
-      message.warning('请输入目标企业全称或统一信用代码');
+    const trimmedName = companyName.trim();
+    const trimmedCode = creditCode.trim();
+
+    if (!trimmedName) {
+      message.warning('请输入目标企业全称');
+      return;
+    }
+
+    if (!trimmedCode) {
+      message.warning('请输入企业统一社会信用代码 (18位)');
       return;
     }
 
@@ -95,16 +81,16 @@ export default function DDHomePage() {
       ];
 
       const res = await apiClient.post('/v1/tasks/create', {
-        company_name: companyName,
-        credit_code: creditCode || `91440300MA5${Math.floor(Math.random()*900000000+100000000)}X`,
-        legal_person: legalPerson || '张法定',
+        company_name: trimmedName,
+        credit_code: trimmedCode,
+        legal_person: '法定代表人',
         scene: 'bank_credit',
         dimensions: dimensions,
         auth_mode: 'weifengqi_qr'
       });
 
       if (res.code === 0) {
-        message.success('尽调任务发起成功！已扣减 1 次尽调额度，请让企业法定代表人完成扫码授权');
+        message.success('尽调任务发起成功！已生成专属授权链接，请让企业法人完成扫码授权');
         refreshUserProfile();
         navigate('/app/tasks?tab=tasks');
       }
@@ -133,7 +119,7 @@ export default function DDHomePage() {
             发起企业深度尽调任务
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            企业法人授权接入，全量调阅企业工商、司法、股权与经营合规全景尽调报告
+            全量调阅企业工商、司法、股权与经营合规全景尽调报告
           </p>
         </div>
 
@@ -181,61 +167,73 @@ export default function DDHomePage() {
 
       <div className="mt-6 space-y-6">
         
-        {/* 1. 目标企业输入 */}
-        <div className="bg-white rounded-sm p-6 border border-slate-300 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-            <label className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-sky-700" />
-              1. 目标企业主体 (中台模糊联想匹配)
-            </label>
-            <span className="text-xs text-slate-400 font-mono">STEP 01</span>
-          </div>
-          
-          <div className="relative pt-1">
-            <div className="flex items-center bg-slate-50 border border-slate-300 rounded-sm px-3.5 py-2.5 focus-within:border-sky-600 focus-within:bg-white transition-colors">
-              <Search className="w-4 h-4 text-slate-400 mr-2.5 shrink-0" />
-              <input
-                type="text"
-                value={companyName}
-                onChange={handleSearchChange}
-                placeholder="输入企业全称或统一信用代码（如：东莞市顺捷实业、深圳腾讯前海、享宇数科）..."
-                className="w-full bg-transparent border-0 text-sm text-slate-800 placeholder-slate-400 focus:outline-none"
-              />
+        {/* 1. 目标企业主体与统一信用代码 */}
+        <div className="bg-white rounded-sm p-6 border border-slate-300 shadow-xs space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+            <div>
+              <label className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-sky-700" />
+                1. 目标企业主体与统一社会信用代码
+              </label>
+              <p className="text-xs text-slate-500 mt-0.5">
+                请准确输入接入尽调的企业全称与 18 位统一社会信用代码
+              </p>
             </div>
+            <span className="text-xs font-mono font-bold text-sky-800 bg-sky-50 px-2.5 py-1 rounded-sm border border-sky-200">
+              STEP 01
+            </span>
+          </div>
 
-            {/* 联想下拉菜单 */}
-            {searchResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-sm shadow-lg border border-slate-300 overflow-hidden z-50 divide-y divide-slate-100">
-                <div className="p-2.5 text-xs text-slate-500 font-semibold bg-slate-50">
-                  匹配到企业主体库（点击快捷填入）：
+          {/* 突出的双核心输入区域 */}
+          <div className="p-5 sm:p-6 bg-gradient-to-r from-sky-50/50 via-slate-50/80 to-sky-50/30 rounded-md border-2 border-sky-100 shadow-2xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+              {/* 企业全称 */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    企业全称 <span className="text-rose-500 font-extrabold text-base">*</span>
+                  </span>
+                  <span className="text-2xs text-slate-400 font-normal">须与营业执照完全一致</span>
+                </label>
+                <div className="flex items-center bg-white border-2 border-slate-300 rounded-sm px-4 py-3 focus-within:border-sky-600 focus-within:ring-3 focus-within:ring-sky-100 transition-all shadow-2xs">
+                  <Building className="w-4 h-4 text-sky-700 mr-3 shrink-0" />
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="请输入企业全称（如：东莞市顺捷实业有限公司）"
+                    className="w-full bg-transparent border-0 text-sm sm:text-base text-slate-900 font-bold focus:outline-none placeholder:text-slate-400 placeholder:font-normal placeholder:text-xs"
+                  />
                 </div>
-                {searchResults.map((item, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => handleSelectCompany(item)}
-                    className="p-3.5 hover:bg-sky-50 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-slate-900">{item.company_name}</span>
-                      <span className="text-xs text-sky-800 font-mono font-semibold px-2 py-0.5 rounded-xs bg-sky-50 border border-sky-300">
-                        法人: {item.legal_person}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500 font-mono">
-                      统一社会信用代码: {item.credit_code}
-                    </div>
-                  </div>
-                ))}
               </div>
-            )}
-          </div>
 
-          {creditCode && (
-            <div className="p-3.5 rounded-sm bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between text-xs text-slate-700 font-mono">
-              <span>已绑定统一代码: <strong className="text-slate-900">{creditCode}</strong></span>
-              <span>法定代表人: <strong className="text-slate-900">{legalPerson || '已核验'}</strong></span>
+              {/* 统一社会信用代码 */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    统一社会信用代码 (18位) <span className="text-rose-500 font-extrabold text-base">*</span>
+                  </span>
+                  <span className="text-2xs text-slate-400 font-normal">18位大写英数混编</span>
+                </label>
+                <div className="flex items-center bg-white border-2 border-slate-300 rounded-sm px-4 py-3 focus-within:border-sky-600 focus-within:ring-3 focus-within:ring-sky-100 transition-all shadow-2xs">
+                  <Hash className="w-4 h-4 text-sky-700 mr-3 shrink-0" />
+                  <input
+                    type="text"
+                    value={creditCode}
+                    onChange={(e) => setCreditCode(e.target.value.toUpperCase())}
+                    placeholder="如：91441900MA4UQ8888X"
+                    className="w-full bg-transparent border-0 text-sm sm:text-base text-slate-900 font-mono font-extrabold tracking-wider focus:outline-none placeholder:text-slate-400 placeholder:font-normal placeholder:text-xs"
+                    maxLength={18}
+                  />
+                </div>
+              </div>
             </div>
-          )}
+
+            <div className="mt-4 pt-3 border-t border-sky-100/80 text-xs text-slate-600 flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+              <span>提示：请仔细核对上述企业全称与统一社会信用代码，确认无误后点击下方按钮发起全景尽调。系统将对接微风企金税网关与工商全息数据源。</span>
+            </div>
+          </div>
         </div>
 
         {/* 2. 企业数据授权全量接入清单 */}
@@ -278,7 +276,7 @@ export default function DDHomePage() {
             
             <div className="p-3 bg-sky-50/70 border border-sky-200 rounded-sm text-xs text-sky-950 flex items-center gap-2">
               <QrCode className="w-4 h-4 text-sky-700 shrink-0" />
-              <span>【授权流说明】任务发起后将生成专属授权二维码，企业法人微信扫码确认后，平台将全自动调阅生成企业全景尽调报告。</span>
+              <span>【授权说明】任务发起后将实时生成专属授权链接与二维码，支持复制分享或由企业法定代表人微信扫码确认授权。</span>
             </div>
           </div>
         </div>
@@ -286,7 +284,7 @@ export default function DDHomePage() {
         {/* 3. 一键发起按钮栏 */}
         <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <span className="text-xs text-slate-500">
-            消耗规则：消耗 <strong className="text-slate-900 font-semibold">1 次尽调额度 = 生成 1 份终身有效报告</strong>（深度整合全维数据中台，永久归档免费复查）
+            消耗规则：消耗 <strong className="text-slate-900 font-semibold">1 次尽调额度 = 生成 1 份终身有效报告</strong>（深度整合金税与全维数据中台）
           </span>
 
           <button
