@@ -189,7 +189,7 @@ export default function TaskCenterPage() {
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
       
       {/* 头部标题与操作 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-300">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-slate-950 flex items-center gap-2 tracking-tight">
             <Clock className="w-5 h-5 text-slate-800" />
@@ -209,7 +209,7 @@ export default function TaskCenterPage() {
             }}
             className="shadcn-button-outline text-xs py-1.5 px-3"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
+            <RefreshCw className="w-3.5 h-3.5 text-zinc-500" />
             刷新
           </button>
 
@@ -224,14 +224,14 @@ export default function TaskCenterPage() {
       </div>
 
       {/* shadcn Tabs 胶囊切换栏 */}
-      <div className="mt-6 flex items-center bg-zinc-100 p-1 rounded-lg w-fit border border-zinc-200/80">
+      <div className="mt-6 flex items-center bg-zinc-100 p-1 rounded-lg w-fit border border-slate-300 shadow-2xs">
         <button
           type="button"
           onClick={() => switchTab('tasks')}
           className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'tasks'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs'
-              : 'text-zinc-600 hover:text-slate-900'
+              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-slate-300'
+              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
           <Activity className="w-3.5 h-3.5 text-slate-700" />
@@ -248,8 +248,8 @@ export default function TaskCenterPage() {
           onClick={() => switchTab('reports')}
           className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'reports'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs'
-              : 'text-zinc-600 hover:text-slate-900'
+              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-slate-300'
+              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
           <FileText className="w-3.5 h-3.5 text-slate-700" />
@@ -265,7 +265,7 @@ export default function TaskCenterPage() {
           {loadingTasks ? (
             <div className="text-center py-16 text-zinc-400 text-sm">正在加载进行中的尽调任务...</div>
           ) : activeTasks.length === 0 ? (
-            <div className="shadcn-card p-12 text-center bg-white space-y-4">
+            <div className="shadcn-card p-12 text-center bg-white space-y-4 border border-slate-300 shadow-xs">
               <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-slate-900">当前暂无进行中的尽调任务</h3>
@@ -293,10 +293,10 @@ export default function TaskCenterPage() {
             </div>
           ) : (
             activeTasks.map((task) => (
-              <div key={task.id} className="shadcn-card p-6 bg-white space-y-4">
+              <div key={task.id} className="shadcn-card p-6 bg-white space-y-4 border border-slate-300 shadow-xs">
                 
                 {/* 头部企业与状态栏 */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
                   <div className="space-y-1">
                     <div className="flex items-center gap-3">
                       <h3 className="text-base font-bold text-slate-900">{task.company_name}</h3>
@@ -316,7 +316,7 @@ export default function TaskCenterPage() {
                       <button
                         type="button"
                         onClick={() => setSelectedTaskForAuth(task)}
-                        className="shadcn-button-outline text-xs py-1.5 px-3 bg-amber-50/50 border-amber-200 text-amber-900 hover:bg-amber-100/50"
+                        className="shadcn-button-outline text-xs py-1.5 px-3 bg-amber-50/50 border-amber-300 text-amber-900 hover:bg-amber-100/50"
                       >
                         <QrCode className="w-3.5 h-3.5 text-amber-700" />
                         扫码授权协同
@@ -327,7 +327,7 @@ export default function TaskCenterPage() {
 
                 {/* 进行中状态提示条 */}
                 {(task.status === 'pulling_data' || task.status === 'ai_analyzing') && (
-                  <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between text-xs text-slate-900">
+                  <div className="p-4 rounded-lg bg-zinc-50 border border-slate-300 flex items-center justify-between text-xs text-slate-900">
                     <div className="flex items-center gap-2.5">
                       <Sparkles className="w-4 h-4 text-slate-800 shrink-0 animate-spin" />
                       <span className="text-zinc-700">正在调用享宇数据中台聚合工商主体、司法合规与金税发票数据，并执行 AI 深度量化研判，完成后将自动移入【历史尽调报告资产库】...</span>
@@ -349,8 +349,8 @@ export default function TaskCenterPage() {
         <div className="mt-6 space-y-4">
           
           {/* 检索过滤条 */}
-          <div className="shadcn-card p-3 bg-white">
-            <form onSubmit={(e) => { e.preventDefault(); fetchReports(); }} className="flex items-center w-full bg-zinc-50 rounded-md px-3.5 py-2 border border-zinc-200 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10 transition-all">
+          <div className="shadcn-card p-3 bg-white border border-slate-300 shadow-xs">
+            <form onSubmit={(e) => { e.preventDefault(); fetchReports(); }} className="flex items-center w-full bg-zinc-50 rounded-md px-3.5 py-2 border border-slate-300 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10 transition-all">
               <Search className="w-4 h-4 text-zinc-400 mr-2.5 shrink-0" />
               <input
                 type="text"
@@ -381,7 +381,7 @@ export default function TaskCenterPage() {
           {loadingReports ? (
             <div className="text-center py-16 text-zinc-400 text-sm">正在加载企业尽调报告...</div>
           ) : reports.length === 0 ? (
-            <div className="shadcn-card p-12 text-center bg-white space-y-3">
+            <div className="shadcn-card p-12 text-center bg-white space-y-3 border border-slate-300 shadow-xs">
               <FileText className="w-10 h-10 text-zinc-300 mx-auto" />
               <h3 className="text-base font-bold text-slate-900">未检索到历史尽调报告</h3>
               <p className="text-xs text-zinc-500">发起新尽调并完成法人授权后，生成的报告将永久留存于此资产库中。</p>
@@ -389,7 +389,7 @@ export default function TaskCenterPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4">
               {reports.map((report) => (
-                <div key={report.id} className="shadcn-card-hover p-6 bg-white space-y-4">
+                <div key={report.id} className="shadcn-card-hover p-6 bg-white space-y-4 border border-slate-300 shadow-xs">
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                     <div className="space-y-1.5">
                       <div className="flex flex-wrap items-center gap-3">
@@ -425,7 +425,7 @@ export default function TaskCenterPage() {
 
                   {/* AI 综合画像速览 */}
                   {report.ai_summary && (
-                    <div className="p-3.5 bg-zinc-50/70 rounded-lg border border-zinc-200/80 text-xs text-zinc-700 leading-relaxed">
+                    <div className="p-3.5 bg-zinc-50/80 rounded-lg border border-slate-300 text-xs text-zinc-700 leading-relaxed shadow-2xs">
                       <div className="font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                         AI 全景综合画像结论:

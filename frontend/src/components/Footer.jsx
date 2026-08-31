@@ -3,7 +3,7 @@ import { Shield, Lock, FileCheck } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="border-t border-zinc-200 bg-white py-12 mt-16 text-xs text-zinc-500">
+    <footer className="border-t border-slate-300 bg-white py-12 mt-16 text-xs text-zinc-500">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
           <div className="space-y-3">
@@ -52,7 +52,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="pt-6 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between text-zinc-400 text-xs">
+        <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-zinc-400 text-xs">
           <p>© 2026 享宇智评 XY AI Platform. All rights reserved. 四川享宇科技有限公司自研技术中台</p>
           <div className="flex space-x-6 mt-3 sm:mt-0">
             <span className="hover:text-zinc-700 cursor-pointer transition-colors">用户服务协议</span>

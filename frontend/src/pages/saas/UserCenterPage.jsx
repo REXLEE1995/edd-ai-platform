@@ -194,7 +194,7 @@ export default function UserCenterPage() {
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
       
       {/* 头部个人基本信息卡片 (shadcn Card) */}
-      <div className="shadcn-card bg-white p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="shadcn-card bg-white p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-300 shadow-xs">
         <div className="flex items-center space-x-4">
           <div className={`w-12 h-12 rounded-xl text-white flex items-center justify-center font-bold text-xl shadow-2xs ${
             isRealNameVerified ? 'bg-slate-900' : 'bg-zinc-500'
@@ -215,7 +215,7 @@ export default function UserCenterPage() {
                   实名认证已通过
                 </span>
               ) : (
-                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-amber-800 px-2.5 py-0.5 text-xs font-medium gap-1">
+                <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 text-amber-800 px-2.5 py-0.5 text-xs font-medium gap-1">
                   <AlertTriangle className="w-3.5 h-3.5" />
                   未实名认证
                 </span>
@@ -230,7 +230,7 @@ export default function UserCenterPage() {
         </div>
 
         {/* 快捷额度卡 */}
-        <div className="flex items-center gap-4 bg-zinc-50/80 p-3 rounded-lg border border-zinc-200 self-start md:self-auto">
+        <div className="flex items-center gap-4 bg-zinc-50/90 p-3 rounded-lg border border-slate-300 self-start md:self-auto shadow-2xs">
           <div className="text-right">
             <span className="text-xs text-zinc-500 block">可用尽调额度</span>
             <span className="text-2xl font-bold text-slate-950 font-mono leading-none">
@@ -249,14 +249,14 @@ export default function UserCenterPage() {
       </div>
 
       {/* Tab 导航栏 (shadcn 胶囊风格) */}
-      <div className="mt-6 flex items-center bg-zinc-100 p-1 rounded-lg w-fit border border-zinc-200/80">
+      <div className="mt-6 flex items-center bg-zinc-100 p-1 rounded-lg w-fit border border-slate-300 shadow-2xs">
         <button
           type="button"
           onClick={() => switchTab('profile')}
           className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'profile'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs'
-              : 'text-zinc-600 hover:text-slate-900'
+              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-slate-300'
+              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
           <User className="w-3.5 h-3.5 text-slate-700" />
@@ -268,8 +268,8 @@ export default function UserCenterPage() {
           onClick={() => switchTab('billing')}
           className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'billing'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs'
-              : 'text-zinc-600 hover:text-slate-900'
+              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-slate-300'
+              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
           <Zap className="w-3.5 h-3.5 text-slate-700" />
@@ -281,8 +281,8 @@ export default function UserCenterPage() {
           onClick={() => switchTab('transactions')}
           className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'transactions'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs'
-              : 'text-zinc-600 hover:text-slate-900'
+              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-slate-300'
+              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
           <Receipt className="w-3.5 h-3.5 text-slate-700" />
@@ -296,8 +296,8 @@ export default function UserCenterPage() {
       {activeTab === 'profile' && (
         <div className="mt-6 space-y-6">
           
-          <div className="shadcn-card bg-white p-6 space-y-4">
-            <div className="pb-3 border-b border-zinc-100 flex items-center justify-between">
+          <div className="shadcn-card bg-white p-6 space-y-4 border border-slate-300 shadow-xs">
+            <div className="pb-3 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-slate-800" />
                 个人实名认证与账户资料
@@ -307,7 +307,7 @@ export default function UserCenterPage() {
                   个人公安实名已核身
                 </span>
               ) : (
-                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-amber-800 px-2.5 py-0.5 text-xs font-medium">
+                <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 text-amber-800 px-2.5 py-0.5 text-xs font-medium">
                   未完成实名认证 (不可发起尽调)
                 </span>
               )}
@@ -321,7 +321,7 @@ export default function UserCenterPage() {
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
                   placeholder="请输入您的真实姓名..."
-                  className="w-full px-3.5 py-2 bg-white border border-zinc-200 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none text-slate-900 text-xs font-medium transition-all"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none text-slate-900 text-xs font-medium transition-all"
                 />
               </div>
 
@@ -331,7 +331,7 @@ export default function UserCenterPage() {
                   type="text"
                   disabled
                   value={user?.phone || '13800138000'}
-                  className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-md text-zinc-500 font-mono text-xs cursor-not-allowed"
+                  className="w-full px-3.5 py-2 bg-zinc-100 border border-slate-300 rounded-md text-zinc-500 font-mono text-xs cursor-not-allowed"
                 />
               </div>
 
@@ -341,7 +341,7 @@ export default function UserCenterPage() {
                   type="text"
                   disabled
                   value="居民身份证"
-                  className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-md text-zinc-500 text-xs cursor-not-allowed font-medium"
+                  className="w-full px-3.5 py-2 bg-zinc-100 border border-slate-300 rounded-md text-zinc-500 text-xs cursor-not-allowed font-medium"
                 />
               </div>
 
@@ -355,14 +355,14 @@ export default function UserCenterPage() {
                   value={isRealNameVerified ? '440301********1234' : idCardNumber}
                   onChange={(e) => setIdCardNumber(e.target.value)}
                   placeholder="请输入18位居民身份证号码..."
-                  className={`w-full px-3.5 py-2 border border-zinc-200 rounded-md font-mono text-xs ${
-                    isRealNameVerified ? 'bg-zinc-50 text-zinc-500 cursor-not-allowed' : 'bg-white focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none'
+                  className={`w-full px-3.5 py-2 border border-slate-300 rounded-md font-mono text-xs ${
+                    isRealNameVerified ? 'bg-zinc-100 text-zinc-500 cursor-not-allowed' : 'bg-white focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none'
                   }`}
                 />
               </div>
 
               {isRealNameVerified ? (
-                <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-lg text-emerald-950 text-xs flex items-start gap-2.5">
+                <div className="p-3.5 bg-emerald-50/80 border border-emerald-300 rounded-lg text-emerald-950 text-xs flex items-start gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
                     <p className="font-semibold">实名认证权益已生效：</p>
@@ -372,7 +372,7 @@ export default function UserCenterPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-lg text-amber-950 text-xs flex items-start gap-2.5">
+                <div className="p-3.5 bg-amber-50/80 border border-amber-300 rounded-lg text-amber-950 text-xs flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
                     <p className="font-semibold">⚠️ 尚未完成实名认证提示：</p>
@@ -397,7 +397,7 @@ export default function UserCenterPage() {
                     <button
                       type="button"
                       onClick={handleCancelRealName}
-                      className="shadcn-button-outline text-xs py-2 px-4 text-amber-900 border-amber-200 bg-amber-50 hover:bg-amber-100/50"
+                      className="shadcn-button-outline text-xs py-2 px-4 text-amber-900 border-amber-300 bg-amber-50 hover:bg-amber-100/50"
                       title="点击模拟未实名认证状态，便于测试未认证场景"
                     >
                       <XCircle className="w-3.5 h-3.5 text-amber-600" />
@@ -418,8 +418,8 @@ export default function UserCenterPage() {
           </div>
 
           {/* 安全与登录密码修改 */}
-          <div className="shadcn-card bg-white p-6 space-y-4">
-            <div className="pb-3 border-b border-zinc-100 flex items-center justify-between">
+          <div className="shadcn-card bg-white p-6 space-y-4 border border-slate-300 shadow-xs">
+            <div className="pb-3 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Lock className="w-4 h-4 text-slate-800" />
                 账户登录密码安全
@@ -434,7 +434,7 @@ export default function UserCenterPage() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="请输入新密码..."
-                  className="w-full px-3.5 py-2 bg-white border border-zinc-200 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none text-slate-900 text-xs font-mono transition-all"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none text-slate-900 text-xs font-mono transition-all"
                 />
               </div>
 
@@ -445,7 +445,7 @@ export default function UserCenterPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="请再次输入新密码..."
-                  className="w-full px-3.5 py-2 bg-white border border-zinc-200 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none text-slate-900 text-xs font-mono transition-all"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 focus:outline-none text-slate-900 text-xs font-mono transition-all"
                 />
               </div>
 
@@ -472,32 +472,32 @@ export default function UserCenterPage() {
           
           {/* 额度 4 宫格概览 (shadcn Stat Cards) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="shadcn-card p-5 bg-white space-y-1 border border-zinc-200">
-              <span className="text-xs text-zinc-500 font-medium block">当前可用尽调额度</span>
+            <div className="shadcn-card p-5 bg-white space-y-1 border border-slate-300 shadow-xs">
+              <span className="text-xs text-zinc-500 font-semibold block">当前可用尽调额度</span>
               <span className="text-3xl font-bold text-slate-950 font-mono block mt-1">
                 {isRealNameVerified ? (user?.balance_quota ?? 57) : Math.max(0, (user?.balance_quota ?? 57) - 1)}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
               </span>
             </div>
 
-            <div className="shadcn-card p-5 bg-white space-y-1 border border-zinc-200">
-              <span className="text-xs text-zinc-500 font-medium block">累计购买充值额度</span>
+            <div className="shadcn-card p-5 bg-white space-y-1 border border-slate-300 shadow-xs">
+              <span className="text-xs text-zinc-500 font-semibold block">累计购买充值额度</span>
               <span className="text-2xl font-bold text-slate-950 font-mono block mt-1">
                 {summary?.total_recharge_quota ?? 80}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
               </span>
             </div>
 
-            <div className="shadcn-card p-5 bg-white space-y-1 border border-zinc-200">
-              <span className="text-xs text-zinc-500 font-medium block">累计已消耗尽调</span>
+            <div className="shadcn-card p-5 bg-white space-y-1 border border-slate-300 shadow-xs">
+              <span className="text-xs text-zinc-500 font-semibold block">累计已消耗尽调</span>
               <span className="text-2xl font-bold text-slate-950 font-mono block mt-1">
                 {summary?.total_consumed_quota ?? 24}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
               </span>
             </div>
 
-            <div className="shadcn-card p-5 bg-white space-y-1 border border-zinc-200">
-              <span className="text-xs text-zinc-500 font-medium block">实名赠送额度</span>
+            <div className="shadcn-card p-5 bg-white space-y-1 border border-slate-300 shadow-xs">
+              <span className="text-xs text-zinc-500 font-semibold block">实名赠送额度</span>
               <span className="text-2xl font-bold text-emerald-700 font-mono block mt-1">
                 {isRealNameVerified ? 1 : 0}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
@@ -506,11 +506,11 @@ export default function UserCenterPage() {
           </div>
 
           {/* 1 次尽调额度 = 1 份完整报告 看板 */}
-          <div className="shadcn-card bg-white p-6 space-y-5 border border-zinc-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100">
+          <div className="shadcn-card bg-white p-6 space-y-5 border border-slate-300 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
                     透明计费说明
                   </span>
                   <h3 className="text-sm font-bold text-slate-900">
@@ -522,7 +522,7 @@ export default function UserCenterPage() {
                 </p>
               </div>
 
-              <div className="text-right sm:border-l sm:border-zinc-200 sm:pl-5 shrink-0 font-mono">
+              <div className="text-right sm:border-l sm:border-slate-300 sm:pl-5 shrink-0 font-mono">
                 <span className="text-xs text-zinc-400 block line-through">市面独立采购成本: ¥85~125/家</span>
                 <span className="text-xs font-bold text-slate-900 block mt-0.5">享宇智评 仅耗 1 次 (低至 ¥22.5/份)</span>
               </div>
@@ -530,7 +530,7 @@ export default function UserCenterPage() {
 
             {/* 多维数据体系 3 宫格拆解 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="p-3.5 bg-zinc-50/70 rounded-lg border border-zinc-200 space-y-1">
+              <div className="p-3.5 bg-zinc-50/80 rounded-lg border border-slate-300 space-y-1 shadow-2xs">
                 <div className="font-bold text-slate-900 flex items-center justify-between">
                   <span>市监工商与股权治理</span>
                   <span className="text-zinc-400 font-mono text-[10px]">自研中台</span>
@@ -540,7 +540,7 @@ export default function UserCenterPage() {
                 </p>
               </div>
 
-              <div className="p-3.5 bg-zinc-50/70 rounded-lg border border-zinc-200 space-y-1">
+              <div className="p-3.5 bg-zinc-50/80 rounded-lg border border-slate-300 space-y-1 shadow-2xs">
                 <div className="font-bold text-slate-900 flex items-center justify-between">
                   <span>司法涉诉与合规监管</span>
                   <span className="text-zinc-400 font-mono text-[10px]">实时穿透</span>
@@ -550,7 +550,7 @@ export default function UserCenterPage() {
                 </p>
               </div>
 
-              <div className="p-3.5 bg-zinc-100/80 rounded-lg border border-zinc-200 space-y-1">
+              <div className="p-3.5 bg-zinc-100/90 rounded-lg border border-slate-300 space-y-1 shadow-2xs">
                 <div className="font-bold text-slate-900 flex items-center justify-between">
                   <span>企业全景尽调报告</span>
                   <span className="text-slate-800 font-mono text-[10px]">享宇智评</span>
@@ -563,7 +563,7 @@ export default function UserCenterPage() {
           </div>
 
           {/* 赠送额度与充值机制说明 */}
-          <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 flex items-start gap-3 text-xs text-slate-900">
+          <div className="p-4 rounded-xl bg-zinc-50 border border-slate-300 flex items-start gap-3 text-xs text-slate-900 shadow-2xs">
             <Gift className="w-5 h-5 text-slate-800 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <div className="font-bold text-sm text-slate-950">
@@ -577,7 +577,7 @@ export default function UserCenterPage() {
 
           {/* 3 档商业化加油包 */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-slate-800" />
                 选择尽调加油包套餐 (按次计费 · 永久有效)
@@ -594,7 +594,7 @@ export default function UserCenterPage() {
                     className={`shadcn-card bg-white p-6 flex flex-col justify-between space-y-6 transition-all ${
                       isPopular
                         ? 'border-2 border-slate-900 shadow-md relative'
-                        : 'border-zinc-200 hover:border-zinc-300'
+                        : 'border-slate-300 hover:border-slate-400'
                     }`}
                   >
                     {isPopular && (
@@ -609,7 +609,7 @@ export default function UserCenterPage() {
                         <p className="text-xs text-zinc-500 mt-1 leading-relaxed">{pkg.desc || pkg.description}</p>
                       </div>
 
-                      <div className="pt-3 border-t border-zinc-100 font-mono">
+                      <div className="pt-3 border-t border-slate-200 font-mono">
                         <div className="flex items-baseline gap-1">
                           <span className="text-sm font-bold text-slate-600">¥</span>
                           <span className="text-3xl font-extrabold text-slate-950">{pkg.price || pkg.price_cny}</span>
@@ -625,7 +625,7 @@ export default function UserCenterPage() {
                       </div>
 
                       {pkg.features && (
-                        <ul className="space-y-2 text-xs text-zinc-700 pt-3 border-t border-zinc-100">
+                        <ul className="space-y-2 text-xs text-zinc-700 pt-3 border-t border-slate-200">
                           {pkg.features.map((feat, fIdx) => (
                             <li key={fIdx} className="flex items-center gap-2">
                               <CheckCircle2 className="w-3.5 h-3.5 text-slate-900 shrink-0" />
@@ -661,8 +661,8 @@ export default function UserCenterPage() {
       {/* ========================================================================= */}
       {activeTab === 'transactions' && (
         <div className="mt-6 space-y-4">
-          <div className="shadcn-card bg-white p-6 space-y-4 border border-zinc-200">
-            <div className="pb-3 border-b border-zinc-100 flex items-center justify-between">
+          <div className="shadcn-card bg-white p-6 space-y-4 border border-slate-300 shadow-xs">
+            <div className="pb-3 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Receipt className="w-4 h-4 text-slate-800" />
                 额度变动账单与消耗明细
@@ -681,9 +681,9 @@ export default function UserCenterPage() {
             ) : transactions.length === 0 ? (
               <div className="text-center py-12 text-zinc-400 text-sm">暂无额度变动明细</div>
             ) : (
-              <div className="overflow-x-auto border border-zinc-200 rounded-lg">
-                <table className="w-full text-xs text-left divide-y divide-zinc-100">
-                  <thead className="bg-zinc-50 text-zinc-500 font-semibold uppercase tracking-wider text-[11px]">
+              <div className="overflow-x-auto border border-slate-300 rounded-lg shadow-2xs">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-zinc-50 text-slate-700 font-semibold uppercase tracking-wider text-[11px] border-b-2 border-slate-300">
                     <tr>
                       <th className="py-3 px-4">流水号</th>
                       <th className="py-3 px-4">变动类型</th>
@@ -693,9 +693,9 @@ export default function UserCenterPage() {
                       <th className="py-3 px-4">时间</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
+                  <tbody className="divide-y divide-slate-200 bg-white">
                     {transactions.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-zinc-50/70 transition-colors">
+                      <tr key={tx.id} className="hover:bg-zinc-50/80 transition-colors">
                         <td className="py-3 px-4 font-mono text-zinc-500">{tx.tx_no || tx.id}</td>
                         <td className="py-3 px-4 font-medium text-slate-900">
                           {tx.change_type === 'recharge' ? '🟢 购买充值' : (tx.change_type === 'consume' ? '🔴 尽调消耗' : '🎁 实名赠送')}
@@ -736,8 +736,8 @@ export default function UserCenterPage() {
               </p>
             </div>
 
-            <div className="bg-zinc-50 p-6 rounded-xl border border-zinc-200 text-center space-y-3">
-              <div className="w-40 h-40 mx-auto bg-white p-2 border border-zinc-200 rounded-lg shadow-2xs flex items-center justify-center">
+            <div className="bg-zinc-50 p-6 rounded-xl border border-slate-300 text-center space-y-3 shadow-2xs">
+              <div className="w-40 h-40 mx-auto bg-white p-2 border border-slate-300 rounded-lg shadow-2xs flex items-center justify-center">
                 <img src={payingOrder.pay_qrcode_url} alt="支付二维码" className="w-full h-full object-contain" />
               </div>
               <div className="font-mono">
@@ -752,7 +752,7 @@ export default function UserCenterPage() {
                 type="button"
                 onClick={handleMockPaySuccess}
                 disabled={isProcessingPay}
-                className="shadcn-button-primary w-full py-2.5 text-xs font-semibold"
+                className="shadcn-button-primary w-full py-2.5 text-xs font-semibold shadow-xs"
               >
                 {isProcessingPay ? '正在结算入账...' : '⚡ 模拟微信扫码支付成功 (开发测试通道)'}
               </button>

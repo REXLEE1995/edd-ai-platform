@@ -38,12 +38,11 @@ wheels/
 backend/.env
 
 # Local Databases & Logs
-*.db
 *.sqlite
 *.sqlite3
-backend/data/*.db
-data/
 *.log
+backend/data/edd_dev.db
+
 
 # IDE & OS
 .vscode/

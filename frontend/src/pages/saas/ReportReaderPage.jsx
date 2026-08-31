@@ -139,14 +139,14 @@ function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
     <div 
       ref={containerRef}
       id={`pdf-page-${pageNum}`}
-      className={`bg-white rounded-sm border shadow-2xs overflow-hidden transition-all duration-300 relative ${
-        isCurrentVisible ? 'border-sky-500 ring-2 ring-sky-300/40' : 'border-slate-300'
+      className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all duration-300 relative ${
+        isCurrentVisible ? 'border-slate-900 ring-2 ring-slate-900/20 shadow-md' : 'border-slate-300'
       }`}
     >
       {/* 单页头部页码标尺 (企业全景尽调规范) */}
-      <div className="px-4 py-2 bg-slate-900 text-white flex items-center justify-between text-xs border-b border-slate-800 select-none">
+      <div className="px-4 py-2 bg-slate-950 text-white flex items-center justify-between text-xs border-b border-slate-800 select-none">
         <div className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-xs bg-sky-600 text-white flex items-center justify-center font-mono font-bold text-[10px]">
+          <span className="w-5 h-5 rounded-md bg-slate-800 text-white flex items-center justify-center font-mono font-bold text-[10px] border border-slate-700">
             {String(pageNum).padStart(2, '0')}
           </span>
           <span className="font-bold tracking-wide">
@@ -638,7 +638,7 @@ export default function ReportReaderPage() {
     <div className="min-h-screen bg-[#fafafa] text-slate-900 antialiased pb-28">
       
       {/* 顶部公文状态栏 (PC 紧凑固定导航，吸附在主Navbar下方) */}
-      <header className="sticky top-14 z-40 border-b border-zinc-200 bg-white/85 backdrop-blur-md shadow-2xs">
+      <header className="sticky top-14 z-40 border-b border-slate-300 bg-white/95 backdrop-blur-md shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
           
           {/* 左侧：返回 + 企业名称与统一社会信用代码 */}
@@ -652,7 +652,7 @@ export default function ReportReaderPage() {
               <span>返回</span>
             </Link>
 
-            <div className="h-5 w-px bg-zinc-200 shrink-0"></div>
+            <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
             <div className="min-w-0 flex items-baseline gap-3 flex-wrap">
               <h1 className="font-bold text-base sm:text-lg text-slate-950 tracking-tight truncate">
@@ -669,7 +669,7 @@ export default function ReportReaderPage() {
             <a 
               href={targetPdfUrl}
               download={`${report?.company_name || '企业尽调报告'}.pdf`}
-              className="shadcn-button-primary text-xs py-1.5 px-3.5 whitespace-nowrap"
+              className="shadcn-button-primary text-xs py-1.5 px-3.5 whitespace-nowrap shadow-xs"
             >
               <Download className="w-3.5 h-3.5" />
               <span>下载 PDF 原件</span>
@@ -684,10 +684,10 @@ export default function ReportReaderPage() {
         {/* 左栏：PDF 目录大纲树状导航 (Col 3, 紧凑型 Sticky 侧边栏，顶部大纲与搜索固定，目录独立滚动) */}
         <aside 
           ref={sidebarNavRef}
-          className="hidden lg:flex lg:flex-col lg:col-span-3 xl:col-span-3 sticky top-[115px] bg-white rounded-xl border border-zinc-200 shadow-xs p-3.5 h-[calc(100vh-135px)] z-20"
+          className="hidden lg:flex lg:flex-col lg:col-span-3 xl:col-span-3 sticky top-[115px] bg-white rounded-xl border border-slate-300 shadow-xs p-3.5 h-[calc(100vh-135px)] z-20"
         >
           {/* 1. 固定在顶部的 报告大纲标题 + 搜索章节输入框 */}
-          <div className="shrink-0 space-y-2.5 pb-3 border-b border-zinc-100">
+          <div className="shrink-0 space-y-2.5 pb-3 border-b border-slate-200">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
                 <Bookmark className="w-3.5 h-3.5 text-slate-800" />
@@ -703,7 +703,7 @@ export default function ReportReaderPage() {
                 placeholder="搜索章节..."
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-md focus:outline-none focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 transition-all placeholder:text-zinc-400"
+                className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-zinc-50 border border-slate-300 rounded-md focus:outline-none focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 transition-all placeholder:text-zinc-400"
               />
             </div>
           </div>
@@ -729,7 +729,7 @@ export default function ReportReaderPage() {
                     onClick={() => jumpToPage(item.page)}
                     className={`w-full text-left px-2 py-1.5 rounded-md font-medium transition-all flex items-center justify-between cursor-pointer group ${
                       isParentActive 
-                        ? 'bg-slate-100 text-slate-950 font-semibold shadow-2xs border-l-2 border-slate-900 pl-2' 
+                        ? 'bg-slate-100 text-slate-950 font-semibold shadow-2xs border-l-3 border-slate-900 pl-2' 
                         : 'text-zinc-700 hover:text-slate-950 hover:bg-zinc-50'
                     }`}
                   >
@@ -756,7 +756,7 @@ export default function ReportReaderPage() {
                             e.stopPropagation();
                             handleOpenAiChapter(item.id);
                           }}
-                          className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center gap-0.5 transition-all border border-amber-200 shadow-2xs"
+                          className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center gap-0.5 transition-all border border-amber-300 shadow-2xs"
                           title="点击查看此板块 AI 深度总结"
                         >
                           <Sparkles className="w-2.5 h-2.5 text-amber-600 animate-pulse" />
@@ -771,7 +771,7 @@ export default function ReportReaderPage() {
 
                   {/* 二级子目录 (展开显示，支持区间范围持续关联高亮) */}
                   {hasChildren && isExpanded && (
-                    <div className="pl-5 pr-1 py-0.5 space-y-0.5 border-l border-zinc-200 ml-3">
+                    <div className="pl-5 pr-1 py-0.5 space-y-0.5 border-l border-slate-300 ml-3">
                       {item.children.map(sub => {
                         const isSubActive = isParentActive && activeSubId === sub.id;
                         return (
@@ -799,7 +799,7 @@ export default function ReportReaderPage() {
           </nav>
 
           {/* 3. 固定在底部的 展开/折叠全部 */}
-          <div className="shrink-0 pt-2 border-t border-zinc-100 flex justify-between items-center text-[11px] text-zinc-500">
+          <div className="shrink-0 pt-2 border-t border-slate-200 flex justify-between items-center text-[11px] text-zinc-500">
             <span>共 {totalPages} 页</span>
             <button
               type="button"
@@ -827,12 +827,12 @@ export default function ReportReaderPage() {
           <div className="w-full max-w-[1020px] space-y-6">
             
             {/* 全景综合尽调 AI 智能总结卡片 (吸顶固定 sticky top-[115px]，支持展开/收起) */}
-            <div className="shadcn-card sticky top-[115px] z-30 bg-white overflow-hidden shadow-xs border border-zinc-200 transition-all">
+            <div className="shadcn-card sticky top-[115px] z-30 bg-white overflow-hidden shadow-xs border border-slate-300 transition-all">
               
               {/* 顶栏收起/展开控制条 */}
               <div 
                 onClick={() => setIsOverallAiSummaryOpen(!isOverallAiSummaryOpen)}
-                className="px-4 py-3 bg-zinc-50/80 hover:bg-zinc-100/60 flex items-center justify-between cursor-pointer border-b border-zinc-100 transition-colors select-none"
+                className="px-4 py-3 bg-zinc-50/90 hover:bg-zinc-100/80 flex items-center justify-between cursor-pointer border-b border-slate-200 transition-colors select-none"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-6 h-6 rounded-md bg-slate-900 text-white flex items-center justify-center shadow-2xs shrink-0">
@@ -853,10 +853,10 @@ export default function ReportReaderPage() {
 
               {/* 展开后的全景总结内容 */}
               {isOverallAiSummaryOpen && (
-                <div className="p-5 bg-white space-y-4 text-xs max-h-[calc(100vh-200px)] overflow-y-auto">
+                <div className="p-5 bg-white space-y-4 text-xs max-h-[calc(100vh-200px)] overflow-y-auto border-t border-slate-200">
                   
                   {/* 核心总括 */}
-                  <div className="p-4 bg-zinc-50 rounded-lg border border-zinc-200 space-y-1.5">
+                  <div className="p-4 bg-zinc-50 rounded-lg border border-slate-300 space-y-1.5">
                     <strong className="text-slate-950 block text-xs flex items-center gap-1.5 font-bold">
                       <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                       企业信用全景综合画像：
@@ -867,8 +867,8 @@ export default function ReportReaderPage() {
                   </div>
 
                   {/* 全景深度研判要点 */}
-                  <div className="space-y-2.5 p-4 bg-zinc-50/70 border border-zinc-200 rounded-lg">
-                    <strong className="text-xs font-bold text-slate-950 block flex items-center gap-1.5 border-b border-zinc-200/80 pb-2">
+                  <div className="space-y-2.5 p-4 bg-zinc-50/80 border border-slate-300 rounded-lg">
+                    <strong className="text-xs font-bold text-slate-950 block flex items-center gap-1.5 border-b border-slate-200 pb-2">
                       <span className="w-1.5 h-3 bg-slate-900 rounded-full"></span>
                       📑 全景深度研判要点与风控审查结论：
                     </strong>
@@ -878,7 +878,7 @@ export default function ReportReaderPage() {
                         "【经营与涉税】近 12 个月有效销项开票 4063.73 万元，红废比仅 0.42%，36 个月涉税申报矩阵 100% 正常无偷漏税记录。",
                         "【司法与合规】全国失信被执行人及限高记录为 0，历史涉诉案件已完全出清合规，环保与市监处罚记录为 0。"
                       ]).map((kp, idx) => (
-                        <div key={idx} className="flex items-start gap-2.5 leading-relaxed bg-white p-3 rounded-md border border-zinc-200/80">
+                        <div key={idx} className="flex items-start gap-2.5 leading-relaxed bg-white p-3 rounded-md border border-slate-300 shadow-2xs">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-900 shrink-0 mt-1.5"></span>
                           <span className="leading-relaxed text-zinc-800">{kp}</span>
                         </div>
