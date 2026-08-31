@@ -8,26 +8,38 @@ export const AuthProvider = ({ children }) => {
   const [admin, setAdmin] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 初始化加载当前用户与管理员信息
+  // 初始化加载当前用户与管理员信息 (仅在存在对应凭证时静默刷新，避免控制台 401 告警)
   const refreshUserProfile = async () => {
+    const token = localStorage.getItem('edd_user_token');
+    if (!token) return;
     try {
       const res = await apiClient.get('/v1/auth/me');
       if (res && res.id) {
         setUser(res);
       }
     } catch (e) {
-      console.warn('获取前台用户信息失败或未登录');
+      if (e.response?.status === 401) {
+        localStorage.removeItem('edd_user_token');
+        setUser(null);
+      }
+      console.debug('前台登录凭证已失效');
     }
   };
 
   const refreshAdminProfile = async () => {
+    const adminToken = localStorage.getItem('edd_admin_token');
+    if (!adminToken) return;
     try {
       const res = await apiClient.get('/admin/auth/me');
       if (res && res.id) {
         setAdmin(res);
       }
     } catch (e) {
-      console.warn('获取管理员信息失败或未登录');
+      if (e.response?.status === 401) {
+        localStorage.removeItem('edd_admin_token');
+        setAdmin(null);
+      }
+      console.debug('后台管理凭证已失效');
     }
   };
 

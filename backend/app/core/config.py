@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 4320
 
+    # ==========================================
+    # MinIO 对象存储配置
+    # ==========================================
+    MINIO_ENDPOINT: str = "192.168.1.100:9000"
+    MINIO_ACCESS_KEY: str = "admin"
+    MINIO_SECRET_KEY: str = "admin123456"
+    MINIO_BUCKET_NAME: str = "my-files"
+    MINIO_SECURE: bool = False
+
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
 

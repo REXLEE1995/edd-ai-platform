@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { message } from 'antd';
 import apiClient from '../../api/client';
+import { formatLocalTime } from '../../utils/date';
 
 export default function ReportAssetsPage() {
   const [reports, setReports] = useState([]);
@@ -147,30 +148,33 @@ export default function ReportAssetsPage() {
                   {rpt.summary_ai_comment}
                 </p>
 
-                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 font-mono">
-                  <span>报告文号: <strong className="text-slate-700">{rpt.report_no}</strong></span>
-                  <span>信用代码: <strong className="text-slate-700">{rpt.credit_code}</strong></span>
-                  <span>参考授信额度: <strong className="text-teal-800 font-bold">{rpt.suggested_quota_min}~{rpt.suggested_quota_max} 万元</strong></span>
-                  <span>出具时间: {rpt.created_at}</span>
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 font-mono">
+                    <span>报告文号: <strong className="text-slate-700">{rpt.report_no}</strong></span>
+                    <span>信用代码: <strong className="text-slate-700">{rpt.credit_code}</strong></span>
+                    <span>参考授信额度: <strong className="text-teal-800 font-bold">{rpt.suggested_quota_min}~{rpt.suggested_quota_max} 万元</strong></span>
+                    <span>出具时间: <strong className="text-slate-700 font-semibold">{formatLocalTime(rpt.created_at)}</strong></span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Link
-                  to={`/app/reports/${rpt.id}`}
-                  className="px-4 py-2 rounded-sm bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
-                >
-                  <span>查看全景报告</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-                <button
-                  onClick={() => message.info('正在排版导出 Word / PDF 报告底稿...')}
-                  className="p-2 rounded-sm bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs transition-colors"
-                  title="下载报告文档"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-              </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    to={`/app/reports/${rpt.id}`}
+                    className="px-4 py-2 rounded-sm bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                  >
+                    <span>查看全景报告</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                  <a
+                    href={`/api/v1/reports/${rpt.id}/pdf`}
+                    download={`微风企尽调报告_${rpt.company_name}.pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 rounded-sm bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs transition-colors inline-flex items-center justify-center"
+                    title="下载 MinIO 真实 PDF 存证原件"
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
+                </div>
             </div>
           ))
         )}

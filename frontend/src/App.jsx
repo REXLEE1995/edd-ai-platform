@@ -28,7 +28,7 @@ export default function App() {
       }}
     >
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ScrollToTop />
           <div className="flex flex-col min-h-screen bg-[#fafafa] text-[#09090b] selection:bg-slate-200 selection:text-slate-900">
             <Navbar />

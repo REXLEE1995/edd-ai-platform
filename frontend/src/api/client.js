@@ -24,6 +24,11 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use((response) => {
   return response.data;
 }, (error) => {
+  const isAuthProbe = error.config?.url && error.config.url.includes('/auth/me');
+  if (error.response?.status === 401 && isAuthProbe) {
+    // 静默身份探测返回 401 属正常未登录分支，不输出错误日志
+    return Promise.reject(error);
+  }
   const msg = error.response?.data?.detail || error.message || '请求处理失败';
   console.error('[API Error]:', msg);
   return Promise.reject(error);
