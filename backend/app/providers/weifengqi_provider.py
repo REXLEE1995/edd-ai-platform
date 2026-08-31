@@ -69,7 +69,7 @@ class WeifengqiProvider(BaseProvider):
         generated_req_no = request_no or f"kzgbls29zq3lkw8rsw"
         now_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        final_cb_url = cb_url or f"{self.base_url}/api/v1/tasks/callback/wfq"
+        final_cb_url = cb_url or f"{self.base_url}/api/v1/tasks/callback"
         payload = {
             "cburl": final_cb_url,
             "orderNo": generated_order_no,
@@ -114,7 +114,7 @@ class WeifengqiProvider(BaseProvider):
                     )
                     return {
                         "auth_url": auth_url,
-                        "order_no": body.get("orderNo") or generated_order_no,
+                        "order_no": order_no or body.get("orderNo") or generated_order_no,
                         "request_no": body.get("requestNo") or generated_req_no,
                         "app_no": body.get("appNo") or "ws2tMSOtu058Ey2G",
                         "status": "WAIT_AUTH",
@@ -197,16 +197,35 @@ class WeifengqiProvider(BaseProvider):
                             "url": None,
                             "raw_response": res_data
                         }
+                    else:
+                        logger.info(f"[WFQ Script Method - PDF Fetch] Remote returned error (errorCode={error_code}): {res_data.get('errMsg')}")
+                        return {
+                            "is_ready": False,
+                            "errorCode": error_code,
+                            "errMsg": res_data.get("errMsg", "等待法定代表人扫码授权并提交"),
+                            "url": None,
+                            "raw_response": res_data
+                        }
         except Exception as exc:
-            logger.warning(f"[WFQ Script Method - PDF Fetch] Request to {url} failed: {exc}, fallback to default mock URL.")
+            logger.warning(f"[WFQ Script Method - PDF Fetch] Request to {url} failed: {exc}")
 
-        # 默认 Mock 模式降级兜底
+        # 如果是真实 http 模式，失败或未授权时严格返回未就绪
+        if call_mode == "http":
+            return {
+                "is_ready": False,
+                "errorCode": 400,
+                "errMsg": "未检测到微风企实名授权完成",
+                "url": None,
+                "raw_response": {"fallback": True, "call_mode": "http"}
+            }
+
+        # 仅在明确开启 mock 模式时提供 mock 兜底
         return {
             "is_ready": True,
             "errorCode": 0,
-            "errMsg": "操作成功",
+            "errMsg": "操作成功 (Mock)",
             "url": f"{self.base_url}/files/微风企贷前报告{order_no}.pdf",
-            "raw_response": {"fallback": True}
+            "raw_response": {"fallback": True, "call_mode": "mock"}
         }
 
     async def check_report_status(

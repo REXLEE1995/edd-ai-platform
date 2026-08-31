@@ -44,6 +44,9 @@ backend/.env
 backend/data/*.db
 data/
 *.log
+*.pdf
+样例报告/
+backend/data/storage/
 
 
 # IDE & OS

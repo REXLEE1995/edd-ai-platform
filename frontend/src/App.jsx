@@ -28,7 +28,7 @@ export default function App() {
       }}
     >
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ScrollToTop />
           <div className="relative flex flex-col min-h-screen bg-[#f8fafc] text-[#0f172a] selection:bg-cyan-100 selection:text-cyan-900 overflow-x-clip">
             {/* Ambient Lighting Gradient Orbs fusing Azure #0ea5e9, Teal #29B47D, and Green #5AB331 */}

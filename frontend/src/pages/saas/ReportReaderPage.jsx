@@ -43,6 +43,7 @@ import {
 import { message, Drawer, Modal, Tooltip } from 'antd';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { formatLocalTime } from '../../utils/date';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
@@ -222,13 +223,13 @@ export default function ReportReaderPage() {
     return reportShunjieData;
   }, [isHangzhouReport]);
 
-  const DEFAULT_REPORT_META = activeArchiveData.report_meta;
-  const OVERALL_SUMMARY = activeArchiveData.overall_ai_summary;
-  const PDF_TOC_CATALOG = activeArchiveData.toc_catalog;
-  const STRUCTURED_FACTS = activeArchiveData.structured_facts || {};
-  const targetPdfUrl = isHangzhouReport 
-    ? '/reports/hangzhou_preloan.pdf' 
-    : '/reports/shunjie_preloan.pdf';
+  const DEFAULT_REPORT_META = report?.content?.report_meta || activeArchiveData.report_meta;
+  const OVERALL_SUMMARY = report?.content?.overall_ai_summary || activeArchiveData.overall_ai_summary;
+  const PDF_TOC_CATALOG = report?.content?.toc_catalog || activeArchiveData.toc_catalog;
+  const STRUCTURED_FACTS = report?.content?.structured_facts || activeArchiveData.structured_facts || {};
+
+  // 严格从 MinIO 对象存储服务端点加载该笔任务的真实 PDF 存证文件流 (0 本地静态文件依赖)
+  const targetPdfUrl = reportId ? `/api/v1/reports/${reportId}/pdf` : null;
 
   // 动态构建各章节 AI 深度研判字典
   const AI_CHAPTER_INSIGHTS = useMemo(() => ({
@@ -240,8 +241,9 @@ export default function ReportReaderPage() {
     )
   }), [OVERALL_SUMMARY, PDF_TOC_CATALOG]);
 
-  // 异步流式加载 PDF 原生文件 (带单例缓存，按任务 PDF 路径分发)
+  // 异步流式加载 PDF 原生文件 (带单例缓存，直接连接 MinIO 流式存证输出)
   useEffect(() => {
+    if (!targetPdfUrl) return;
     let isMounted = true;
     setPdfDoc(null);
     getCachedPdfDocument(targetPdfUrl)
@@ -251,7 +253,7 @@ export default function ReportReaderPage() {
         }
       })
       .catch((err) => {
-        console.error(`Failed to load ${targetPdfUrl} via pdfjs:`, err);
+        console.error(`Failed to load PDF stream from MinIO (${targetPdfUrl}):`, err);
       });
 
     return () => {
@@ -451,7 +453,8 @@ export default function ReportReaderPage() {
   // 大纲折叠状态（默认全部展开，仅记录被用户主动折叠的项）
   const [collapsedSections, setCollapsedSections] = useState({});
 
-  const totalPages = report?.total_pages || DEFAULT_REPORT_META?.total_pages || (isHangzhouReport ? 39 : 61);
+  // 动态感知实际 MinIO PDF 物理文件的真实页数
+  const totalPages = pdfDoc?.numPages || report?.total_pages || DEFAULT_REPORT_META?.total_pages || (isHangzhouReport ? 39 : 61);
   const pagesArray = useMemo(() => Array.from({ length: totalPages }, (_, i) => i + 1), [totalPages]);
 
   useEffect(() => {
@@ -466,32 +469,11 @@ export default function ReportReaderPage() {
     setLoading(true);
     try {
       const res = await apiClient.get(`/v1/reports/${reportId}`);
-      setReport(res.data || res);
-    } catch (err) {
-      // 缺省回退
-      if (isHangzhouReport) {
-        setReport({
-          id: reportId || 'rpt_hangzhou_preloan_001',
-          company_name: '杭州高新智能科技股份有限公司',
-          credit_code: '91330100MA28T4998L',
-          report_no: 'RPT-39P-16320551',
-          score: 92,
-          risk_level: 'green',
-          total_pages: 39,
-          content: { is_locked: false, is_public_only: false }
-        });
-      } else {
-        setReport({
-          id: reportId || 'rpt_shunjie_preloan_001',
-          company_name: '东莞市顺捷实业有限公司',
-          credit_code: '91441900MA4W6BGB8T',
-          report_no: 'RNO1881255253482991616',
-          score: 702,
-          risk_level: 'B+',
-          total_pages: 61,
-          content: { is_locked: false, is_public_only: false }
-        });
+      if (res && res.data) {
+        setReport(res.data);
       }
+    } catch (err) {
+      console.warn(`Fetch report ${reportId} error:`, err);
     } finally {
       setLoading(false);
     }

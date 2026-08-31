@@ -62,6 +62,7 @@ class TaskService:
             # Step 1: 微风企报告状态确认与 PDF 文件拉取存储
             # -------------------------------------------------------------
             stored_file = None
+            parsed_pdf_data = None
             if not is_public_only:
                 # 1.1 直接发起微风企贷前报告 PDF 获取与状态校验 (POST /model/wfq/loanBeforeReportPdf)
                 append_log(f"【微风企·金税中台】企业授权校验通过 -> 正在向微风企网关拉取贷前报告下载地址 (单号: {order_no})...")
@@ -83,25 +84,28 @@ class TaskService:
                 await session.commit()
                 await asyncio.sleep(0.8)
 
-                # 1.3 调用文件存储服务下载并持久化保存
-                append_log("【文件存储服务】启动流式安全拉取微风企 PDF 报告流，写入系统持久化存储并执行 SHA-256 存证校验...")
+                # 1.3 调用数据清洗中台对原始 PDF 流进行清洗、脱敏与大纲解析，处理后再持久化存入 MinIO
+                append_log("【数据清洗中台】启动流式拉取三方原始 PDF 报告流，执行数据清洗、文本规范化、敏感脱敏与结构化大纲提炼...")
                 await session.commit()
 
                 try:
-                    stored_file = await FileStorageService.download_and_store_remote_file(
+                    stored_file, parsed_pdf_data = await FileStorageService.download_and_store_remote_file(
                         session=session,
                         remote_url=pdf_download_url,
                         task_id=task.id,
                         file_type="wfq_preloan_pdf",
-                        custom_filename=f"微风企贷前报告_{company_name}.pdf"
+                        custom_filename=f"微风企贷前报告_{company_name}.pdf",
+                        company_name=company_name,
+                        credit_code=credit_code
                     )
                     task.storage_file_id = stored_file.id
                     file_size_mb = round(stored_file.file_size / (1024 * 1024), 2)
-                    append_log(f"【文件存储服务】报告 PDF 存证归档完成 (大小: {file_size_mb} MB, SHA256: {stored_file.file_hash[:16]}...)，已持久化落盘。")
+                    toc_len = len(parsed_pdf_data.get("toc_catalog", [])) if parsed_pdf_data else 0
+                    append_log(f"【数据清洗与存储】PDF 清洗与全景大纲抽取完成 ({toc_len} 个核心大纲板块, 大小: {file_size_mb} MB, SHA256: {stored_file.file_hash[:16]}...)，已安全存证归档至 MinIO 对象存储。")
                     await session.commit()
                 except Exception as e:
-                    logger.error(f"[TaskService] Failed to store remote PDF: {str(e)}")
-                    append_log(f"【文件存储服务】远程 PDF 存证拉取警告 ({str(e)})，启用内置高保真模版兜底。")
+                    logger.error(f"[TaskService] Failed to clean and store remote PDF: {str(e)}")
+                    append_log(f"【数据清洗中台】远程 PDF 存证拉取与清洗警告 ({str(e)})，启用内置高保真模版兜底。")
                     await session.commit()
 
                 # 1.4 解析金税底稿明细
@@ -144,7 +148,12 @@ class TaskService:
                 quota_min, 
                 quota_max, 
                 ai_summary
-            ) = DataCleansingService.clean_and_synthesize(raw_weifengqi, raw_ic, raw_risk)
+            ) = DataCleansingService.clean_and_synthesize(
+                raw_weifengqi=raw_weifengqi, 
+                raw_ic=raw_ic, 
+                raw_risk=raw_risk,
+                parsed_pdf_data=parsed_pdf_data
+            )
 
             report_content["is_public_only"] = is_public_only
             report_content["is_locked"] = is_locked
