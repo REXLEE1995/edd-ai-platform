@@ -8,6 +8,7 @@ from app.models.order import Order, Invoice
 from app.models.audit import AdminAuditLog
 from app.models.file_record import TaskFile
 from app.models.third_party_api import SysThirdPartyApi
+from app.models.report_share import ReportShare
 
 __all__ = [
     "Base",
@@ -22,4 +23,5 @@ __all__ = [
     "AdminAuditLog",
     "TaskFile",
     "SysThirdPartyApi",
+    "ReportShare",
 ]

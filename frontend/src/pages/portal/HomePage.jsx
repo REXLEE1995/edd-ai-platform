@@ -47,7 +47,7 @@ export default function HomePage() {
     try {
       await userLogin(phone, code);
       setIsAuthModalOpen(false);
-      message.success('登录成功！已为您发放 2 次免费 AI 全景尽调体验额度');
+      message.success('登录成功！已为您发放 1 次免费 AI 全景尽调体验额度');
       navigate('/app', { state: { prefillCompany: { company_name: keyword.trim() || '东莞市顺捷实业有限公司' } } });
     } catch (err) {
       message.error(err.response?.data?.detail || '登录失败');
@@ -89,16 +89,16 @@ export default function HomePage() {
           <button 
             type="button"
             onClick={() => handleTriggerExperience()}
-            className="inline-flex items-center justify-center px-8 py-3.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 cursor-pointer gap-2 border border-slate-800"
+            className="inline-flex items-center justify-center px-8 py-3.5 rounded-md bg-[#0096DB] hover:bg-[#0084c2] text-white font-semibold text-sm shadow-glow-primary transition-all transform hover:-translate-y-0.5 cursor-pointer gap-2 border border-[#0084c2]"
           >
-            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <Sparkles className="w-4 h-4 text-white animate-pulse" />
             <span>免费体验 AI 尽调</span>
             <ArrowRight className="w-4 h-4 ml-0.5" />
           </button>
           
           <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5 text-zinc-700 font-medium">
-              <Check className="w-3.5 h-3.5 text-emerald-600" /> 新用户注册即赠 2 次额度
+              <Check className="w-3.5 h-3.5 text-[#0096DB]" /> 新用户注册即赠 1 次额度
             </span>
             <span className="text-zinc-300">•</span>
             <span className="flex items-center gap-1.5 text-zinc-700 font-medium">
@@ -315,17 +315,17 @@ export default function HomePage() {
                   超高性价比承诺
                 </span>
                 <h3 className="text-base font-bold text-slate-900">
-                  消耗 1 次额度 = 生成 1 份终身有效全景报告 (平台自研全维数据深度拟合计算)
+                  消耗 1 次额度 = 生成 1 份企业全景尽调报告 (平台自研全维数据深度拟合计算)
                 </h3>
               </div>
               <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                按报告份数结算，一次生成永久归档于历史资产库中，后续在系统内随时复查、调阅底稿<strong>终身免费，绝无重复扣费</strong>。
+                按报告份数结算，一次生成长期归档于历史资产库中，后续在系统内随时复查、调阅底稿<strong>随时免费查阅，绝无重复扣费</strong>。
               </p>
             </div>
 
             <div className="text-right sm:border-l sm:border-slate-300 sm:pl-6 shrink-0 font-mono">
-              <span className="text-xs text-zinc-400 block line-through">市面独立采购成本: ¥85~125/家</span>
-              <span className="text-sm font-bold text-slate-900 block mt-0.5">享宇智评 仅耗 1 次额度 (低至 ¥22.5/份)</span>
+              <span className="text-xs text-zinc-400 block line-through">市面独立采购成本: ¥498/家</span>
+              <span className="text-sm font-bold text-slate-900 block mt-0.5">享宇智评 仅耗 1 次额度 (单份低至 ¥318)</span>
             </div>
           </div>
 
@@ -381,7 +381,7 @@ export default function HomePage() {
               新用户个人注册并完成实名认证，即刻获赠 1 次免费全景尽调额度
             </div>
             <p className="text-zinc-500 text-[11px]">
-              * 注：消耗 1 次额度即可生成 1 份终身有效的企业全景尽调报告，支持导出银行级 A4 PDF 原件。
+              * 注：消耗 1 次额度即可生成 1 份企业全景尽调报告，支持导出银行级 A4 PDF 原件。
             </p>
           </div>
           <button
@@ -393,35 +393,35 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* 3 档分级套餐矩阵 (基于报告份数充值) */}
+        {/* 3 档分级套餐矩阵 (与个人中心充值套餐 100% 保持一致) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* 1. 标准充值包 (10份) */}
+          {/* 1. 单份尝鲜体验包 (1份) */}
           <div className="shadcn-card p-6 bg-white flex flex-col justify-between space-y-6 border border-slate-300 shadow-xs">
             <div className="space-y-4">
               <div>
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">灵活充值 · 永久有效</span>
-                <h3 className="font-bold text-lg text-slate-900 mt-1">标准充值包 (10份)</h3>
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">尝鲜体验 · 随时复查</span>
+                <h3 className="font-bold text-lg text-slate-900 mt-1">单份尝鲜体验包 (1份)</h3>
                 <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                  包含 10 份企业全景尽调报告，适合信贷与业务精准尽调。
+                  包含 1 份企业全景尽调报告，支持在线目录大纲查阅与 A4 PDF 原件下载。
                 </p>
               </div>
 
               <div className="pt-4 border-t border-slate-200 font-mono">
                 <div className="flex items-baseline gap-1">
                   <span className="text-xs font-bold text-slate-600">¥</span>
-                  <span className="text-3xl font-extrabold text-slate-950">268</span>
-                  <span className="text-xs text-zinc-400 line-through ml-1">¥380</span>
+                  <span className="text-3xl font-extrabold text-slate-950">368</span>
+                  <span className="text-xs text-zinc-400 line-through ml-1">¥498</span>
                 </div>
-                <span className="text-xs text-zinc-600 font-medium mt-0.5 block">包含 10 份全景报告 (¥26.8/份)</span>
+                <span className="text-xs text-zinc-600 font-medium mt-0.5 block">包含 1 份全景报告 (¥368.0/份)</span>
               </div>
 
               <ul className="space-y-2 text-xs text-zinc-700 pt-4 border-t border-slate-200 font-medium">
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 10 份企业全景尽调报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 1 份企业全景尽调报告</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持在线目录大纲索引查阅</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持一键下载 A4 PDF 原件</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 企业工商基本面与股权全量覆盖</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 永久归档终身免费复查已生成报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 历史报告长期归档，支持随时在线复查</li>
               </ul>
             </div>
 
@@ -430,41 +430,41 @@ export default function HomePage() {
               onClick={() => navigate('/app/profile?tab=billing')}
               className="shadcn-button-outline w-full py-2.5"
             >
-              立即充值 10 份
+              立即充值 1 份
             </button>
           </div>
 
-          {/* 2. 优惠充值包 (50份) - 推荐 */}
-          <div className="rounded-xl border-2 border-slate-900 bg-white p-6 shadow-md flex flex-col justify-between space-y-6 relative">
-            <span className="absolute -top-3 right-6 px-3 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 text-white uppercase tracking-wider shadow-xs">
-              推荐 · 单次 ¥24.0
+          {/* 2. 标准进阶充值包 (10份) - 推荐 */}
+          <div className="rounded-lg border-2 border-[#0096DB] bg-white/90 backdrop-blur-xl p-6 shadow-md flex flex-col justify-between space-y-6 relative">
+            <span className="absolute -top-3 right-6 px-3 py-0.5 rounded-md text-[10px] font-bold bg-[#0096DB] text-white uppercase tracking-wider shadow-xs">
+              推荐 · 单次 ¥338.0
             </span>
 
             <div className="space-y-4">
               <div>
-                <span className="text-[11px] font-semibold text-slate-800 uppercase tracking-wider block">优惠充值 · 单价更低</span>
-                <h3 className="font-bold text-lg text-slate-900 mt-1">优惠充值包 (50份)</h3>
+                <span className="text-[11px] font-semibold text-[#0084c2] uppercase tracking-wider block">标准进阶 · 单价更低</span>
+                <h3 className="font-bold text-lg text-slate-900 mt-1">标准进阶充值包 (10份)</h3>
                 <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                  包含 50 份企业全景尽调报告，单次成本更低，支持开具发票。
+                  包含 10 份企业全景尽调报告，适合信贷与投前精准尽调，支持开具专用发票。
                 </p>
               </div>
 
               <div className="pt-4 border-t border-slate-200 font-mono">
                 <div className="flex items-baseline gap-1">
                   <span className="text-xs font-bold text-slate-600">¥</span>
-                  <span className="text-3xl font-extrabold text-slate-950">1,200</span>
-                  <span className="text-xs text-zinc-400 line-through ml-1">¥1,900</span>
+                  <span className="text-3xl font-extrabold text-slate-950">3,380</span>
+                  <span className="text-xs text-zinc-400 line-through ml-1">¥4,980</span>
                 </div>
-                <span className="text-xs text-slate-800 font-medium mt-0.5 block">包含 50 份全景报告 (¥24.0/份)</span>
+                <span className="text-xs text-[#0084c2] font-medium mt-0.5 block">包含 10 份全景报告 (单份立省 ¥30)</span>
               </div>
 
               <ul className="space-y-2 text-xs text-zinc-700 pt-4 border-t border-slate-200 font-medium">
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 50 份企业全景尽调报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 10 份企业全景尽调报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 单份折算低至 ¥338 元</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持在线目录大纲索引查阅</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持一键下载 A4 PDF 原件</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 企业工商基本面与股权全量覆盖</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持开具增值税发票</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 永久归档终身免费复查已生成报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持开具增值税专用发票</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 历史报告长期归档，支持随时在线复查</li>
               </ul>
             </div>
 
@@ -473,37 +473,37 @@ export default function HomePage() {
               onClick={() => navigate('/app/profile?tab=billing')}
               className="shadcn-button-primary w-full py-2.5 shadow-sm"
             >
-              购买 50 份优惠包
+              购买 10 份标准包
             </button>
           </div>
 
-          {/* 3. 大额特惠包 (200份) */}
+          {/* 3. 机构大额优选包 (50份) */}
           <div className="shadcn-card p-6 bg-white flex flex-col justify-between space-y-6 border border-slate-300 shadow-xs">
             <div className="space-y-4">
               <div>
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">大额特惠 · 单价最优</span>
-                <h3 className="font-bold text-lg text-slate-900 mt-1">大额特惠包 (200份)</h3>
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">机构大额 · 单价最优</span>
+                <h3 className="font-bold text-lg text-slate-900 mt-1">机构大额优选包 (50份)</h3>
                 <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                  包含 200 份企业全景尽调报告，适合大批量企业排查与尽调。
+                  包含 50 份企业全景尽调报告，适合金融机构与律所高频批量排查，支持对公打款。
                 </p>
               </div>
 
               <div className="pt-4 border-t border-slate-200 font-mono">
                 <div className="flex items-baseline gap-1">
                   <span className="text-xs font-bold text-slate-600">¥</span>
-                  <span className="text-3xl font-extrabold text-slate-950">4,500</span>
-                  <span className="text-xs text-zinc-400 line-through ml-1">¥7,600</span>
+                  <span className="text-3xl font-extrabold text-slate-950">15,900</span>
+                  <span className="text-xs text-zinc-400 line-through ml-1">¥24,900</span>
                 </div>
-                <span className="text-xs text-zinc-600 font-medium mt-0.5 block">包含 200 份全景报告 (¥22.5/份)</span>
+                <span className="text-xs text-zinc-600 font-medium mt-0.5 block">包含 50 份全景报告 (单份低至 ¥318)</span>
               </div>
 
               <ul className="space-y-2 text-xs text-zinc-700 pt-4 border-t border-slate-200 font-medium">
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 200 份企业全景尽调报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 50 份企业全景尽调报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 单份折算低至 ¥318 元 (最优)</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持在线目录大纲索引查阅</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持一键下载 A4 PDF 原件</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 企业工商基本面与股权全量覆盖</li>
                 <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 支持开具发票与对公转账结算</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 永久归档终身免费复查已生成报告</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-900 shrink-0" /> 历史报告长期归档，支持随时在线复查</li>
               </ul>
             </div>
 
@@ -512,7 +512,7 @@ export default function HomePage() {
               onClick={() => navigate('/app/profile?tab=billing')}
               className="shadcn-button-outline w-full py-2.5"
             >
-              购买 200 份大额包
+              购买 50 份机构包
             </button>
           </div>
 

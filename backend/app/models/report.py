@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional
-from sqlalchemy import String, Integer, JSON, Text
+from datetime import datetime, timedelta
+from sqlalchemy import String, Integer, JSON, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
@@ -109,3 +110,30 @@ class DDReport(Base, TimestampMixin):
         nullable=True,
         comment="报告 PDF 本地持久化文件路径"
     )
+
+    # 15 天有效期机制
+    expired_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="报告失效时间 (自生成起 15 天有效期)"
+    )
+
+    @property
+    def effective_expired_at(self) -> datetime:
+        if self.expired_at:
+            return self.expired_at
+        base_time = self.created_at or datetime.utcnow()
+        return base_time + timedelta(days=15)
+
+    @property
+    def is_expired(self) -> bool:
+        return datetime.utcnow() > self.effective_expired_at
+
+    @property
+    def remaining_days(self) -> int:
+        now = datetime.utcnow()
+        diff = self.effective_expired_at - now
+        if diff.total_seconds() <= 0:
+            return 0
+        return max(1, int(diff.total_seconds() // 86400) + 1)
+

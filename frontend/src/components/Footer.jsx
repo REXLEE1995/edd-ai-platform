@@ -1,7 +1,15 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { Shield, Lock, FileCheck } from 'lucide-react';
 
 export default function Footer() {
+  const location = useLocation();
+  const pathname = location.pathname;
+
+  if (pathname.startsWith('/share') || pathname.startsWith('/app/reports')) {
+    return null;
+  }
+
   return (
     <footer className="border-t border-slate-300 bg-white py-12 mt-16 text-xs text-zinc-500">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

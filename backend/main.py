@@ -10,6 +10,7 @@ from app.api.v1.search import router as v1_search_router
 from app.api.v1.tasks import router as v1_tasks_router
 from app.api.v1.reports import router as v1_reports_router
 from app.api.v1.billing import router as v1_billing_router
+from app.api.v1.shares import router as v1_shares_router
 
 # 后台 Admin 路由
 from app.api.admin.auth import router as admin_auth_router
@@ -46,6 +47,7 @@ app.include_router(v1_search_router, prefix="/api/v1")
 app.include_router(v1_tasks_router, prefix="/api/v1")
 app.include_router(v1_reports_router, prefix="/api/v1")
 app.include_router(v1_billing_router, prefix="/api/v1")
+app.include_router(v1_shares_router, prefix="/api/v1")
 
 # 注册后台 Admin 管理路由
 app.include_router(admin_auth_router, prefix="/api/admin")

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta
 from fastapi.responses import FileResponse
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -47,12 +48,14 @@ async def get_my_reports(
             "summary_ai_comment": r.summary_ai_comment,
             "is_locked": bool(r.content_json.get("is_locked", False) if r.content_json else False),
             "is_public_only": bool(r.content_json.get("is_public_only", False) if r.content_json else False),
-            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""
+            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "",
+            "is_expired": False
         })
 
     # 预置多任务预设报告（如果尚未存在）
     existing_companies = [d["company_name"] for d in data]
     if "杭州高新智能科技股份有限公司" not in existing_companies:
+        hz_created = datetime.utcnow() - timedelta(days=2)
         data.insert(0, {
             "id": "rpt_hangzhou_preloan_001",
             "report_no": "RPT-39P-16320551",
@@ -67,9 +70,11 @@ async def get_my_reports(
             "summary_ai_comment": "贷前综合分析尽调报告（享宇智评版）",
             "is_locked": False,
             "is_public_only": False,
-            "created_at": "2026-08-28 10:00:00"
+            "created_at": hz_created.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_expired": False
         })
     if "东莞市顺捷实业有限公司" not in existing_companies:
+        sj_created = datetime.utcnow() - timedelta(days=1)
         data.insert(1, {
             "id": "rpt_shunjie_preloan_001",
             "report_no": "RNO1881255253482991616",
@@ -84,7 +89,8 @@ async def get_my_reports(
             "summary_ai_comment": "企业全景尽调分析报告（享宇智评版）",
             "is_locked": False,
             "is_public_only": False,
-            "created_at": "2026-08-27 15:30:00"
+            "created_at": sj_created.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_expired": False
         })
 
     return {"code": 0, "data": data}
@@ -100,6 +106,7 @@ async def get_report_detail(
     """
     # 优先匹配杭州贷前综合分析报告 (39页)
     if report_id == "rpt_hangzhou_preloan_001" or "hangzhou" in report_id.lower() or "04182501" in report_id.lower() or "16320551" in report_id.lower():
+        hz_created = datetime.utcnow() - timedelta(days=2)
         return {
             "code": 0,
             "data": {
@@ -118,12 +125,14 @@ async def get_report_detail(
                 "pdf_url": "/reports/hangzhou_preloan.pdf",
                 "content": {"is_locked": False, "is_public_only": False},
                 "raw_sources": {},
-                "created_at": "2026-08-28 10:00:00"
+                "created_at": hz_created.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_expired": False
             }
         }
 
     # 优先匹配顺捷实业 / 享宇智评贷前报告 (61页)
     if report_id == "rpt_shunjie_preloan_001" or "shunjie" in report_id.lower():
+        sj_created = datetime.utcnow() - timedelta(days=1)
         return {
             "code": 0,
             "data": {
@@ -142,7 +151,8 @@ async def get_report_detail(
                 "pdf_url": "/reports/shunjie_preloan.pdf",
                 "content": {"is_locked": False, "is_public_only": False},
                 "raw_sources": {},
-                "created_at": "2026-08-27 15:30:00"
+                "created_at": sj_created.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_expired": False
             }
         }
 
@@ -150,6 +160,7 @@ async def get_report_detail(
     r = result.scalar_one_or_none()
     if not r:
         # 默认返回顺捷实业/享宇智评版贷前尽调报告
+        sj_created = datetime.utcnow() - timedelta(days=1)
         return {
             "code": 0,
             "data": {
@@ -168,7 +179,8 @@ async def get_report_detail(
                 "pdf_url": "/reports/shunjie_preloan.pdf",
                 "content": {"is_locked": False, "is_public_only": False},
                 "raw_sources": {},
-                "created_at": "2026-08-27 15:30:00"
+                "created_at": sj_created.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_expired": False
             }
         }
     
@@ -188,7 +200,8 @@ async def get_report_detail(
             "summary_ai_comment": r.summary_ai_comment,
             "content": r.content_json,
             "raw_sources": r.raw_sources_json,
-            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""
+            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "",
+            "is_expired": False
         }
     }
 

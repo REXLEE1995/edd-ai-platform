@@ -9,6 +9,7 @@ import DDHomePage from '../pages/saas/DDHomePage';
 import TaskCenterPage from '../pages/saas/TaskCenterPage';
 import UserCenterPage from '../pages/saas/UserCenterPage';
 import ReportReaderPage from '../pages/saas/ReportReaderPage';
+import SharedReportPage from '../pages/saas/SharedReportPage';
 
 // 认证
 import LoginPage from '../pages/auth/LoginPage';
@@ -25,6 +26,9 @@ export default function AppRoutes() {
     <Routes>
       {/* 宣传官网 */}
       <Route path="/" element={<HomePage />} />
+
+      {/* 外部加密分享查阅页 (免登录 6 位密码安全解锁) */}
+      <Route path="/share/:shareCode" element={<SharedReportPage />} />
 
       {/* 认证 */}
       <Route path="/auth/login" element={<LoginPage />} />

@@ -21,29 +21,35 @@ export default function Navbar() {
   const pathname = location.pathname;
   const isSaaSPath = pathname.startsWith('/app');
   const isAdminPath = pathname.startsWith('/admin');
+  const isSharePath = pathname.startsWith('/share');
+
+  // 分享报告页面具有专属单体顶栏
+  if (isSharePath) {
+    return null;
+  }
 
   // 1. 后台管理系统独立导航
   if (isAdminPath) {
     return (
-      <header className="sticky top-0 z-50 w-full border-b border-slate-300 bg-white/95 backdrop-blur-md shadow-xs">
+      <header className="sticky top-0 z-50 w-full border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-[0_4px_20px_-2px_rgba(0,150,219,0.03)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           
           <div className="flex items-center space-x-5">
             <Link to="/admin/dashboard" className="flex items-center space-x-2.5 group">
-              <div className="w-8 h-8 rounded-md bg-white border border-zinc-200 shadow-2xs flex items-center justify-center">
-                <LayoutDashboard className="w-4 h-4 text-slate-900" />
+              <div className="w-8 h-8 rounded-md bg-white/80 p-1 border border-slate-200/80 shadow-xs flex items-center justify-center backdrop-blur-md overflow-hidden">
+                <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm tracking-tight text-slate-900">
                   享宇智评 Admin
                 </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
+                <span className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-cyan-50/80 text-[#0084c2] border border-cyan-200/60 backdrop-blur-sm">
                   运营管控
                 </span>
               </div>
             </Link>
 
-            <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-zinc-200">
+            <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200/70">
               {[
                 { to: '/admin/dashboard', label: '运营大盘' },
                 { to: '/admin/users', label: '用户管理' },
@@ -53,10 +59,10 @@ export default function Navbar() {
                 <Link 
                   key={item.to}
                   to={item.to} 
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                     pathname === item.to 
-                      ? 'bg-slate-100 text-slate-900 font-semibold shadow-2xs' 
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      ? 'bg-cyan-50/80 text-[#0084c2] font-semibold border border-cyan-200/60 shadow-xs' 
+                      : 'text-slate-600 hover:text-[#0096DB] hover:bg-white/60'
                   }`}
                 >
                   {item.label}
@@ -77,7 +83,7 @@ export default function Navbar() {
                     adminLogout();
                     navigate('/admin/login');
                   }}
-                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-zinc-200 transition-colors cursor-pointer"
+                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-white/70 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200/80 transition-all cursor-pointer backdrop-blur-md"
                 >
                   <LogOut className="w-3.5 h-3.5 inline mr-1" />
                   退出
@@ -86,7 +92,7 @@ export default function Navbar() {
             ) : (
               <Link
                 to="/admin/login"
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-2xs"
+                className="shadcn-button-primary px-3 py-1.5 text-xs"
               >
                 管理员登录
               </Link>
@@ -101,47 +107,42 @@ export default function Navbar() {
   // 2. 发起尽调平台专属导航
   if (isSaaSPath) {
     return (
-      <header className="sticky top-0 z-50 w-full border-b border-slate-300 bg-white/95 backdrop-blur-md shadow-xs">
+      <header className="sticky top-0 z-50 w-full border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-[0_4px_20px_-2px_rgba(0,150,219,0.03)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           
           {/* Logo */}
           <div className="flex items-center space-x-5">
             <Link to="/app" className="flex items-center space-x-2.5 group">
-              <div className="w-8 h-8 rounded-md bg-white p-1 border border-zinc-200 shadow-2xs flex items-center justify-center overflow-hidden">
+              <div className="w-8 h-8 rounded-md bg-white/80 p-1 border border-white/80 shadow-xs flex items-center justify-center overflow-hidden backdrop-blur-md">
                 <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm tracking-tight text-slate-900">
-                  享宇智评尽调平台
-                </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
-                  商业版
-                </span>
-              </div>
+              <span className="font-bold text-sm tracking-tight text-slate-900">
+                享宇智评尽调平台
+              </span>
             </Link>
 
             {/* 顶栏主菜单：只保留「发起尽调」与「任务中心」 */}
-            <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-zinc-200">
+            <nav className="hidden md:flex items-center space-x-1.5 pl-4 border-l border-slate-200/70">
               <Link 
                 to="/app" 
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
                   pathname === '/app' 
-                    ? 'bg-slate-100 text-slate-900 font-semibold shadow-2xs' 
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-cyan-50/90 text-[#0284c7] font-semibold border border-cyan-200/70 shadow-xs backdrop-blur-md' 
+                    : 'text-slate-600 hover:text-[#0ea5e9] hover:bg-white/60'
                 }`}
               >
-                <Zap className="w-3.5 h-3.5 text-slate-700" />
+                <Zap className="w-3.5 h-3.5 text-[#0ea5e9]" />
                 发起尽调
               </Link>
               <Link 
                 to="/app/tasks" 
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
                   pathname.startsWith('/app/tasks') || pathname.startsWith('/app/reports') 
-                    ? 'bg-slate-100 text-slate-900 font-semibold shadow-2xs' 
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-cyan-50/90 text-[#0284c7] font-semibold border border-cyan-200/70 shadow-xs backdrop-blur-md' 
+                    : 'text-slate-600 hover:text-[#0ea5e9] hover:bg-white/60'
                 }`}
               >
-                <Clock className="w-3.5 h-3.5 text-slate-700" />
+                <Clock className="w-3.5 h-3.5 text-[#0ea5e9]" />
                 任务中心 (含历史报告)
               </Link>
             </nav>
@@ -152,12 +153,12 @@ export default function Navbar() {
             {user && (
               <Link 
                 to="/app/profile?tab=billing" 
-                className="flex items-center space-x-2 px-3 py-1.5 rounded-md bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-slate-800 text-xs font-medium transition-colors shadow-2xs"
+                className="flex items-center space-x-2 px-3 py-1.5 rounded-md bg-cyan-50/70 hover:bg-cyan-100/70 border border-cyan-200/60 text-[#0284c7] text-xs font-medium transition-all backdrop-blur-md shadow-xs group"
                 title="点击前往额度充值"
               >
-                <span className={`w-2 h-2 rounded-full ${(user.balance_quota ?? 0) > 0 ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                <span className="text-slate-500">剩余额度:</span>
-                <span className="font-mono text-xs text-slate-900 font-bold">
+                <span className={`w-2 h-2 rounded-full ${(user.balance_quota ?? 0) > 0 ? 'bg-[#0ea5e9] shadow-sm shadow-[#0ea5e9]/40' : 'bg-amber-500'}`}></span>
+                <span className="text-[#0284c7]">剩余额度:</span>
+                <span className="font-mono text-xs text-[#0284c7] font-bold">
                   {user.balance_quota ?? 0} 次
                 </span>
               </Link>
@@ -169,9 +170,9 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => setUserDropdown(!userDropdown)}
-                  className="flex items-center space-x-2 p-1 pl-2 pr-2.5 rounded-md hover:bg-zinc-100 transition-colors border border-transparent hover:border-zinc-200 cursor-pointer"
+                  className="flex items-center space-x-2 p-1 pl-2 pr-2.5 rounded-md hover:bg-white/80 transition-all border border-transparent hover:border-slate-200/70 cursor-pointer backdrop-blur-md"
                 >
-                  <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                  <div className="w-7 h-7 rounded-md bg-gradient-to-br from-sky-400 to-[#29B47D] text-white flex items-center justify-center font-bold text-xs shadow-xs border border-white/40">
                     {user.phone ? user.phone.slice(-2) : 'XY'}
                   </div>
                   <span className="text-xs font-medium text-slate-700 hidden sm:inline font-mono">
@@ -182,40 +183,40 @@ export default function Navbar() {
 
                 {userDropdown && (
                   <div 
-                    className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-zinc-200 py-1.5 z-50 text-xs animate-in fade-in slide-in-from-top-1"
+                    className="absolute right-0 mt-2 w-52 bg-white/80 backdrop-blur-2xl rounded-xl shadow-xl border border-white/85 py-1.5 z-50 text-xs animate-in fade-in slide-in-from-top-1"
                     onMouseLeave={() => setUserDropdown(false)}
                   >
-                    <div className="px-3.5 py-2 border-b border-zinc-100">
-                      <p className="font-bold text-slate-900">{user.company_name || '个人用户'}</p>
+                    <div className="px-3.5 py-2 border-b border-slate-100/80">
+                      <p className="font-bold text-slate-950">{user.company_name || '个人用户'}</p>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">{user.phone}</p>
                     </div>
                     <div className="py-1">
                       <Link 
                         to="/app/profile?tab=profile" 
                         onClick={() => setUserDropdown(false)}
-                        className="flex items-center px-3.5 py-2 text-slate-700 hover:text-slate-900 hover:bg-zinc-50 transition-colors font-medium"
+                        className="flex items-center px-3.5 py-2 text-slate-700 hover:text-[#0284c7] hover:bg-cyan-50/50 transition-colors font-medium"
                       >
-                        <UserIcon className="w-3.5 h-3.5 mr-2 text-slate-500" />
+                        <UserIcon className="w-3.5 h-3.5 mr-2 text-[#0ea5e9]" />
                         个人中心
                       </Link>
                       <Link 
                         to="/app/profile?tab=billing" 
                         onClick={() => setUserDropdown(false)}
-                        className="flex items-center px-3.5 py-2 text-slate-700 hover:text-slate-900 hover:bg-zinc-50 transition-colors font-medium"
+                        className="flex items-center px-3.5 py-2 text-slate-700 hover:text-[#0284c7] hover:bg-cyan-50/50 transition-colors font-medium"
                       >
-                        <CreditCard className="w-3.5 h-3.5 mr-2 text-slate-500" />
+                        <CreditCard className="w-3.5 h-3.5 mr-2 text-[#0ea5e9]" />
                         额度充值加油包
                       </Link>
                       <Link 
                         to="/app/profile?tab=transactions" 
                         onClick={() => setUserDropdown(false)}
-                        className="flex items-center px-3.5 py-2 text-slate-700 hover:text-slate-900 hover:bg-zinc-50 transition-colors font-medium"
+                        className="flex items-center px-3.5 py-2 text-slate-700 hover:text-[#0284c7] hover:bg-cyan-50/50 transition-colors font-medium"
                       >
-                        <Receipt className="w-3.5 h-3.5 mr-2 text-slate-500" />
+                        <Receipt className="w-3.5 h-3.5 mr-2 text-[#0ea5e9]" />
                         额度变动流水明细
                       </Link>
                     </div>
-                    <div className="pt-1 border-t border-zinc-100">
+                    <div className="pt-1 border-t border-slate-100/80">
                       <button 
                         type="button"
                         onClick={() => {
@@ -223,7 +224,7 @@ export default function Navbar() {
                           setUserDropdown(false);
                           navigate('/auth/login');
                         }}
-                        className="w-full text-left flex items-center px-3.5 py-2 text-rose-600 hover:bg-rose-50 transition-colors font-medium cursor-pointer"
+                        className="w-full text-left flex items-center px-3.5 py-2 text-rose-600 hover:bg-rose-50/80 transition-colors font-medium cursor-pointer"
                       >
                         <LogOut className="w-3.5 h-3.5 mr-2" />
                         退出登录
@@ -235,7 +236,7 @@ export default function Navbar() {
             ) : (
               <Link 
                 to="/auth/login"
-                className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-md text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-colors"
+                className="shadcn-button-primary px-3.5 py-1.5 text-xs"
               >
                 登录工作台
               </Link>
@@ -249,22 +250,17 @@ export default function Navbar() {
 
   // 3. 宣传官网专属导航
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/85 backdrop-blur-md shadow-2xs">
+    <header className="sticky top-0 z-50 w-full border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-[0_4px_20px_-2px_rgba(0,150,219,0.03)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         
         <div className="flex items-center space-x-5">
           <Link to="/" className="flex items-center space-x-2.5 group">
-            <div className="w-8 h-8 rounded-md bg-white p-1 border border-zinc-200 shadow-2xs flex items-center justify-center">
+            <div className="w-8 h-8 rounded-md bg-white/80 p-1 border border-slate-200/80 shadow-xs flex items-center justify-center backdrop-blur-md overflow-hidden">
               <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight text-slate-900">
-                享宇智评 · XY AI Platform
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
-                v2.1
-              </span>
-            </div>
+            <span className="font-bold text-sm tracking-tight text-slate-900">
+              享宇智评 · XY AI Platform
+            </span>
           </Link>
         </div>
 
@@ -272,7 +268,7 @@ export default function Navbar() {
           {user ? (
             <Link 
               to="/app"
-              className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-md text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-colors gap-1.5"
+              className="shadcn-button-primary px-3.5 py-1.5 text-xs shadow-xs flex items-center gap-1.5"
             >
               <Zap className="w-3.5 h-3.5" />
               进入工作台
@@ -281,13 +277,13 @@ export default function Navbar() {
             <div className="flex items-center space-x-2">
               <Link 
                 to="/auth/login"
-                className="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-zinc-100 transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-[#0096DB] hover:bg-cyan-50/50 transition-colors"
               >
                 登录
               </Link>
               <Link 
                 to="/app"
-                className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-md text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-colors"
+                className="shadcn-button-primary px-3.5 py-1.5 text-xs shadow-xs"
               >
                 免费体验
               </Link>

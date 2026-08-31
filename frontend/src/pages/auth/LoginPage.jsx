@@ -21,7 +21,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await userLogin(phone, code);
-      message.success('登录成功！已赠送 2 次免费尽调体验额度');
+      message.success('登录成功！已赠送 1 次免费尽调体验额度');
       navigate('/app');
     } catch (err) {
       message.error(err.response?.data?.detail || '登录失败');
@@ -39,7 +39,7 @@ export default function LoginPage() {
           </div>
           <h2 className="text-xl font-bold text-slate-950 tracking-tight">企业工作台登录 / 快速认证</h2>
           <p className="text-xs text-zinc-500">
-            新用户手机号直登，即赠送 2 次完整 AI 全景尽调额度
+            新用户手机号直登，即赠送 1 次完整 AI 全景尽调额度
           </p>
         </div>
 

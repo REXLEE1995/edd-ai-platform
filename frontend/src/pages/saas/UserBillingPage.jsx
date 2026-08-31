@@ -139,12 +139,12 @@ export default function UserBillingPage() {
                 key={pkg.id}
                 className={`shadcn-card p-6 bg-white flex flex-col justify-between space-y-6 transition-all ${
                   isPopular
-                    ? 'border-2 border-slate-900 shadow-md relative'
+                    ? 'border-2 border-[#0096DB] shadow-md relative'
                     : 'border-zinc-200 hover:border-zinc-300'
                 }`}
               >
                 {isPopular && (
-                  <span className="absolute -top-3 right-6 px-3 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 text-white uppercase tracking-wider shadow-xs">
+                  <span className="absolute -top-3 right-6 px-3 py-0.5 rounded-md text-[10px] font-bold bg-gradient-to-r from-[#0096DB] to-[#29B47D] text-white uppercase tracking-wider shadow-xs">
                     推荐档位
                   </span>
                 )}

@@ -37,7 +37,8 @@ import {
   Bot,
   MessageSquare,
   Copy,
-  Check
+  Check,
+  Clock
 } from 'lucide-react';
 import { message, Drawer, Modal, Tooltip } from 'antd';
 import apiClient from '../../api/client';
@@ -50,6 +51,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 import reportShunjieData from '../../mock/report_shunjie_preloan.json';
 import reportHangzhouData from '../../mock/report_hangzhou_preloan.json';
 import { Send, CornerDownLeft, RefreshCw } from 'lucide-react';
+import ShareReportModal from '../../components/ShareReportModal';
 
 // 极简微核 HTML5 Canvas 逐页流式渲染组件 (纯矢量直接从 sample_report.pdf 读取，0 图片依赖)
 function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
@@ -140,27 +142,9 @@ function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
       ref={containerRef}
       id={`pdf-page-${pageNum}`}
       className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all duration-300 relative ${
-        isCurrentVisible ? 'border-slate-900 ring-2 ring-slate-900/20 shadow-md' : 'border-slate-300'
+        isCurrentVisible ? 'border-[#0ea5e9] ring-2 ring-[#0ea5e9]/20 shadow-md' : 'border-slate-200/80'
       }`}
     >
-      {/* 单页头部页码标尺 (企业全景尽调规范) */}
-      <div className="px-4 py-2 bg-slate-950 text-white flex items-center justify-between text-xs border-b border-slate-800 select-none">
-        <div className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-md bg-slate-800 text-white flex items-center justify-center font-mono font-bold text-[10px] border border-slate-700">
-            {String(pageNum).padStart(2, '0')}
-          </span>
-          <span className="font-bold tracking-wide">
-            {pageNum === 1 ? '报告封面' : (pageNum <= 5 ? '报告目录与声明' : '企业深度尽调底稿')}
-          </span>
-        </div>
-        <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            PDF 原生矢量 Canvas · P.{pageNum}
-          </span>
-        </div>
-      </div>
-
       {/* 原生 HTML5 Canvas 渲染区域 */}
       <div className="w-full bg-white relative flex items-center justify-center min-h-[700px]">
         {loading && !rendered && (
@@ -211,6 +195,7 @@ export default function ReportReaderPage() {
   const [selectedAiChapterId, setSelectedAiChapterId] = useState('overall');
   const [copied, setCopied] = useState(false);
   const [isOverallAiSummaryOpen, setIsOverallAiSummaryOpen] = useState(false);
+  const [openShareModal, setOpenShareModal] = useState(false);
   const sidebarNavRef = useRef(null);
   const chatBottomRef = useRef(null);
 
@@ -586,16 +571,17 @@ export default function ReportReaderPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 核心随动：当 activeSubId 或 activeChapterId 变化时，左侧侧边栏自动跟随滚动，保持高亮项可见！
+  // 核心随动：当 activeSubId 或 activeChapterId 变化时，左侧侧边栏内部自动跟随滚动，保持高亮项可见 (不影响主页面滚动)
   useEffect(() => {
     const targetId = activeSubId ? `toc-sub-${activeSubId}` : `toc-item-${activeChapterId}`;
     const targetEl = document.getElementById(targetId);
-    if (targetEl && sidebarNavRef.current) {
-      targetEl.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'nearest'
-      });
+    const navEl = sidebarNavRef.current;
+    if (targetEl && navEl) {
+      const navRect = navEl.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+      if (targetRect.top < navRect.top || targetRect.bottom > navRect.bottom) {
+        navEl.scrollTop += (targetRect.top - navRect.top - 40);
+      }
     }
   }, [activeChapterId, activeSubId]);
 
@@ -635,41 +621,51 @@ export default function ReportReaderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fafafa] text-slate-900 antialiased pb-28">
+    <div className="min-h-screen text-slate-900 antialiased pb-28">
       
       {/* 顶部公文状态栏 (PC 紧凑固定导航，吸附在主Navbar下方) */}
-      <header className="sticky top-14 z-40 border-b border-slate-300 bg-white/95 backdrop-blur-md shadow-xs">
+      <header className="sticky top-14 z-40 border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
           
           {/* 左侧：返回 + 企业名称与统一社会信用代码 */}
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
             <Link 
               to="/app/tasks" 
-              className="shadcn-button-outline text-xs py-1.5 px-2.5 shrink-0"
+              className="shadcn-button-outline text-xs py-1.5 px-2.5 shrink-0 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
               title="返回任务中心"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>返回</span>
             </Link>
 
-            <div className="h-5 w-px bg-slate-300 shrink-0"></div>
+            <div className="h-5 w-px bg-slate-200/80 shrink-0"></div>
 
-            <div className="min-w-0 flex items-baseline gap-3 flex-wrap">
+            <div className="min-w-0 flex items-center gap-3 flex-wrap">
               <h1 className="font-bold text-base sm:text-lg text-slate-950 tracking-tight truncate">
                 {report?.company_name || '东莞市顺捷实业有限公司'}
               </h1>
-              <span className="text-xs text-zinc-500 font-mono">
+              <span className="text-xs text-slate-500 font-mono">
                 统一代码: <strong className="font-medium text-slate-800">{report?.credit_code || '91441900MA4W6BGB8T'}</strong>
               </span>
             </div>
           </div>
 
-          {/* 右侧：仅保留下载 PDF 原件按钮 */}
+          {/* 右侧：分享报告 + 下载 PDF 原件 */}
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setOpenShareModal(true)}
+              className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+              title="设置 6 位密码加密分享此报告"
+            >
+              <Share2 className="w-3.5 h-3.5 text-[#0096DB]" />
+              <span>分享报告</span>
+            </button>
+
             <a 
               href={targetPdfUrl}
               download={`${report?.company_name || '企业尽调报告'}.pdf`}
-              className="shadcn-button-primary text-xs py-1.5 px-3.5 whitespace-nowrap shadow-xs"
+              className="shadcn-button-primary text-xs py-1.5 px-3.5 whitespace-nowrap flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
               <span>下载 PDF 原件</span>
@@ -683,33 +679,32 @@ export default function ReportReaderPage() {
         
         {/* 左栏：PDF 目录大纲树状导航 (Col 3, 紧凑型 Sticky 侧边栏，顶部大纲与搜索固定，目录独立滚动) */}
         <aside 
-          ref={sidebarNavRef}
-          className="hidden lg:flex lg:flex-col lg:col-span-3 xl:col-span-3 sticky top-[115px] bg-white rounded-xl border border-slate-300 shadow-xs p-3.5 h-[calc(100vh-135px)] z-20"
+          className="hidden lg:flex lg:flex-col lg:col-span-3 xl:col-span-3 sticky top-[115px] bg-white/75 backdrop-blur-xl rounded-2xl border border-white/80 shadow-glass p-3.5 h-[calc(100vh-135px)] z-20"
         >
           {/* 1. 固定在顶部的 报告大纲标题 + 搜索章节输入框 */}
-          <div className="shrink-0 space-y-2.5 pb-3 border-b border-slate-200">
+          <div className="shrink-0 space-y-2.5 pb-3 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
-                <Bookmark className="w-3.5 h-3.5 text-slate-800" />
+                <Bookmark className="w-3.5 h-3.5 text-[#0096DB]" />
                 <span>报告大纲</span>
               </h3>
             </div>
 
             {/* 搜索框 */}
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="搜索章节..."
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-zinc-50 border border-slate-300 rounded-md focus:outline-none focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 transition-all placeholder:text-zinc-400"
+                className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-lg focus:outline-none focus:border-[#0096DB] focus:bg-white/90 focus:ring-2 focus:ring-[#0096DB]/15 transition-all placeholder:text-slate-400"
               />
             </div>
           </div>
 
           {/* 2. 目录项列表 (独立纵向平滑滚动，默认全部展开) */}
-          <nav className="flex-1 overflow-y-auto py-2 space-y-1 text-xs scroll-smooth pr-1">
+          <nav ref={sidebarNavRef} className="flex-1 overflow-y-auto py-2 space-y-1 text-xs scroll-smooth pr-1">
             {PDF_TOC_CATALOG.map((item) => {
               const isExpanded = !collapsedSections[item.id];
               const isParentActive = activeChapterId === item.id;
@@ -727,10 +722,10 @@ export default function ReportReaderPage() {
                 <div key={item.id} id={`toc-item-${item.id}`} className="space-y-0.5 scroll-mt-24">
                   <div
                     onClick={() => jumpToPage(item.page)}
-                    className={`w-full text-left px-2 py-1.5 rounded-md font-medium transition-all flex items-center justify-between cursor-pointer group ${
+                    className={`w-full text-left px-2 py-1.5 rounded-lg font-medium transition-all flex items-center justify-between cursor-pointer group ${
                       isParentActive 
-                        ? 'bg-slate-100 text-slate-950 font-semibold shadow-2xs border-l-3 border-slate-900 pl-2' 
-                        : 'text-zinc-700 hover:text-slate-950 hover:bg-zinc-50'
+                        ? 'bg-cyan-50/90 text-[#0070a4] font-semibold shadow-2xs border-l-3 border-[#0096DB] pl-2' 
+                        : 'text-slate-700 hover:text-[#0084c2] hover:bg-cyan-50/50'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-1">
@@ -738,7 +733,7 @@ export default function ReportReaderPage() {
                         <button
                           type="button"
                           onClick={(e) => toggleSection(item.id, e)}
-                          className="p-0.5 hover:bg-zinc-200 rounded text-zinc-400 shrink-0 cursor-pointer"
+                          className="p-0.5 hover:bg-slate-200/60 rounded text-slate-400 shrink-0 cursor-pointer"
                         >
                           {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                         </button>
@@ -756,14 +751,14 @@ export default function ReportReaderPage() {
                             e.stopPropagation();
                             handleOpenAiChapter(item.id);
                           }}
-                          className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center gap-0.5 transition-all border border-amber-300 shadow-2xs"
+                          className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-50 hover:bg-cyan-100/90 text-[#0084c2] flex items-center gap-0.5 transition-all border border-cyan-200/90 shadow-2xs cursor-pointer"
                           title="点击查看此板块 AI 深度总结"
                         >
-                          <Sparkles className="w-2.5 h-2.5 text-amber-600 animate-pulse" />
+                          <Sparkles className="w-2.5 h-2.5 text-[#0096DB]" />
                           <span>AI总结</span>
                         </button>
                       )}
-                      <span className="text-[11px] font-mono text-zinc-400 group-hover:text-slate-900 font-medium">
+                      <span className="text-[11px] font-mono text-zinc-400 group-hover:text-[#0084c2] font-medium">
                         P.{item.page}
                       </span>
                     </div>
@@ -781,8 +776,8 @@ export default function ReportReaderPage() {
                             onClick={() => jumpToPage(sub.page)}
                             className={`w-full text-left py-1 px-2 rounded-md text-[11px] cursor-pointer flex items-center justify-between truncate transition-all scroll-mt-24 ${
                               isSubActive 
-                                ? 'bg-slate-100 text-slate-950 font-semibold shadow-2xs border-l-2 border-slate-900 pl-1.5' 
-                                : 'text-zinc-500 hover:text-slate-900 hover:bg-zinc-50'
+                                ? 'bg-cyan-50 text-slate-950 font-semibold shadow-2xs border-l-2 border-[#0096DB] pl-1.5' 
+                                : 'text-zinc-500 hover:text-[#0096DB] hover:bg-cyan-50/40'
                             }`}
                             title={sub.title}
                           >
@@ -813,7 +808,7 @@ export default function ReportReaderPage() {
                   setCollapsedSections(allCollapsed); // 全部折叠
                 }
               }}
-              className="text-slate-800 hover:text-slate-950 font-semibold cursor-pointer"
+              className="text-[#0084c2] hover:text-[#0096DB] font-semibold cursor-pointer"
             >
               展开/折叠全部
             </button>
@@ -827,16 +822,16 @@ export default function ReportReaderPage() {
           <div className="w-full max-w-[1020px] space-y-6">
             
             {/* 全景综合尽调 AI 智能总结卡片 (吸顶固定 sticky top-[115px]，支持展开/收起) */}
-            <div className="shadcn-card sticky top-[115px] z-30 bg-white overflow-hidden shadow-xs border border-slate-300 transition-all">
+            <div className="shadcn-card sticky top-[115px] z-30 bg-white/75 backdrop-blur-xl overflow-hidden shadow-glass border border-white/80 rounded-xl transition-all">
               
               {/* 顶栏收起/展开控制条 */}
               <div 
                 onClick={() => setIsOverallAiSummaryOpen(!isOverallAiSummaryOpen)}
-                className="px-4 py-3 bg-zinc-50/90 hover:bg-zinc-100/80 flex items-center justify-between cursor-pointer border-b border-slate-200 transition-colors select-none"
+                className="px-4 py-3 bg-cyan-50/40 backdrop-blur-md hover:bg-cyan-50/60 flex items-center justify-between cursor-pointer border-b border-cyan-100/70 transition-colors select-none"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-6 h-6 rounded-md bg-slate-900 text-white flex items-center justify-center shadow-2xs shrink-0">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                  <div className="w-6 h-6 rounded-md bg-gradient-to-br from-sky-400 to-[#0ea5e9] text-white flex items-center justify-center shadow-2xs shrink-0">
+                    <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
                   </div>
                   <span className="font-bold text-xs text-slate-950">
                     享宇智评 · 全景综合尽调 AI 智能总结
@@ -853,12 +848,12 @@ export default function ReportReaderPage() {
 
               {/* 展开后的全景总结内容 */}
               {isOverallAiSummaryOpen && (
-                <div className="p-5 bg-white space-y-4 text-xs max-h-[calc(100vh-200px)] overflow-y-auto border-t border-slate-200">
+                <div className="p-5 bg-white/75 backdrop-blur-xl space-y-4 text-xs max-h-[calc(100vh-200px)] overflow-y-auto border-t border-slate-100/80">
                   
                   {/* 核心总括 */}
-                  <div className="p-4 bg-zinc-50 rounded-lg border border-slate-300 space-y-1.5">
+                  <div className="p-4 bg-cyan-50/40 backdrop-blur-md rounded-lg border border-cyan-100/80 space-y-1.5">
                     <strong className="text-slate-950 block text-xs flex items-center gap-1.5 font-bold">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <Sparkles className="w-3.5 h-3.5 text-[#0ea5e9]" />
                       企业信用全景综合画像：
                     </strong>
                     <p className="text-zinc-700 leading-relaxed text-xs">
@@ -867,9 +862,9 @@ export default function ReportReaderPage() {
                   </div>
 
                   {/* 全景深度研判要点 */}
-                  <div className="space-y-2.5 p-4 bg-zinc-50/80 border border-slate-300 rounded-lg">
+                  <div className="space-y-2.5 p-4 bg-slate-50/70 backdrop-blur-md border border-slate-200/70 rounded-lg">
                     <strong className="text-xs font-bold text-slate-950 block flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                      <span className="w-1.5 h-3 bg-slate-900 rounded-full"></span>
+                      <span className="w-1.5 h-3 bg-[#0ea5e9] rounded-full"></span>
                       📑 全景深度研判要点与风控审查结论：
                     </strong>
                     <div className="space-y-2 text-zinc-700 text-xs">
@@ -878,8 +873,8 @@ export default function ReportReaderPage() {
                         "【经营与涉税】近 12 个月有效销项开票 4063.73 万元，红废比仅 0.42%，36 个月涉税申报矩阵 100% 正常无偷漏税记录。",
                         "【司法与合规】全国失信被执行人及限高记录为 0，历史涉诉案件已完全出清合规，环保与市监处罚记录为 0。"
                       ]).map((kp, idx) => (
-                        <div key={idx} className="flex items-start gap-2.5 leading-relaxed bg-white p-3 rounded-md border border-slate-300 shadow-2xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-900 shrink-0 mt-1.5"></span>
+                        <div key={idx} className="flex items-start gap-2.5 leading-relaxed bg-white/80 backdrop-blur-md p-3 rounded-md border border-white/90 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#0ea5e9] shrink-0 mt-1.5"></span>
                           <span className="leading-relaxed text-zinc-800">{kp}</span>
                         </div>
                       ))}
@@ -888,7 +883,7 @@ export default function ReportReaderPage() {
 
                   {/* 底部快捷操作 */}
                   <div className="flex items-center justify-between pt-1 text-[11px] text-zinc-400">
-                    <span>基于多源权威数据中台拟合生成 · 终身免费复查</span>
+                    <span>基于多源权威数据中台拟合生成 · 支持随时调阅</span>
                     <button
                       type="button"
                       onClick={() => handleCopyAiInsight(
@@ -932,8 +927,8 @@ export default function ReportReaderPage() {
         title={
           <div className="flex items-center justify-between w-full pr-2">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-md bg-slate-900 flex items-center justify-center text-white shadow-2xs">
-                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+              <div className="w-7 h-7 rounded-md bg-[#0096DB] flex items-center justify-center text-white shadow-2xs">
+                <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
               </div>
               <div>
                 <span className="font-bold text-sm text-slate-950 block leading-tight">
@@ -963,12 +958,12 @@ export default function ReportReaderPage() {
           <div className="flex-1 p-4 space-y-4 overflow-y-auto min-h-0">
             {chatMessages.length === 0 ? (
               <div className="py-16 text-center space-y-3 px-6">
-                <div className="w-10 h-10 rounded-full bg-zinc-100 border border-zinc-200 text-slate-900 mx-auto flex items-center justify-center shadow-2xs">
-                  <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+                <div className="w-10 h-10 rounded-full bg-cyan-50 border border-cyan-100 text-[#0096DB] mx-auto flex items-center justify-center shadow-2xs">
+                  <Sparkles className="w-5 h-5 text-[#0096DB] animate-pulse" />
                 </div>
                 <h4 className="font-bold text-sm text-slate-950">享宇森云 AI 智能审贷风控助手</h4>
                 <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mx-auto">
-                  基于对本份企业尽调报告原件的<strong className="text-slate-800">实时深度解析与多维核验</strong>，支持点击左侧大纲 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-medium text-[10px]"><Sparkles className="w-2.5 h-2.5 text-amber-600" /> AI总结</span> 调阅章节研判，或直接在下方输入框自由提问。
+                  基于对本份企业尽调报告原件的<strong className="text-slate-800">实时深度解析与多维核验</strong>，支持点击左侧大纲 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-cyan-50 text-[#0084c2] border border-cyan-200 font-medium text-[10px]"><Sparkles className="w-2.5 h-2.5 text-[#0096DB]" /> AI总结</span> 调阅章节研判，或直接在下方输入框自由提问。
                 </p>
                 {/* 推荐问题气泡 */}
                 <div className="pt-3 flex flex-wrap justify-center gap-1.5 max-w-sm mx-auto">
@@ -977,7 +972,7 @@ export default function ReportReaderPage() {
                       key={qIdx}
                       type="button"
                       onClick={() => handleSendMessage(qp.prompt)}
-                      className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 transition-all shadow-2xs cursor-pointer text-left"
+                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white hover:bg-cyan-50 hover:text-[#0084c2] hover:border-cyan-200 text-zinc-700 border border-zinc-200 transition-all shadow-2xs cursor-pointer text-left"
                     >
                       {qp.label}
                     </button>
@@ -989,13 +984,13 @@ export default function ReportReaderPage() {
                 if (msg.role === 'user') {
                   return (
                     <div key={msg.id || index} className="flex items-start justify-end gap-2.5 pl-10">
-                      <div className="bg-slate-900 text-white p-3 rounded-xl rounded-tr-xs shadow-2xs text-xs leading-relaxed max-w-[88%]">
+                      <div className="bg-[#0096DB] text-white p-3 rounded-lg rounded-tr-xs shadow-2xs text-xs leading-relaxed max-w-[88%]">
                         <p className="whitespace-pre-wrap">{msg.text}</p>
-                        <span className="text-[10px] text-zinc-400 block text-right mt-1 font-mono">
+                        <span className="text-[10px] text-white/80 block text-right mt-1 font-mono">
                           {msg.timestamp || '刚刚'}
                         </span>
                       </div>
-                      <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                      <div className="w-7 h-7 rounded-md bg-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                         我
                       </div>
                     </div>
@@ -1006,11 +1001,11 @@ export default function ReportReaderPage() {
                 if (msg.role === 'ai_text') {
                   return (
                     <div key={msg.id || index} className="flex items-start gap-2.5 pr-4">
-                      <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                        <Bot className="w-4 h-4 text-amber-300" />
+                      <div className="w-7 h-7 rounded-md bg-[#0096DB] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                        <Bot className="w-4 h-4 text-white" />
                       </div>
                       <div className="flex-1 max-w-[92%]">
-                        <div className="bg-white p-4 rounded-xl rounded-tl-xs border border-zinc-200 shadow-2xs space-y-2 text-xs text-slate-900 leading-relaxed">
+                        <div className="bg-white p-4 rounded-lg rounded-tl-xs border border-zinc-200 shadow-2xs space-y-2 text-xs text-slate-900 leading-relaxed">
                           <div className="whitespace-pre-wrap font-normal leading-relaxed text-zinc-800">
                             {msg.text}
                           </div>
@@ -1036,12 +1031,12 @@ export default function ReportReaderPage() {
                 if (!data) return null;
                 return (
                   <div key={msg.id || index} className="flex items-start gap-2.5 pr-4">
-                    <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                      <Bot className="w-4 h-4 text-amber-300" />
+                    <div className="w-7 h-7 rounded-md bg-[#0096DB] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                      <Bot className="w-4 h-4 text-white" />
                     </div>
                     
                     <div className="flex-1 space-y-2 max-w-[92%]">
-                      <div className="bg-white p-4 rounded-xl rounded-tl-xs border border-zinc-200 shadow-2xs space-y-3">
+                      <div className="bg-white p-4 rounded-lg rounded-tl-xs border border-zinc-200 shadow-2xs space-y-3">
                         
                         {/* 标题栏 */}
                         <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
@@ -1059,7 +1054,7 @@ export default function ReportReaderPage() {
                         </div>
 
                         {/* 核心结论 */}
-                        <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-md text-xs text-zinc-800 leading-relaxed">
+                        <div className="p-3 bg-cyan-50/40 border border-cyan-100 rounded-md text-xs text-zinc-800 leading-relaxed">
                           <strong className="text-slate-950 block mb-1">💡 核心研判结论：</strong>
                           {data.summary}
                         </div>
@@ -1107,11 +1102,11 @@ export default function ReportReaderPage() {
             {/* AI 思考中动效 */}
             {isAiThinking && (
               <div className="flex items-start gap-2.5 pr-4">
-                <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                  <Bot className="w-4 h-4 text-amber-300 animate-spin" />
+                <div className="w-7 h-7 rounded-md bg-[#0096DB] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <Bot className="w-4 h-4 text-white animate-spin" />
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-zinc-200 shadow-2xs flex items-center gap-2 text-xs text-zinc-500">
-                  <RefreshCw className="w-3.5 h-3.5 text-slate-800 animate-spin" />
+                <div className="bg-white p-3 rounded-lg border border-zinc-200 shadow-2xs flex items-center gap-2 text-xs text-zinc-500">
+                  <RefreshCw className="w-3.5 h-3.5 text-[#0096DB] animate-spin" />
                   <span>正在深度解析尽调报告原件并核验事实...</span>
                 </div>
               </div>
@@ -1128,7 +1123,7 @@ export default function ReportReaderPage() {
                   key={qIdx}
                   type="button"
                   onClick={() => handleSendMessage(qp.prompt)}
-                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 transition-all shrink-0 cursor-pointer"
+                  className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-100 hover:bg-cyan-50 hover:text-[#0084c2] hover:border-cyan-200 text-zinc-700 border border-zinc-200 transition-all shrink-0 cursor-pointer"
                 >
                   {qp.label}
                 </button>
@@ -1136,7 +1131,7 @@ export default function ReportReaderPage() {
             </div>
 
             {/* 输入框与发送按钮 */}
-            <div className="flex items-end gap-2 bg-zinc-50 border border-zinc-200 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10 rounded-lg p-1.5 transition-all">
+            <div className="flex items-end gap-2 bg-zinc-50 border border-zinc-200 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 rounded-md p-1.5 transition-all">
               <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
@@ -1156,7 +1151,7 @@ export default function ReportReaderPage() {
                 onClick={() => handleSendMessage()}
                 className={`p-2 rounded-md transition-all shrink-0 flex items-center justify-center ${
                   chatInput.trim() && !isAiThinking
-                    ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-2xs cursor-pointer'
+                    ? 'bg-[#0096DB] text-white shadow-2xs cursor-pointer hover:bg-[#0084c2]'
                     : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
                 }`}
                 title="发送问题 (Enter)"
@@ -1181,16 +1176,23 @@ export default function ReportReaderPage() {
         <button
           type="button"
           onClick={() => setIsAiDrawerOpen(true)}
-          className="group flex flex-col items-center gap-1.5 py-3.5 px-2 bg-slate-900 text-white rounded-l-lg shadow-xl border-l border-t border-b border-zinc-800 hover:bg-slate-800 hover:pl-2.5 transition-all cursor-pointer select-none"
+          className="group flex flex-col items-center gap-1.5 py-3.5 px-2.5 bg-gradient-to-b from-sky-400 to-[#0ea5e9] text-white rounded-l-lg shadow-lg border-l border-t border-b border-white/60 backdrop-blur-md hover:from-sky-300 hover:to-[#38bdf8] hover:pl-3 transition-all cursor-pointer select-none"
           title="点击展开 AI 智能总结与板块研判记录"
         >
-          <Sparkles className="w-4 h-4 text-amber-300 animate-pulse group-hover:scale-110 transition-transform" />
-          <span className="text-[11px] font-bold tracking-widest text-zinc-100 [writing-mode:vertical-rl] leading-tight py-1">
+          <Sparkles className="w-4 h-4 text-white animate-pulse group-hover:scale-110 transition-transform" />
+          <span className="text-[11px] font-bold tracking-widest text-white [writing-mode:vertical-rl] leading-tight py-1">
             AI 总结
           </span>
-          <ChevronLeft className="w-3.5 h-3.5 text-zinc-400 group-hover:-translate-x-0.5 transition-transform" />
+          <ChevronLeft className="w-3.5 h-3.5 text-white/80 group-hover:-translate-x-0.5 transition-transform" />
         </button>
       </aside>
+
+      {/* 报告加密分享弹窗 (6 位访问密码设置) */}
+      <ShareReportModal
+        report={report}
+        open={openShareModal}
+        onClose={() => setOpenShareModal(false)}
+      />
 
     </div>
   );

@@ -324,7 +324,7 @@ export default function AdminUsersPage() {
                     type="button"
                     onClick={() => setAdjustType('add')}
                     className={`py-2 rounded-md font-semibold border transition-all ${
-                      adjustType === 'add' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-zinc-200'
+                      adjustType === 'add' ? 'bg-[#29B47D] text-white border-[#29B47D] shadow-xs' : 'bg-white text-slate-700 border-zinc-200'
                     }`}
                   >
                     增加额度 (+)
@@ -333,7 +333,7 @@ export default function AdminUsersPage() {
                     type="button"
                     onClick={() => setAdjustType('deduct')}
                     className={`py-2 rounded-md font-semibold border transition-all ${
-                      adjustType === 'deduct' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-zinc-200'
+                      adjustType === 'deduct' ? 'bg-rose-600 text-white border-rose-600 shadow-xs' : 'bg-white text-slate-700 border-zinc-200'
                     }`}
                   >
                     扣减额度 (-)

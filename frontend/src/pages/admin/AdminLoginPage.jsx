@@ -27,13 +27,13 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-16 text-slate-900">
-      <div className="max-w-md w-full shadcn-card bg-white p-8 space-y-6 border border-zinc-200 shadow-sm">
+      <div className="max-w-md w-full shadcn-card bg-white/85 backdrop-blur-2xl p-8 space-y-6 border border-white/90 shadow-glass">
         <div className="text-center space-y-1.5">
-          <div className="w-11 h-11 rounded-lg bg-zinc-100 border border-zinc-200 mx-auto flex items-center justify-center text-slate-900 mb-2 shadow-2xs">
-            <ShieldCheck className="w-5 h-5 text-slate-800" />
+          <div className="w-12 h-12 rounded-lg bg-white/80 p-1.5 border border-slate-200/80 mx-auto flex items-center justify-center mb-2 shadow-xs backdrop-blur-md overflow-hidden">
+            <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-xl font-bold text-slate-950 tracking-tight">运营管理后台登录</h2>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-slate-500">
             享宇智评尽调平台 · 运营/风控/财务管控中心
           </p>
         </div>
@@ -41,8 +41,8 @@ export default function AdminLoginPage() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-1.5">
             <label className="block text-xs font-medium text-slate-700">管理员账号</label>
-            <div className="flex items-center bg-white rounded-md px-3.5 py-2.5 border border-zinc-200 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10 transition-all">
-              <User className="w-4 h-4 text-zinc-400 mr-2.5 shrink-0" />
+            <div className="flex items-center bg-white/90 rounded-md px-3.5 py-2.5 border border-slate-200/90 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 transition-all">
+              <User className="w-4 h-4 text-slate-400 mr-2.5 shrink-0" />
               <input
                 type="text"
                 value={username}
@@ -56,8 +56,8 @@ export default function AdminLoginPage() {
 
           <div className="space-y-1.5">
             <label className="block text-xs font-medium text-slate-700">登录密码</label>
-            <div className="flex items-center bg-white rounded-md px-3.5 py-2.5 border border-zinc-200 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10 transition-all">
-              <Lock className="w-4 h-4 text-zinc-400 mr-2.5 shrink-0" />
+            <div className="flex items-center bg-white/90 rounded-md px-3.5 py-2.5 border border-slate-200/90 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 transition-all">
+              <Lock className="w-4 h-4 text-slate-400 mr-2.5 shrink-0" />
               <input
                 type="password"
                 value={password}
@@ -69,7 +69,7 @@ export default function AdminLoginPage() {
             </div>
           </div>
 
-          <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 text-xs text-zinc-600">
+          <div className="p-3 rounded-md bg-cyan-50/60 border border-cyan-100 text-xs text-slate-600">
             <span>默认演示账号: <strong className="font-mono text-slate-900">admin</strong> | 密码: <strong className="font-mono text-slate-900">admin123</strong></span>
           </div>
 
@@ -83,8 +83,8 @@ export default function AdminLoginPage() {
           </button>
         </form>
 
-        <div className="pt-4 border-t border-zinc-100 text-center text-xs">
-          <Link to="/" className="text-zinc-500 hover:text-slate-900 transition-colors font-medium">
+        <div className="pt-4 border-t border-slate-100 text-center text-xs">
+          <Link to="/" className="text-slate-500 hover:text-[#0084c2] transition-colors font-medium">
             ← 返回前台工作台
           </Link>
         </div>
