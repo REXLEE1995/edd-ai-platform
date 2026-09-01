@@ -133,7 +133,7 @@ class AIService:
         """
         company_name = report_meta.get("company_name", "目标企业")
         system_prompt = (
-            f"你是由享宇智评研发的企业尽调 AI 智能助手。当前正在协助用户阅读【{company_name}】的深度尽调报告底稿。\n"
+            f"你是由享宇AI智评研发的企业尽调 AI 智能助手。当前正在协助用户阅读【{company_name}】的深度尽调报告底稿。\n"
             "请严格依据提供的报告上下文事实准确、专业、精炼地回答用户提问。如果报告数据中未明确提及，请如实告知并提示用户查阅其他底稿附件。"
         )
 

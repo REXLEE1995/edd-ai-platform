@@ -306,7 +306,7 @@ export default function SharedReportPage() {
             <div className="w-7 h-7 rounded-md bg-white p-0.5 border border-slate-200/80 shadow-xs flex items-center justify-center overflow-hidden">
               <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <span className="font-bold text-sm text-slate-900 tracking-tight">享宇智评 · XY AI Platform</span>
+            <span className="font-bold text-sm text-slate-900 tracking-tight">享宇AI智评</span>
           </div>
           <span className="text-xs text-[#0084c2] bg-cyan-50/80 px-2.5 py-0.5 rounded-md border border-cyan-200/60 font-mono backdrop-blur-sm">
             加密分享查阅通道
@@ -415,14 +415,14 @@ export default function SharedReportPage() {
             )}
 
             <div className="text-center text-[11px] text-slate-400 font-mono">
-              享宇智评 XY AI Platform · 企业信用深度尽调合规存证系统
+              享宇AI智评 · 企业信用深度尽调合规存证系统
             </div>
 
           </div>
         </main>
 
         <footer className="relative z-10 py-4 text-center text-xs text-slate-400">
-          © 2026 享宇智评 XY AI Platform. All rights reserved.
+          © 2026 享宇AI智评. All rights reserved.
         </footer>
 
       </div>
@@ -565,7 +565,7 @@ export default function SharedReportPage() {
             >
               <div className="flex items-center gap-2 font-bold text-sm text-slate-950">
                 <Sparkles className="w-4 h-4 text-[#0ea5e9]" />
-                <span>享宇智评 · 全景综合尽调 AI 智能研判综述</span>
+                <span>享宇AI智评 · 全景综合尽调 AI 智能研判综述</span>
               </div>
               <div className="flex items-center gap-1.5 text-xs text-slate-500">
                 <span>{summaryExpanded ? '收起总结' : '展开总结'}</span>

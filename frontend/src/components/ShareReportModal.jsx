@@ -160,7 +160,7 @@ export default function ShareReportModal({ report, open, onClose, onShareUpdated
 
   const copyFullShareText = async () => {
     const expiryText = shareData?.expires_in_text || (getCalculatedExpireDays() === 0 ? '永久有效 (不过期)' : `${getCalculatedExpireDays()} 天内有效`);
-    const text = `【享宇智评 · 企业深度尽调报告加密查阅】\n🏢 企业名称：${report?.company_name || '目标企业'}\n📌 统一代码：${report?.credit_code || ''}\n🔗 访问链接：${shareUrl}\n🔑 6 位访问密码：${accessCode || shareData?.access_code || '888666'}\n🕒 分享有效期：${expiryText}`;
+    const text = `【享宇AI智评 · 企业深度尽调报告加密查阅】\n🏢 企业名称：${report?.company_name || '目标企业'}\n📌 统一代码：${report?.credit_code || ''}\n🔗 访问链接：${shareUrl}\n🔑 6 位访问密码：${accessCode || shareData?.access_code || '888666'}\n🕒 分享有效期：${expiryText}`;
     const ok = await copyText(text);
     if (ok) {
       setCopied(true);

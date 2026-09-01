@@ -5,10 +5,13 @@ from pydantic_settings import BaseSettings
 db_path_str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'edd_v6.db')).replace('\\', '/')
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "EDD AI Platform"
+    PROJECT_NAME: str = "享宇AI智评"
     VERSION: str = "2.1.0"
     API_V1_STR: str = "/api/v1"
     API_ADMIN_STR: str = "/api/admin"
+
+    # 公网/局域网真实服务 IP 或域名 (用于短链生成、二维码、对外分享和微风企授权回调，如 http://192.168.110.234:8000)
+    PUBLIC_BASE_URL: str = ""
 
     # Database
     DATABASE_URL: str = f"sqlite+aiosqlite:///{db_path_str}"

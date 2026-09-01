@@ -34,20 +34,7 @@ class WfqCallbackRequest(BaseModel):
     authResult: Optional[str] = "SUCCESS"
     sign: Optional[str] = None
 
-import socket
-
-def get_public_base_url(request: Request) -> str:
-    base_url = str(request.base_url).rstrip("/")
-    if "127.0.0.1" in base_url or "localhost" in base_url:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(('8.8.8.8', 80))
-            lan_ip = s.getsockname()[0]
-            s.close()
-            base_url = base_url.replace("127.0.0.1", lan_ip).replace("localhost", lan_ip)
-        except Exception:
-            pass
-    return base_url
+from app.core.network import get_public_base_url
 
 @router.post("/create")
 async def create_dd_task(
@@ -313,7 +300,7 @@ async def weifengqi_auth_callback_get(
     </div>
 
     <button onclick="window.close();" class="btn">关闭此页面</button>
-    <div class="footer">EDD AI Platform · 享宇智评企业全景尽调平台</div>
+    <div class="footer">享宇AI智评 · 企业全景尽调平台</div>
   </div>
 </body>
 </html>"""
@@ -325,7 +312,7 @@ async def weifengqi_auth_callback_get(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>企业数据授权成功 - 享宇智评 AI 尽调平台</title>
+  <title>企业数据授权成功 - 享宇AI智评</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }}
     body {{ background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); color: #0f172a; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }}
@@ -371,7 +358,7 @@ async def weifengqi_auth_callback_get(
     </div>
 
     <button onclick="if(window.opener){{try{{window.opener.location.reload();}}catch(e){{}}}} window.close();" class="btn">完成并关闭此页面</button>
-    <div class="footer">EDD AI Platform · 享宇智评企业全景尽调平台</div>
+    <div class="footer">享宇AI智评 · 企业全景尽调平台</div>
   </div>
 </body>
 </html>"""

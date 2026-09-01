@@ -34,7 +34,7 @@ export default function AdminLoginPage() {
           </div>
           <h2 className="text-xl font-bold text-slate-950 tracking-tight">运营管理后台登录</h2>
           <p className="text-xs text-slate-500">
-            享宇智评尽调平台 · 运营/风控/财务管控中心
+            享宇AI智评 · 运营/风控/财务管控中心
           </p>
         </div>
 

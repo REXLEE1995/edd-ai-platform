@@ -16,8 +16,8 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
           <div className="space-y-3">
             <div className="flex items-center space-x-2">
-              <img src="/brand_logo.png" alt="享宇智评" className="w-5 h-5 object-contain" />
-              <span className="font-bold text-sm text-slate-900 tracking-tight">享宇智评 · XY AI Platform</span>
+              <img src="/brand_logo.png" alt="享宇AI智评" className="w-5 h-5 object-contain" />
+              <span className="font-bold text-sm text-slate-900 tracking-tight">享宇AI智评</span>
             </div>
             <p className="text-zinc-600 leading-relaxed text-xs">
               新一代企业信贷深度尽调平台。深度融合官方中台工商/司法合规底稿与企业经营全息档案，出具银行级全景尽调报告。
@@ -61,7 +61,7 @@ export default function Footer() {
         </div>
 
         <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-zinc-400 text-xs">
-          <p>© 2026 享宇智评 XY AI Platform. All rights reserved. 四川享宇科技有限公司自研技术中台</p>
+          <p>© 2026 享宇AI智评. All rights reserved. 四川享宇科技有限公司自研技术中台</p>
           <div className="flex space-x-6 mt-3 sm:mt-0">
             <span className="hover:text-zinc-700 cursor-pointer transition-colors">用户服务协议</span>
             <span className="hover:text-zinc-700 cursor-pointer transition-colors">隐私合规保护政策</span>

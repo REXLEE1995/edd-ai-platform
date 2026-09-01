@@ -325,7 +325,7 @@ export default function HomePage() {
 
             <div className="text-right sm:border-l sm:border-slate-300 sm:pl-6 shrink-0 font-mono">
               <span className="text-xs text-zinc-400 block line-through">市面独立采购成本: ¥498/家</span>
-              <span className="text-sm font-bold text-slate-900 block mt-0.5">享宇智评 仅耗 1 次额度 (单份低至 ¥318)</span>
+              <span className="text-sm font-bold text-slate-900 block mt-0.5">享宇AI智评 仅耗 1 次额度 (单份低至 ¥318)</span>
             </div>
           </div>
 
@@ -364,7 +364,7 @@ export default function HomePage() {
             <div className="p-4 bg-zinc-100/90 rounded-lg border border-slate-300 space-y-1.5 shadow-2xs">
               <div className="font-bold text-slate-900 flex items-center justify-between">
                 <span>全景报告与PDF导出</span>
-                <span className="text-slate-800 font-mono text-[11px]">享宇智评</span>
+                <span className="text-slate-800 font-mono text-[11px]">享宇AI智评</span>
               </div>
               <p className="text-zinc-700 leading-relaxed text-[11px]">
                 集成全景大纲目录索引、深度尽调报告全文，支持在线高清沉浸式查阅与 A4 PDF 原件导出。
@@ -588,7 +588,7 @@ export default function HomePage() {
               <Sparkles className="w-5 h-5 text-amber-500" />
             </div>
             <h3 className="text-lg font-bold text-slate-950 tracking-tight">
-              快速登录 / 注册享宇智评
+              快速登录 / 注册享宇AI智评
             </h3>
             <p className="text-xs text-zinc-500">
               手机验证码一键登录，即刻获赠 <strong className="text-slate-900 font-semibold">2 次免费 AI 全景尽调</strong> 体验额度

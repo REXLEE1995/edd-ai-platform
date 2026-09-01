@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="EDD AI Platform - 企业尽调商业 SaaS 及后台运营管理系统 API",
+    description="享宇AI智评 - 企业尽调商业 SaaS 及后台运营管理系统 API",
     lifespan=lifespan
 )
 

@@ -137,7 +137,7 @@ export default function ShareManagementModal({ open, onClose }) {
   const copyShareInfo = async (share) => {
     const shareUrl = `${window.location.origin}/share/${share.share_code}`;
     const expText = share.expires_in_text || (share.expire_at ? `有效期至 ${share.expire_at}` : '永久有效 (不过期)');
-    const text = `【享宇智评 · 企业深度尽调报告加密查阅】\n🏢 企业名称：${share.company_name}\n📌 统一代码：${share.credit_code}\n🔗 访问链接：${shareUrl}\n🔑 6 位访问密码：${share.access_code}\n🕒 分享有效期：${expText}`;
+    const text = `【享宇AI智评 · 企业深度尽调报告加密查阅】\n🏢 企业名称：${share.company_name}\n📌 统一代码：${share.credit_code}\n🔗 访问链接：${shareUrl}\n🔑 6 位访问密码：${share.access_code}\n🕒 分享有效期：${expText}`;
     const ok = await copyText(text);
     if (ok) {
       message.success(`已复制【${share.company_name}】的分享链接与 6 位密码！`);

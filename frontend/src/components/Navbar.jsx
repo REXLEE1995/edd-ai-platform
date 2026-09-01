@@ -41,7 +41,7 @@ export default function Navbar() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm tracking-tight text-slate-900">
-                  享宇智评 Admin
+                  享宇AI智评 Admin
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-cyan-50/80 text-[#0084c2] border border-cyan-200/60 backdrop-blur-sm">
                   运营管控
@@ -118,7 +118,7 @@ export default function Navbar() {
                 <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <span className="font-bold text-sm tracking-tight text-slate-900">
-                享宇智评尽调平台
+                享宇AI智评
               </span>
             </Link>
 
@@ -260,7 +260,7 @@ export default function Navbar() {
               <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <span className="font-bold text-sm tracking-tight text-slate-900">
-              享宇智评 · XY AI Platform
+              享宇AI智评
             </span>
           </Link>
         </div>

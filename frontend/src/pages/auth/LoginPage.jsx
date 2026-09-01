@@ -35,7 +35,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full shadcn-card p-8 bg-white space-y-6 shadow-sm border border-zinc-200">
         <div className="text-center space-y-2">
           <div className="w-11 h-11 rounded-lg bg-zinc-100 border border-zinc-200 mx-auto flex items-center justify-center text-slate-900 mb-2 shadow-2xs">
-            <img src="/brand_logo.png" alt="享宇智评" className="w-6 h-6 object-contain" />
+            <img src="/brand_logo.png" alt="享宇AI智评" className="w-6 h-6 object-contain" />
           </div>
           <h2 className="text-xl font-bold text-slate-950 tracking-tight">企业工作台登录 / 快速认证</h2>
           <p className="text-xs text-zinc-500">

@@ -524,7 +524,7 @@ export default function UserCenterPage() {
 
               <div className="text-right sm:border-l sm:border-slate-200 sm:pl-5 shrink-0 font-mono">
                 <span className="text-xs text-zinc-400 block line-through">市面独立采购成本: ¥498/家</span>
-                <span className="text-xs font-bold text-slate-900 block mt-0.5">享宇智评 仅耗 1 次 (单份低至 ¥318)</span>
+                <span className="text-xs font-bold text-slate-900 block mt-0.5">享宇AI智评 仅耗 1 次 (单份低至 ¥318)</span>
               </div>
             </div>
 
@@ -553,7 +553,7 @@ export default function UserCenterPage() {
               <div className="p-3.5 bg-cyan-50/40 backdrop-blur-md rounded-lg border border-cyan-100 space-y-1 shadow-2xs">
                 <div className="font-bold text-slate-900 flex items-center justify-between">
                   <span>企业全景尽调报告</span>
-                  <span className="text-[#0096DB] font-mono text-[10px]">享宇智评</span>
+                  <span className="text-[#0096DB] font-mono text-[10px]">享宇AI智评</span>
                 </div>
                 <p className="text-zinc-700 leading-relaxed text-[11px]">
                   集成全景大纲目录索引、深度尽调报告全文，支持在线高清沉浸式查阅与 A4 PDF 原件导出。

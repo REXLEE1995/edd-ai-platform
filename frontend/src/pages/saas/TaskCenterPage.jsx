@@ -588,8 +588,8 @@ export default function TaskCenterPage() {
               const getNormalizedUrl = (url) => {
                 if (!url) return '';
                 const currentHost = window.location.hostname;
-                if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
-                  return url.replace(/127\.0\.0\.1|localhost/g, currentHost);
+                if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1' && !currentHost.startsWith('198.18.')) {
+                  return url.replace(/127\.0\.0\.1|localhost|198\.18\.\d+\.\d+/g, currentHost);
                 }
                 return url;
               };

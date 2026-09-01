@@ -816,7 +816,7 @@ export default function ReportReaderPage() {
                     <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
                   </div>
                   <span className="font-bold text-xs text-slate-950">
-                    享宇智评 · 全景综合尽调 AI 智能总结
+                    享宇AI智评 · 全景综合尽调 AI 智能总结
                   </span>
                 </div>
 
@@ -869,7 +869,7 @@ export default function ReportReaderPage() {
                     <button
                       type="button"
                       onClick={() => handleCopyAiInsight(
-                        `【享宇智评 · 全景综合尽调 AI 总结】\n${OVERALL_SUMMARY.summary}\n\n建议授信：¥500.00 万元 (702分 B+级)`
+                        `【享宇AI智评 · 全景综合尽调 AI 总结】\n${OVERALL_SUMMARY.summary}\n\n建议授信：¥500.00 万元 (702分 B+级)`
                       )}
                       className="shadcn-button-outline text-[11px] py-1 px-2.5"
                     >
