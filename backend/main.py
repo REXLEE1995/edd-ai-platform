@@ -1,8 +1,24 @@
+import sys
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import init_db
+
+# -------------------------------------------------------------
+# 全局日志格式与输出级别配置 (终端高可读性彩色化实时输出)
+# -------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+for logger_name in ["edd", "edd.cleansing", "edd.storage", "edd.task", "edd.weifengqi", "app"]:
+    logging.getLogger(logger_name).setLevel(logging.INFO)
+
+logger = logging.getLogger("edd.server")
 
 # 前台 SaaS 路由
 from app.api.v1.auth import router as v1_auth_router
@@ -23,8 +39,11 @@ from app.api.admin.settings import router as admin_settings_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时自动初始化本地 SQLite 数据库与预置初始数据
+    logger.info("🚀 正在初始化本地 SQLite 数据库与预置系统数据...")
     await init_db()
+    logger.info("✅ 尽调平台后端服务启动就绪，数据清洗中台与 MinIO 存证引擎已待命！")
     yield
+    logger.info("🛑 尽调平台后端服务已安全关闭。")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -41,6 +60,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import time
+from fastapi import Request
+
+@app.middleware("http")
+async def log_requests_middleware(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = round((time.time() - start_time) * 1000, 1)
+    path = request.url.path
+    if not path.endswith("/health") and not path.endswith("/auth/me"):
+        logger.info(f"🌐 [{request.method}] {path} -> HTTP {response.status_code} ({process_time}ms)")
+    return response
 
 # 注册前台 SaaS 业务路由
 app.include_router(v1_auth_router, prefix="/api/v1")
