@@ -16,7 +16,7 @@ import {
   Phone,
   Gift
 } from 'lucide-react';
-import { message, Modal } from 'antd';
+import { message, Modal, Pagination } from 'antd';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
@@ -103,10 +103,10 @@ export default function UserCenterPage() {
     }
     setChangingPwd(true);
     try {
-      const res = await apiClient.post('/v1/auth/change-password', {
+      const res = await apiClient.post('/v1/auth/password/change', {
         new_password: newPassword
       });
-      message.success(res.message || '密码修改成功，请妥善保管！');
+      message.success(res.message || '密码修改成功，请牢记新密码！');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
@@ -123,8 +123,11 @@ export default function UserCenterPage() {
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [isProcessingPay, setIsProcessingPay] = useState(false);
 
-  // 3. 流水数据
+  // 3. 流水数据与分页
   const [transactions, setTransactions] = useState([]);
+  const [txTotal, setTxTotal] = useState(0);
+  const [txPage, setTxPage] = useState(1);
+  const [txPageSize, setTxPageSize] = useState(10);
   const [loadingTx, setLoadingTx] = useState(false);
 
   const fetchPackagesAndSummary = async () => {
@@ -140,11 +143,12 @@ export default function UserCenterPage() {
     }
   };
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = async (p = txPage, ps = txPageSize) => {
     setLoadingTx(true);
     try {
-      const res = await apiClient.get('/v1/billing/transactions');
-      setTransactions(res.data || []);
+      const res = await apiClient.get(`/v1/billing/transactions?page=${p}&page_size=${ps}`);
+      setTransactions(res.items || res.data || []);
+      setTxTotal(res.total || 0);
     } catch (err) {
       console.error(err);
     } finally {
@@ -701,8 +705,8 @@ export default function UserCenterPage() {
                           {tx.change_type === 'recharge' ? '🟢 购买充值' : (tx.change_type === 'consume' ? '🔴 尽调消耗' : '🎁 实名赠送')}
                         </td>
                         <td className="py-3 px-4 font-mono font-bold">
-                          <span className={(tx.points_changed || tx.delta_quota) > 0 ? 'text-emerald-700' : 'text-rose-600'}>
-                            {(tx.points_changed || tx.delta_quota) > 0 ? `+${tx.points_changed || tx.delta_quota}` : (tx.points_changed || tx.delta_quota)} 次
+                          <span className={(tx.amount || tx.points_changed || tx.delta_quota) > 0 ? 'text-emerald-700' : 'text-rose-600'}>
+                            {(tx.amount || tx.points_changed || tx.delta_quota) > 0 ? `+${tx.amount || tx.points_changed || tx.delta_quota}` : (tx.amount || tx.points_changed || tx.delta_quota)} 次
                           </span>
                         </td>
                         <td className="py-3 px-4 font-mono font-semibold text-slate-800">{tx.balance_after || tx.after_balance} 次</td>
@@ -712,6 +716,28 @@ export default function UserCenterPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* 流水明细分页组件 */}
+            {txTotal > 0 && (
+              <div className="pt-2 flex items-center justify-between flex-wrap gap-4 border-t border-slate-200">
+                <span className="text-xs text-slate-500 font-mono">
+                  共计 <strong className="text-slate-800 font-semibold">{txTotal}</strong> 条额度变动流水记录
+                </span>
+                <Pagination
+                  current={txPage}
+                  pageSize={txPageSize}
+                  total={txTotal}
+                  showSizeChanger
+                  pageSizeOptions={['10', '20', '50']}
+                  onChange={(p, ps) => {
+                    setTxPage(p);
+                    setTxPageSize(ps);
+                  }}
+                  showQuickJumper
+                  size="small"
+                />
               </div>
             )}
           </div>

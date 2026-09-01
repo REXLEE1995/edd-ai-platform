@@ -2,13 +2,14 @@ import asyncio
 import uuid
 import urllib.parse
 import logging
+import math
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from app.core.database import get_db
 from app.models.user import User
 from app.models.task import DDTask
@@ -594,24 +595,32 @@ async def simulate_authorize_task(
 
 @router.get("/list")
 async def get_my_tasks(
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(8, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    获取我的尽调任务列表（按时间倒序）
+    获取我的尽调任务列表（支持分页与状态过滤，按时间倒序）
     任务保持严格的状态流转，未收到回调或授权确认前始终保持 waiting_auth 状态
     """
-    result = await db.execute(
-        select(DDTask)
-        .where(DDTask.user_id == user.id)
-        .order_by(desc(DDTask.created_at))
-        .limit(50)
-    )
+    query = select(DDTask).where(DDTask.user_id == user.id)
+    if status:
+        query = query.where(DDTask.status == status)
+
+    # 统计总数
+    total_res = await db.execute(select(func.count()).select_from(query.subquery()))
+    total = total_res.scalar() or 0
+
+    # 分页查询
+    paged_query = query.order_by(desc(DDTask.created_at)).offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(paged_query)
     tasks = result.scalars().all()
 
-    data = []
+    items = []
     for t in tasks:
-        data.append({
+        items.append({
             "id": t.id,
             "task_no": t.task_no,
             "company_name": t.company_name,
@@ -630,7 +639,18 @@ async def get_my_tasks(
             "thinking_logs": t.thinking_logs or [],
             "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S") if t.created_at else ""
         })
-    return {"code": 0, "data": data}
+
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+
+    return {
+        "code": 0,
+        "data": items,
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages
+    }
 
 @router.get("/{task_id}")
 async def get_task_detail(

@@ -24,13 +24,24 @@ DB_PATH = os.path.join(DATA_DIR, "edd_v6.db")
 
 db_url = settings.DATABASE_URL
 
-# 创建异步引擎
-connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}
+# 创建异步引擎 (自适应适配 SQLite 本地单线程与 MySQL / PostgreSQL 生产级连接池)
+engine_kwargs = {
+    "echo": settings.DB_ECHO,
+    "future": True,
+}
+
+if "sqlite" in db_url:
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # 针对 MySQL / PostgreSQL 等生产级关系型数据库的连接池保活配置
+    engine_kwargs["pool_size"] = 20
+    engine_kwargs["max_overflow"] = 10
+    engine_kwargs["pool_recycle"] = 3600  # 防止 MySQL wait_timeout 超时断连
+    engine_kwargs["pool_pre_ping"] = True # 查询前自动探测连接有效性
+
 engine = create_async_engine(
     db_url,
-    echo=settings.DB_ECHO,
-    future=True,
-    connect_args=connect_args
+    **engine_kwargs
 )
 
 AsyncSessionLocal = async_sessionmaker(

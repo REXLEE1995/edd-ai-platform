@@ -5,7 +5,7 @@ import {
   Download, 
   RefreshCw
 } from 'lucide-react';
-import { message } from 'antd';
+import { message, Pagination } from 'antd';
 import apiClient from '../../api/client';
 
 export default function AdminQuotaPage() {
@@ -15,16 +15,17 @@ export default function AdminQuotaPage() {
   const [keyword, setKeyword] = useState('');
   const [changeTypeFilter, setChangeTypeFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = async (p = page, ps = pageSize) => {
     setLoading(true);
     try {
-      let url = `/admin/quota/transactions?page=${page}&page_size=15`;
-      if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+      let url = `/admin/quota/transactions?page=${p}&page_size=${ps}`;
+      if (keyword) url += `&keyword=${encodeURIComponent(keyword.trim())}`;
       if (changeTypeFilter) url += `&change_type=${encodeURIComponent(changeTypeFilter)}`;
       const res = await apiClient.get(url);
-      setTransactions(res.data.items || []);
-      setTotal(res.data.total || 0);
+      setTransactions(res.data?.items || res.items || []);
+      setTotal(res.data?.total || res.total || 0);
     } catch (err) {
       console.error(err);
       message.error('获取额度流水失败');
@@ -34,13 +35,13 @@ export default function AdminQuotaPage() {
   };
 
   useEffect(() => {
-    fetchTransactions();
-  }, [page, changeTypeFilter]);
+    fetchTransactions(page, pageSize);
+  }, [page, pageSize, changeTypeFilter]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(1);
-    fetchTransactions();
+    fetchTransactions(1, pageSize);
   };
 
   const handleExportCSV = () => {
@@ -161,6 +162,28 @@ export default function AdminQuotaPage() {
             </tbody>
           </table>
         </div>
+
+        {/* 额度流水全量分页换页条 */}
+        {total > 0 && (
+          <div className="p-3.5 border-t border-zinc-200 flex items-center justify-between flex-wrap gap-4 bg-zinc-50/40">
+            <span className="text-xs text-zinc-500 font-mono">
+              共计 <strong className="text-slate-900 font-semibold">{total}</strong> 条额度全生命周期流水记录
+            </span>
+            <Pagination
+              current={page}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger
+              pageSizeOptions={['15', '30', '50', '100']}
+              onChange={(p, ps) => {
+                setPage(p);
+                setPageSize(ps);
+              }}
+              showQuickJumper
+              size="small"
+            />
+          </div>
+        )}
       </div>
 
     </div>

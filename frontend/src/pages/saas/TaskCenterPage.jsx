@@ -24,7 +24,7 @@ import {
   RotateCw,
   Trash2
 } from 'lucide-react';
-import { message, Modal } from 'antd';
+import { message, Modal, Pagination } from 'antd';
 import apiClient from '../../api/client';
 import { formatLocalTime } from '../../utils/date';
 import ShareReportModal from '../../components/ShareReportModal';
@@ -80,14 +80,20 @@ export default function TaskCenterPage() {
     navigate(`/app/tasks?tab=${tabKey}`, { replace: true });
   };
 
-  // 1. 任务数据
+  // 1. 任务数据与分页
   const [tasks, setTasks] = useState([]);
+  const [taskTotal, setTaskTotal] = useState(0);
+  const [taskPage, setTaskPage] = useState(1);
+  const [taskPageSize, setTaskPageSize] = useState(8);
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [selectedTaskForAuth, setSelectedTaskForAuth] = useState(null);
   const [syncingTaskId, setSyncingTaskId] = useState(null);
 
-  // 2. 报告资产数据
+  // 2. 报告资产数据与分页
   const [reports, setReports] = useState([]);
+  const [reportTotal, setReportTotal] = useState(0);
+  const [reportPage, setReportPage] = useState(1);
+  const [reportPageSize, setReportPageSize] = useState(8);
   const [loadingReports, setLoadingReports] = useState(false);
   const [reportKeyword, setReportKeyword] = useState('');
   const [reportRiskFilter, setReportRiskFilter] = useState('');
@@ -96,10 +102,11 @@ export default function TaskCenterPage() {
   const [selectedReportForShare, setSelectedReportForShare] = useState(null);
   const [openShareManagement, setOpenShareManagement] = useState(false);
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (p = taskPage, ps = taskPageSize) => {
     try {
-      const res = await apiClient.get('/v1/tasks/list');
-      setTasks(res.data || []);
+      const res = await apiClient.get(`/v1/tasks/list?page=${p}&page_size=${ps}`);
+      setTasks(res.items || res.data || []);
+      setTaskTotal(res.total || (res.data?.length ?? 0));
     } catch (err) {
       console.error(err);
     } finally {
@@ -107,17 +114,18 @@ export default function TaskCenterPage() {
     }
   };
 
-  const fetchReports = async () => {
+  const fetchReports = async (p = reportPage, ps = reportPageSize) => {
     setLoadingReports(true);
     try {
-      let url = '/v1/reports/list?';
-      if (reportKeyword) url += `keyword=${encodeURIComponent(reportKeyword)}&`;
+      let url = `/v1/reports/list?page=${p}&page_size=${ps}&`;
+      if (reportKeyword) url += `keyword=${encodeURIComponent(reportKeyword.trim())}&`;
       if (reportRiskFilter) url += `risk_level=${encodeURIComponent(reportRiskFilter)}&`;
       const res = await apiClient.get(url);
-      const list = res.data || [];
+      const list = res.items || res.data || [];
       // 严格保证按生成时间从新到旧 (最新在前) 倒序排列
       list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
       setReports(list);
+      setReportTotal(res.total || list.length);
     } catch (err) {
       console.error(err);
     } finally {
@@ -160,11 +168,11 @@ export default function TaskCenterPage() {
   // 切换 Tab 时触发对应 Tab 的定向刷新
   useEffect(() => {
     if (activeTab === 'tasks') {
-      fetchTasks();
+      fetchTasks(taskPage, taskPageSize);
     } else {
-      fetchReports();
+      fetchReports(reportPage, reportPageSize);
     }
-  }, [activeTab]);
+  }, [activeTab, taskPage, taskPageSize, reportPage, reportPageSize, reportRiskFilter]);
 
   // 定时轻量轮询：当有任务处于 processing (pulling_data / ai_analyzing / waiting_auth) 时自动刷新
   useEffect(() => {
@@ -352,7 +360,7 @@ export default function TaskCenterPage() {
           <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold font-mono ${
             activeTab === 'reports' ? 'bg-cyan-50 text-[#0284c7] border border-cyan-200/60' : 'bg-slate-300/80 text-slate-700'
           }`}>
-            {reports.length}
+            {reportTotal || reports.length}
           </span>
         </button>
       </div>
@@ -364,103 +372,126 @@ export default function TaskCenterPage() {
         <div className="mt-6 space-y-4">
           {loadingTasks ? (
             <div className="text-center py-16 text-slate-400 text-sm">正在加载进行中的尽调任务...</div>
-          ) : activeTasks.length === 0 ? (
+          ) : tasks.length === 0 ? (
             <div className="shadcn-card p-12 text-center bg-white/80 backdrop-blur-xl space-y-4 border border-white/80 shadow-glass">
               <div className="w-12 h-12 rounded-lg bg-cyan-50/80 border border-cyan-100 flex items-center justify-center mx-auto text-[#0096DB] shadow-xs">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-slate-900">当前暂无进行中的尽调任务</h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                  所有已生成的尽调报告均已自动归档至【历史尽调报告资产库】中，可随时调阅或导出。
-                </p>
-              </div>
-              <div className="pt-2 flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => switchTab('reports')}
-                  className="shadcn-button-outline text-xs py-2 px-4 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
-                >
-                  <FileText className="w-3.5 h-3.5 text-[#0096DB]" />
-                  查看历史尽调报告 ({reports.length} 份)
-                </button>
-                <Link 
-                  to="/app" 
-                  className="shadcn-button-primary text-xs py-2 px-4 shadow-glow-primary"
-                >
-                  发起新企业尽调
-                </Link>
-              </div>
+              <h3 className="text-base font-bold text-slate-900">当前暂无进行中的尽调任务</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                所有已生成的尽调报告均已自动归档至【历史尽调报告资产库】中，可随时调阅或导出。
+              </p>
+              <Link 
+                to="/app"
+                className="shadcn-button-primary inline-flex items-center gap-1.5 text-xs py-2 px-4 shadow-xs"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>发起新的企业尽调</span>
+              </Link>
             </div>
           ) : (
-            activeTasks.map((task) => (
-              <div key={task.id} className="shadcn-card p-5 bg-white/80 backdrop-blur-xl space-y-4 border border-white/80 shadow-glass">
-                
-                {/* 头部企业与状态栏 */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100/80">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-bold text-slate-900">{task.company_name}</h3>
-                      {getStatusBadge(task.status)}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 font-mono">
-                      <span>任务单号: <strong className="text-slate-800">{task.task_no || task.id}</strong></span>
-                      <span>统一代码: <strong className="text-slate-800">{task.credit_code}</strong></span>
-                      <span>创建时间: {formatLocalTime(task.created_at)}</span>
-                    </div>
-                  </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
+                {tasks.map((task) => (
+                  <div key={task.id} className="shadcn-card-hover p-5 bg-white/80 backdrop-blur-xl space-y-4 border border-white/85 shadow-glass hover:shadow-glass-hover">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
+                            <Building className="w-4 h-4 text-[#0096DB]" />
+                            {task.company_name}
+                          </h3>
+                          {getStatusBadge(task.status)}
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
+                          <span>任务单号: <strong className="text-slate-800">{task.task_no || task.id}</strong></span>
+                          <span>统一代码: <strong className="text-slate-800">{task.credit_code}</strong></span>
+                          <span>创建时间: {formatLocalTime(task.created_at)}</span>
+                        </p>
+                      </div>
 
-                  {/* 快捷操作 */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {task.status === 'waiting_auth' && (
-                      <>
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {/* 状态操作按钮 */}
+                        {task.status === 'waiting_auth' && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTaskForAuth(task)}
+                            className="shadcn-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>查看授权码 / 二维码</span>
+                          </button>
+                        )}
+
+                        {task.status === 'completed' && task.report_id && (
+                          <Link
+                            to={`/app/reports/${task.report_id}`}
+                            className="shadcn-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs"
+                          >
+                            <span>查看尽调报告</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        )}
+
                         <button
                           type="button"
-                          onClick={() => setSelectedTaskForAuth(task)}
-                          className="shadcn-button-outline text-xs py-1.5 px-3 bg-amber-50/70 border-amber-300 text-amber-900 hover:bg-amber-100/70 shadow-xs"
-                        >
-                          <QrCode className="w-3.5 h-3.5 text-amber-700" />
-                          扫码授权协同
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={syncingTaskId === task.id}
                           onClick={() => handleSyncTask(task)}
-                          className="shadcn-button-primary text-xs py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white cursor-pointer flex items-center gap-1.5"
-                          title="主动向微风企网关拉取最新实名授权与报告生成状态"
+                          disabled={syncingTaskId === task.id}
+                          className="shadcn-button-outline text-xs py-1.5 px-2.5 flex items-center gap-1 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
+                          title="刷新/同步三方授权状态"
                         >
-                          <RotateCw className={`w-3.5 h-3.5 ${syncingTaskId === task.id ? 'animate-spin' : ''}`} />
-                          <span>{syncingTaskId === task.id ? '同步中...' : '同步授权状态'}</span>
+                          <RefreshCw className={`w-3.5 h-3.5 ${syncingTaskId === task.id ? 'animate-spin text-[#0096DB]' : 'text-slate-500'}`} />
+                          <span className="hidden sm:inline">同步状态</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleDeleteTask(task)}
-                          className="shadcn-button-outline text-xs py-1.5 px-2.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200/80 shadow-xs flex items-center gap-1"
-                          title="取消并删除此尽调任务"
+                          className="shadcn-button-outline text-xs py-1.5 px-2.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200/80 shadow-xs"
+                          title="删除取消任务"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                          <span>删除</span>
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">删除</span>
                         </button>
-                      </>
+                      </div>
+                    </div>
+
+                    {/* 进行中状态提示条 */}
+                    {(task.status === 'pulling_data' || task.status === 'ai_analyzing') && (
+                      <div className="p-3.5 rounded-lg bg-cyan-50/50 backdrop-blur-md border border-cyan-200/60 flex items-center justify-between text-xs text-slate-900 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                          <Sparkles className="w-4 h-4 text-[#0096DB] shrink-0 animate-spin" />
+                          <span className="text-slate-700">正在向微风企网关拉取贷前报告 PDF，聚合工商主体与经营司法数据，并执行 AI 深度量化研判，完成后将自动移入【历史尽调报告资产库】...</span>
+                        </div>
+                        <span className="text-[#0084c2] font-mono font-semibold animate-pulse">处理中</span>
+                      </div>
                     )}
                   </div>
-                </div>
-
-                {/* 进行中状态提示条 */}
-                {(task.status === 'pulling_data' || task.status === 'ai_analyzing') && (
-                  <div className="p-3.5 rounded-lg bg-cyan-50/50 backdrop-blur-md border border-cyan-200/60 flex items-center justify-between text-xs text-slate-900 shadow-2xs">
-                    <div className="flex items-center gap-2.5">
-                      <Sparkles className="w-4 h-4 text-[#0096DB] shrink-0 animate-spin" />
-                      <span className="text-slate-700">正在向微风企网关拉取贷前报告 PDF，聚合工商主体与经营司法数据，并执行 AI 深度量化研判，完成后将自动移入【历史尽调报告资产库】...</span>
-                    </div>
-                    <span className="text-[#0084c2] font-mono font-semibold animate-pulse">处理中</span>
-                  </div>
-                )}
-
+                ))}
               </div>
-            ))
+
+              {/* 任务列表分页组件 */}
+              {taskTotal > 0 && (
+                <div className="pt-3 flex items-center justify-between flex-wrap gap-4 border-t border-slate-200/80">
+                  <span className="text-xs text-slate-500 font-mono">
+                    共计 <strong className="text-slate-800 font-semibold">{taskTotal}</strong> 个尽调任务
+                  </span>
+                  <Pagination
+                    current={taskPage}
+                    pageSize={taskPageSize}
+                    total={taskTotal}
+                    showSizeChanger
+                    pageSizeOptions={['8', '16', '32', '50']}
+                    onChange={(p, ps) => {
+                      setTaskPage(p);
+                      setTaskPageSize(ps);
+                    }}
+                    showQuickJumper
+                    size="small"
+                  />
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -473,7 +504,7 @@ export default function TaskCenterPage() {
           
           {/* 检索过滤条 */}
           <div className="shadcn-card p-2.5 bg-white/75 backdrop-blur-xl border border-white/80 shadow-glass">
-            <form onSubmit={(e) => { e.preventDefault(); fetchReports(); }} className="flex items-center w-full bg-white/60 backdrop-blur-md rounded-md px-3 py-1.5 border border-slate-200/80 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 transition-all">
+            <form onSubmit={(e) => { e.preventDefault(); setReportPage(1); fetchReports(1, reportPageSize); }} className="flex items-center w-full bg-white/60 backdrop-blur-md rounded-md px-3 py-1.5 border border-slate-200/80 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 transition-all">
               <Search className="w-4 h-4 text-slate-400 mr-2.5 shrink-0" />
               <input
                 type="text"
@@ -485,7 +516,7 @@ export default function TaskCenterPage() {
               {reportKeyword && (
                 <button
                   type="button"
-                  onClick={() => { setReportKeyword(''); }}
+                  onClick={() => { setReportKeyword(''); setReportPage(1); fetchReports(1, reportPageSize); }}
                   className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer font-mono mr-2"
                 >
                   清除
@@ -510,68 +541,92 @@ export default function TaskCenterPage() {
               <p className="text-xs text-slate-500">发起新尽调并完成法人授权后，生成的报告将永久留存于此资产库中。</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {reports.map((report) => (
-                <div key={report.id} className="shadcn-card-hover p-5 bg-white/80 backdrop-blur-xl space-y-3.5 border border-white/85 shadow-glass hover:shadow-glass-hover">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-base font-bold text-slate-950 hover:text-[#0096DB] transition-colors">
-                          <Link to={`/app/reports/${report.id}`}>
-                            {report.company_name}
-                          </Link>
-                        </h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
+                {reports.map((report) => (
+                  <div key={report.id} className="shadcn-card-hover p-5 bg-white/80 backdrop-blur-xl space-y-3.5 border border-white/85 shadow-glass hover:shadow-glass-hover">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="text-base font-bold text-slate-950 hover:text-[#0096DB] transition-colors">
+                            <Link to={`/app/reports/${report.id}`}>
+                              {report.company_name}
+                            </Link>
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
+                          <span>任务单号: <strong className="text-slate-800">{report.task_no || report.task_id || report.report_no}</strong></span>
+                          <span>统一代码: <strong className="text-slate-800">{report.credit_code}</strong></span>
+                          <span>生成时间: {formatLocalTime(report.created_at)}</span>
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span>任务单号: <strong className="text-slate-800">{report.task_no || report.task_id || report.report_no}</strong></span>
-                        <span>统一代码: <strong className="text-slate-800">{report.credit_code}</strong></span>
-                        <span>生成时间: {formatLocalTime(report.created_at)}</span>
-                      </p>
+
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {/* 6位密码加密分享入口 */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReportForShare(report)}
+                          className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
+                          title="设置 6 位密码加密分享此报告"
+                        >
+                          <Share2 className="w-3.5 h-3.5 text-[#0096DB]" />
+                          <span>分享报告</span>
+                        </button>
+
+                        <a
+                          href={report.pdf_url || '/sample_report.pdf'}
+                          download={`${report.company_name}_尽调报告.pdf`}
+                          className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+                        >
+                          <Download className="w-3.5 h-3.5 text-slate-600" />
+                          <span>下载 PDF 原件</span>
+                        </a>
+
+                        <Link
+                          to={`/app/reports/${report.id}`}
+                          className="shadcn-button-primary text-xs py-1.5 px-3.5"
+                        >
+                          <span>在线沉浸查阅</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                      {/* 6位密码加密分享入口 */}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedReportForShare(report)}
-                        className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
-                        title="设置 6 位密码加密分享此报告"
-                      >
-                        <Share2 className="w-3.5 h-3.5 text-[#0096DB]" />
-                        <span>分享报告</span>
-                      </button>
-
-                      <a
-                        href={report.pdf_url || '/sample_report.pdf'}
-                        download={`${report.company_name}_尽调报告.pdf`}
-                        className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
-                      >
-                        <Download className="w-3.5 h-3.5 text-slate-600" />
-                        <span>下载 PDF 原件</span>
-                      </a>
-
-                      <Link
-                        to={`/app/reports/${report.id}`}
-                        className="shadcn-button-primary text-xs py-1.5 px-3.5"
-                      >
-                        <span>在线沉浸查阅</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </div>
+                    {/* AI 综合画像速览 */}
+                    {report.summary_ai_comment && (
+                      <div className="p-3 bg-slate-50/70 backdrop-blur-md rounded-md border border-slate-200/70 text-xs text-slate-700 leading-relaxed shadow-2xs">
+                        <div className="font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-[#0096DB]" />
+                          AI 全景综合画像结论:
+                        </div>
+                        <p className="line-clamp-2 text-slate-600">{report.summary_ai_comment}</p>
+                      </div>
+                    )}
                   </div>
+                ))}
+              </div>
 
-                  {/* AI 综合画像速览 */}
-                  {report.summary_ai_comment && (
-                    <div className="p-3 bg-slate-50/70 backdrop-blur-md rounded-md border border-slate-200/70 text-xs text-slate-700 leading-relaxed shadow-2xs">
-                      <div className="font-semibold text-slate-900 mb-1 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[#0096DB]" />
-                        AI 全景综合画像结论:
-                      </div>
-                      <p className="line-clamp-2 text-slate-600">{report.summary_ai_comment}</p>
-                    </div>
-                  )}
+              {/* 报告资产库分页换页组件 */}
+              {reportTotal > 0 && (
+                <div className="pt-3 flex items-center justify-between flex-wrap gap-4 border-t border-slate-200/80">
+                  <span className="text-xs text-slate-500 font-mono">
+                    共计 <strong className="text-slate-800 font-semibold">{reportTotal}</strong> 份企业尽调报告
+                  </span>
+                  <Pagination
+                    current={reportPage}
+                    pageSize={reportPageSize}
+                    total={reportTotal}
+                    showSizeChanger
+                    pageSizeOptions={['8', '16', '32', '50']}
+                    onChange={(p, ps) => {
+                      setReportPage(p);
+                      setReportPageSize(ps);
+                    }}
+                    showQuickJumper
+                    size="small"
+                  />
                 </div>
-              ))}
+              )}
             </div>
           )}
 
