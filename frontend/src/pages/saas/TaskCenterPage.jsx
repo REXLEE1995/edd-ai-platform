@@ -142,6 +142,7 @@ export default function TaskCenterPage() {
               setSelectedTaskForAuth(null);
             }
             fetchTasks();
+            fetchReports();
           }
         } catch (err) {
           message.error('删除任务失败: ' + (err.response?.data?.detail || err.message));
@@ -151,12 +152,19 @@ export default function TaskCenterPage() {
   };
 
   useEffect(() => {
+    // 初始化及过滤条件变更时同时获取两边数据，确保两边 Tab 徽标数量始终实时准确
+    fetchTasks();
+    fetchReports();
+  }, [reportRiskFilter]);
+
+  // 切换 Tab 时触发对应 Tab 的定向刷新
+  useEffect(() => {
     if (activeTab === 'tasks') {
       fetchTasks();
     } else {
       fetchReports();
     }
-  }, [activeTab, reportRiskFilter]);
+  }, [activeTab]);
 
   // 定时轻量轮询：当有任务处于 processing (pulling_data / ai_analyzing / waiting_auth) 时自动刷新
   useEffect(() => {
@@ -165,6 +173,7 @@ export default function TaskCenterPage() {
       const hasProcessing = tasks.some(t => t.status === 'pulling_data' || t.status === 'ai_analyzing' || t.status === 'waiting_auth');
       if (hasProcessing) {
         fetchTasks();
+        fetchReports();
       }
     }, 4000);
     return () => clearInterval(interval);
@@ -182,6 +191,7 @@ export default function TaskCenterPage() {
             setSelectedTaskForAuth(null);
           }
           await fetchTasks();
+          await fetchReports();
         } else {
           if (showToast) message.warning(res.message || '未检测到法人授权完成，请让企业法定代表人在微信端打开授权链接并提交实名认证。');
         }
@@ -193,9 +203,9 @@ export default function TaskCenterPage() {
     }
   };
 
-  // 弹窗打开时的被动状态感知轮询：仅查询任务详情判断是否已收到微风企回调，不强行更改状态
+  // 监听轮询微风企授权是否在其他窗口/手机完成
   useEffect(() => {
-    if (!selectedTaskForAuth) return;
+    if (!selectedTaskForAuth || selectedTaskForAuth.status !== 'waiting_auth') return;
     const interval = setInterval(async () => {
       try {
         const res = await apiClient.get(`/v1/tasks/${selectedTaskForAuth.id}`);
@@ -203,6 +213,7 @@ export default function TaskCenterPage() {
           message.success('已接收到微风企授权完成回调！AI 全景尽调流水线已启动。');
           setSelectedTaskForAuth(null);
           await fetchTasks();
+          await fetchReports();
         }
       } catch (err) {
         console.debug(err);
@@ -288,8 +299,8 @@ export default function TaskCenterPage() {
           <button 
             type="button"
             onClick={() => {
-              if (activeTab === 'tasks') fetchTasks();
-              else fetchReports();
+              fetchTasks();
+              fetchReports();
             }}
             className="shadcn-button-outline text-xs py-1.5 px-3 shadow-xs hover:border-[#0ea5e9] hover:text-[#0284c7]"
           >
@@ -320,13 +331,11 @@ export default function TaskCenterPage() {
         >
           <Activity className={`w-3.5 h-3.5 ${activeTab === 'tasks' ? 'text-[#0ea5e9]' : 'text-slate-500'}`} />
           <span>进行中的尽调任务</span>
-          {activeTasks.length > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold font-mono ${
-              activeTab === 'tasks' ? 'bg-cyan-50 text-[#0284c7] border border-cyan-200/60' : 'bg-slate-300 text-slate-700'
-            }`}>
-              {activeTasks.length}
-            </span>
-          )}
+          <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold font-mono ${
+            activeTab === 'tasks' ? 'bg-cyan-50 text-[#0284c7] border border-cyan-200/60' : 'bg-slate-300/80 text-slate-700'
+          }`}>
+            {activeTasks.length}
+          </span>
         </button>
 
         <button
@@ -339,7 +348,12 @@ export default function TaskCenterPage() {
           }`}
         >
           <FileText className={`w-3.5 h-3.5 ${activeTab === 'reports' ? 'text-[#0ea5e9]' : 'text-slate-500'}`} />
-          <span>历史尽调报告资产库 ({reports.length})</span>
+          <span>历史尽调报告资产库</span>
+          <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold font-mono ${
+            activeTab === 'reports' ? 'bg-cyan-50 text-[#0284c7] border border-cyan-200/60' : 'bg-slate-300/80 text-slate-700'
+          }`}>
+            {reports.length}
+          </span>
         </button>
       </div>
 
