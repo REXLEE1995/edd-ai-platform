@@ -29,12 +29,15 @@ class FileStorageService:
         file_type: str = "wfq_preloan_pdf",
         custom_filename: Optional[str] = None,
         company_name: str = "",
-        credit_code: str = ""
+        credit_code: str = "",
+        replacements: Optional[Dict[str, str]] = None
     ) -> Tuple[TaskFile, Dict[str, Any]]:
         """
         从远程 URL (如微风企网关/电信云/Mock服务) 异步流式拉取 PDF，
-        【核心执行】先流经 DataCleansingService 数据清洗中台完成文本规范化、敏感脱敏与结构化大纲抽取，
-        再对处理后的标准文件计算 SHA-256 防篡改存证并上传至 MinIO 对象存储。
+        【核心执行流程】：
+        1. 【步骤 1】先流经 DataCleansingService 执行字符替换与数据清洗；
+        2. 【步骤 2】对清洗后的文档做全景目录与章节结构化解析 (参考 test/parse_report_catalog.py)；
+        3. 【步骤 3】对清洗后的标准 PDF 计算 SHA-256 防篡改存证并上传至 MinIO 对象存储。
         返回: (file_record, parsed_pdf_data)
         """
         from app.services.cleansing_service import DataCleansingService
@@ -49,7 +52,7 @@ class FileStorageService:
             clean_filename += ".pdf"
         
         object_name = f"reports/{date_folder}/{task_id}_{timestamp_str}_{clean_filename}"
-        logger.info(f"[FileStorageService] Fetching remote stream: {remote_url} -> Data Cleansing -> MinIO: {minio_mgr.default_bucket}/{object_name}")
+        logger.info(f"[FileStorageService] Fetching remote stream: {remote_url} -> Data Cleansing (Character Replacement & TOC Parse) -> MinIO: {minio_mgr.default_bucket}/{object_name}")
 
         # 2. 流式下载原始二进制流
         file_bytes_list = []
@@ -68,11 +71,12 @@ class FileStorageService:
 
         raw_data = b"".join(file_bytes_list)
 
-        # 3. 核心步骤：调用数据清洗中台执行清洗与结构化解析
+        # 3. 核心步骤 1 & 2：调用数据清洗中台执行字符替换与目录大纲解析
         cleaned_pdf_bytes, parsed_pdf_data = DataCleansingService.clean_and_process_pdf_bytes(
             raw_pdf_bytes=raw_data,
             company_name=company_name,
-            credit_code=credit_code
+            credit_code=credit_code,
+            replacements=replacements
         )
 
         # 4. 对清洗后的最终文件计算 SHA-256 存证与大小
