@@ -52,22 +52,27 @@ class SMSService:
                 remaining = int(60 - diff_seconds)
                 return False, f"验证码发送过于频繁，请等待 {remaining} 秒后再试", {"remaining_seconds": remaining}
 
-        # 2. 生成 6 位随机验证码
-        if settings.SMS_MODE == "mock":
-            code = "123456" # 本地快速调试固定验证码
-        else:
-            code = f"{random.randint(100000, 999999)}"
+        # 2. 生成真实 6 位随机数字验证码 (100000 ~ 999999)
+        code = f"{random.randint(100000, 999999)}"
 
         expire_at = now + timedelta(seconds=settings.SMS_CODE_EXPIRE_SECONDS)
         log_id = f"sms-{uuid.uuid4().hex}"
         
+        # 组装短信模版内容
+        sign_prefix = f"【{settings.SMS_SIGN_NAME}】" if not settings.SMS_SIGN_NAME.startswith("【") else settings.SMS_SIGN_NAME
+        sms_content = f"{sign_prefix}您的验证码为：{code}，{settings.SMS_CODE_EXPIRE_SECONDS // 60}分钟内有效。如非本人操作请忽略。"
+
         request_payload_dict = {
             "account": settings.SMS_ACCOUNT,
+            "password": settings.SMS_PASSWORD,
             "mobile": phone,
-            "sign": settings.SMS_SIGN_NAME,
+            "phone": phone,
+            "sign_name": settings.SMS_SIGN_NAME,
             "template_code": settings.SMS_TEMPLATE_CODE,
             "params": {"code": code},
-            "content": f"【{settings.SMS_SIGN_NAME}】您的验证码为：{code}，{settings.SMS_CODE_EXPIRE_SECONDS // 60}分钟内有效。请勿泄露给他人。"
+            "code": code,
+            "content": sms_content,
+            "msg": sms_content
         }
         request_payload_str = json.dumps(request_payload_dict, ensure_ascii=False)
         response_payload_str = None
@@ -76,38 +81,31 @@ class SMSService:
 
         # 3. 三方短信平台调用
         if settings.SMS_MODE == "http" and settings.SMS_GATEWAY_URL:
-            logger.info(f"[SMSService] Calling 3rd-party SMS Gateway: {settings.SMS_GATEWAY_URL} for {phone}")
+            logger.info(f"[SMSService] [HTTP] 正在调用三方短信网关: {settings.SMS_GATEWAY_URL} 向手机号 {phone} 发送随机验证码 {code}")
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    # 按照标准 HTTP POST 传递账号密码与短信内容
+                    # 标准 HTTP POST 提交 JSON 报文
                     http_res = await client.post(
                         settings.SMS_GATEWAY_URL,
-                        json={
-                            "account": settings.SMS_ACCOUNT,
-                            "password": settings.SMS_PASSWORD,
-                            "mobile": phone,
-                            "sign_name": settings.SMS_SIGN_NAME,
-                            "template_code": settings.SMS_TEMPLATE_CODE,
-                            "code": code,
-                            "msg": request_payload_dict["content"]
-                        }
+                        json=request_payload_dict,
+                        headers={"Content-Type": "application/json; charset=utf-8"}
                     )
                     response_payload_str = http_res.text
                     if http_res.status_code == 200:
                         is_success = True
-                        logger.info(f"[SMSService] 3rd-party SMS sent successfully to {phone}: {response_payload_str}")
+                        logger.info(f"[SMSService] 三方短信网关下发成功 -> 手机号: {phone}, 网关响应: {response_payload_str}")
                     else:
-                        error_msg = f"三方短信网关返回异常 HTTP {http_res.status_code}"
-                        logger.error(f"[SMSService] Failed sending SMS: {error_msg}, body: {response_payload_str}")
+                        error_msg = f"三方短信网关返回异常 HTTP {http_res.status_code}: {response_payload_str}"
+                        logger.error(f"[SMSService] 短信下发失败: {error_msg}")
             except Exception as e:
                 error_msg = f"调用三方短信接口网络异常: {str(e)}"
                 response_payload_str = str(e)
-                logger.error(f"[SMSService] Exception calling SMS gateway: {e}")
+                logger.error(f"[SMSService] 三方短信网关调用异常: {e}")
         else:
-            # Mock 模式：本地直接模拟成功
+            # 本地拟真模式 (生成真实随机码并记录控制台)
             is_success = True
-            response_payload_str = json.dumps({"code": 0, "msg": "MOCK_SUCCESS", "phone": phone, "test_code": code}, ensure_ascii=False)
-            logger.info(f"[SMSService] [Mock] 短信验证码已生成并发送至 {phone}: {code} (5分钟有效)")
+            response_payload_str = json.dumps({"code": 0, "msg": "LOCAL_RANDOM_SMS_GENERATED", "phone": phone, "random_code": code}, ensure_ascii=False)
+            logger.info(f"[SMSService] [Local] 真实随机短信验证码已生成 -> 手机号: {phone}, 验证码: {code} (5分钟有效)")
 
         # 4. 存入 sms_logs 数据库存证表
         sms_log = SMSLog(
@@ -128,11 +126,10 @@ class SMSService:
         await session.refresh(sms_log)
 
         if is_success:
-            return True, "验证码已成功发送", {
+            return True, "验证码已成功发送至您的手机", {
                 "log_id": sms_log.id,
                 "phone": phone,
-                "expire_seconds": settings.SMS_CODE_EXPIRE_SECONDS,
-                "code": code if settings.SMS_MODE == "mock" else None  # 仅 Mock 模式返回明文 code 便于测试
+                "expire_seconds": settings.SMS_CODE_EXPIRE_SECONDS
             }
         else:
             return False, error_msg or "短信发送失败，请稍后重试", {}
@@ -146,10 +143,10 @@ class SMSService:
         scene: str = "login"
     ) -> Tuple[bool, str]:
         """
-        核验短信验证码：
-        1. 优先查库校验 sms_logs 中未核验且在有效期内的记录；
-        2. 核验通过后将记录标记为 verified 并记录核验时间戳；
-        3. 开发/测试环境下兼容通用测试码 (123456 / 888888 / 666666)。
+        严格核验短信验证码：
+        1. 查库检索 sms_logs 中该手机号未核验且在有效期内的最新流水；
+        2. 严格核验真实随机验证码；
+        3. 核验通过后将记录标记为 verified 并记录核验时间戳。
         """
         phone = (phone or "").strip()
         code = (code or "").strip()
@@ -161,7 +158,7 @@ class SMSService:
 
         now = datetime.utcnow()
 
-        # 查库检索最新一条未核验的验证码
+        # 查库检索最新一条未核验且未失效的验证码
         result = await session.execute(
             select(SMSLog)
             .where(
@@ -175,24 +172,15 @@ class SMSService:
         )
         sms_record = result.scalar_one_or_none()
 
-        # 1. 匹配数据库真实下发的验证码
+        # 匹配真实下发的随机验证码
         if sms_record and sms_record.code == code:
             sms_record.status = "verified"
             sms_record.verified_at = now
             await session.commit()
-            logger.info(f"[SMSService] 手机号 {phone} 验证码 {code} 核验成功 (LogID: {sms_record.id})")
-            return True, "验证成功"
-
-        # 2. 模拟/开发环境容错兜底码
-        if settings.SMS_MODE == "mock" and code in ["123456", "888888", "666666"]:
-            if sms_record:
-                sms_record.status = "verified"
-                sms_record.verified_at = now
-                await session.commit()
-            logger.info(f"[SMSService] [Mock] 手机号 {phone} 使用通用测试码 {code} 通过校验")
+            logger.info(f"[SMSService] 手机号 {phone} 真实随机验证码 {code} 成功核验通过 (LogID: {sms_record.id})")
             return True, "验证成功"
 
         if sms_record:
-            return False, "短信验证码错误，请重新输入"
+            return False, "短信验证码错误，请输入手机收到的最新验证码"
         else:
-            return False, "验证码已过期或不存在，请重新获取"
+            return False, "验证码已失效或尚未获取，请重新点击获取验证码"

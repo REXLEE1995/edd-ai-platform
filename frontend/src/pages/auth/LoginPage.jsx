@@ -8,8 +8,8 @@ import { useAuth } from '../../context/AuthContext';
 export default function LoginPage() {
   const navigate = useNavigate();
   const { userLogin } = useAuth();
-  const [phone, setPhone] = useState('13800138000');
-  const [code, setCode] = useState('123456');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [sendLoading, setSendLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -33,12 +33,7 @@ export default function LoginPage() {
     try {
       const res = await apiClient.post('/v1/auth/send-code', { phone, scene: 'login' });
       setCountdown(60);
-      if (res?.data?.code) {
-        setCode(res.data.code);
-        message.success(`验证码发送成功 (测试环境验证码: ${res.data.code})`);
-      } else {
-        message.success(res?.message || '验证码已成功发送至您的手机，5分钟内有效');
-      }
+      message.success(res?.message || '短信验证码已成功发送至您的手机，5分钟内有效，请查收！');
     } catch (err) {
       message.error(err.response?.data?.detail || '短信发送失败，请稍后重试');
     } finally {
@@ -61,7 +56,7 @@ export default function LoginPage() {
     try {
       const res = await userLogin(phone, code);
       if (res?.is_new_user) {
-        message.success('注册并登录成功！已为您赠送 2 次免费尽调额度');
+        message.success('注册并登录成功！已为您赠送 1 次免费尽调体验额度');
       } else {
         message.success(res?.message || '登录成功，欢迎回到工作台！');
       }
@@ -82,7 +77,7 @@ export default function LoginPage() {
           </div>
           <h2 className="text-xl font-bold text-slate-950 tracking-tight">手机快捷 注册/登录</h2>
           <p className="text-xs text-zinc-500">
-            未注册手机号将自动创建账号并赠送 2 次免费 AI 全景尽调额度
+            未注册手机号将自动创建账号并赠送 1 次免费 AI 全景尽调额度
           </p>
         </div>
 
@@ -111,7 +106,7 @@ export default function LoginPage() {
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="验证码 (测试填 123456)"
+                placeholder="请输入 6 位短信验证码"
                 className="w-full bg-transparent border-0 text-xs text-slate-900 focus:outline-none font-mono placeholder:text-zinc-400"
                 maxLength={6}
                 required

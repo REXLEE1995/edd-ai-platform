@@ -567,10 +567,10 @@ export default function UserCenterPage() {
             <Gift className="w-5 h-5 text-[#0096DB] shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <div className="font-bold text-sm text-slate-950">
-                个人注册并完成实名认证后，即刻获赠 1 次免费全景尽调额度 · 永久有效
+                新用户注册并首次登录后，即刻获赠 1 次免费全景尽调体验额度 · 永久有效
               </div>
               <p className="text-zinc-500 leading-relaxed text-[11px]">
-                根据监管要求，<strong>仅完成个人实名核验后才会发放 1 次体验额度（普通注册/登录不赠送额度）</strong>。消耗 1 次额度即可生成 1 份企业全景尽调报告，长期归档随时调阅。
+                新手机号首次登录成功后系统自动发放 1 次体验额度。消耗 1 次额度即可生成 1 份企业全景尽调报告，长期归档于任务中心随时调阅。
               </p>
             </div>
           </div>
