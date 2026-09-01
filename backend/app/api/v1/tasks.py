@@ -683,3 +683,23 @@ async def get_task_detail(
             "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S") if t.created_at else ""
         }
     }
+
+@router.delete("/{task_id}")
+async def delete_task(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    删除指定的尽调任务 (支持清理卡住或不需要的任务)
+    """
+    result = await db.execute(
+        select(DDTask).where(DDTask.id == task_id, DDTask.user_id == user.id)
+    )
+    t = result.scalar_one_or_none()
+    if not t:
+        raise HTTPException(status_code=404, detail="任务不存在或无权限删除")
+
+    await db.delete(t)
+    await db.commit()
+    return {"code": 0, "message": "任务删除成功", "data": {"task_id": task_id}}

@@ -75,7 +75,7 @@ async def get_my_reports(
     existing_companies = [d["company_name"] for d in data]
     if "杭州高新智能科技股份有限公司" not in existing_companies:
         hz_created = datetime.utcnow() - timedelta(days=2)
-        data.insert(0, {
+        data.append({
             "id": "rpt_hangzhou_preloan_001",
             "report_no": "RPT-39P-16320551",
             "task_no": "TSK2026083016320551A",
@@ -96,7 +96,7 @@ async def get_my_reports(
         })
     if "东莞市顺捷实业有限公司" not in existing_companies:
         sj_created = datetime.utcnow() - timedelta(days=1)
-        data.insert(1, {
+        data.append({
             "id": "rpt_shunjie_preloan_001",
             "report_no": "RNO1881255253482991616",
             "task_no": "TSK20260831094624B88X",
@@ -115,6 +115,9 @@ async def get_my_reports(
             "created_at": sj_created.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "is_expired": False
         })
+
+    # 全局严格按生成时间倒序排列 (最新生成的报告排在最前面)
+    data.sort(key=lambda x: x.get("created_at") or "", reverse=True)
 
     return {"code": 0, "data": data}
 

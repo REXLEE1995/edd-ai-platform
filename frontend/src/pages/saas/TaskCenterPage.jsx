@@ -21,7 +21,8 @@ import {
   Check,
   Share2,
   FolderLock,
-  RotateCw
+  RotateCw,
+  Trash2
 } from 'lucide-react';
 import { message, Modal } from 'antd';
 import apiClient from '../../api/client';
@@ -50,8 +51,9 @@ const copyToClipboard = async (text) => {
     document.body.appendChild(textArea);
     textArea.focus();
     textArea.select();
-    const successful = document.body.removeChild(textArea) || true;
-    return successful;
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return !!successful;
   } catch (err) {
     console.error("execCommand fallback failed:", err);
     return false;
@@ -112,12 +114,40 @@ export default function TaskCenterPage() {
       if (reportKeyword) url += `keyword=${encodeURIComponent(reportKeyword)}&`;
       if (reportRiskFilter) url += `risk_level=${encodeURIComponent(reportRiskFilter)}&`;
       const res = await apiClient.get(url);
-      setReports(res.data || []);
+      const list = res.data || [];
+      // 严格保证按生成时间从新到旧 (最新在前) 倒序排列
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      setReports(list);
     } catch (err) {
       console.error(err);
     } finally {
       setLoadingReports(false);
     }
+  };
+
+  // 删除/取消单个尽调任务
+  const handleDeleteTask = async (task) => {
+    Modal.confirm({
+      title: '确认取消并删除该尽调任务？',
+      content: `企业主体：${task.company_name}（单号: ${task.task_no || task.id}），删除后该任务记录将从列表中彻底移除。`,
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await apiClient.delete(`/v1/tasks/${task.id}`);
+          if (res.code === 0) {
+            message.success('尽调任务已成功删除');
+            if (selectedTaskForAuth && selectedTaskForAuth.id === task.id) {
+              setSelectedTaskForAuth(null);
+            }
+            fetchTasks();
+          }
+        } catch (err) {
+          message.error('删除任务失败: ' + (err.response?.data?.detail || err.message));
+        }
+      }
+    });
   };
 
   useEffect(() => {
@@ -388,6 +418,16 @@ export default function TaskCenterPage() {
                         >
                           <RotateCw className={`w-3.5 h-3.5 ${syncingTaskId === task.id ? 'animate-spin' : ''}`} />
                           <span>{syncingTaskId === task.id ? '同步中...' : '同步授权状态'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTask(task)}
+                          className="shadcn-button-outline text-xs py-1.5 px-2.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200/80 shadow-xs flex items-center gap-1"
+                          title="取消并删除此尽调任务"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <span>删除</span>
                         </button>
                       </>
                     )}
