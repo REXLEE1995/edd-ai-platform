@@ -10,7 +10,7 @@ import {
   Zap, 
   CreditCard
 } from 'lucide-react';
-import { message, Drawer, Modal } from 'antd';
+import { message, Drawer, Modal, Pagination } from 'antd';
 import apiClient from '../../api/client';
 
 export default function AdminUsersPage() {
@@ -20,6 +20,7 @@ export default function AdminUsersPage() {
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // 用户 360° 详情抽屉
   const [selectedUserDetail, setSelectedUserDetail] = useState(null);
@@ -36,15 +37,15 @@ export default function AdminUsersPage() {
   const [adjustRemark, setAdjustRemark] = useState('');
   const [submittingAdjust, setSubmittingAdjust] = useState(false);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (p = page, ps = pageSize) => {
     setLoading(true);
     try {
-      let url = `/admin/users/list?page=${page}&page_size=10`;
-      if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+      let url = `/admin/users/list?page=${p}&page_size=${ps}`;
+      if (keyword) url += `&keyword=${encodeURIComponent(keyword.trim())}`;
       if (statusFilter) url += `&status=${encodeURIComponent(statusFilter)}`;
       const res = await apiClient.get(url);
-      setUsers(res.data.items || []);
-      setTotal(res.data.total || 0);
+      setUsers(res.data?.items || res.items || []);
+      setTotal(res.data?.total || res.total || 0);
     } catch (err) {
       console.error(err);
       message.error('获取用户列表失败');
@@ -54,13 +55,13 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, [page, statusFilter]);
+    fetchUsers(page, pageSize);
+  }, [page, pageSize, statusFilter]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(1);
-    fetchUsers();
+    fetchUsers(1, pageSize);
   };
 
   const handleOpenDetail = async (userId) => {
@@ -296,6 +297,28 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* 用户列表分页换页条 */}
+        {total > 0 && (
+          <div className="p-3.5 border-t border-zinc-200 flex items-center justify-between flex-wrap gap-4 bg-zinc-50/40">
+            <span className="text-xs text-zinc-500 font-mono">
+              共计 <strong className="text-slate-900 font-semibold">{total}</strong> 位注册用户
+            </span>
+            <Pagination
+              current={page}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger
+              pageSizeOptions={['10', '20', '50']}
+              onChange={(p, ps) => {
+                setPage(p);
+                setPageSize(ps);
+              }}
+              showQuickJumper
+              size="small"
+            />
+          </div>
+        )}
       </div>
 
       {/* 调额弹窗 (shadcn Dialog) */}

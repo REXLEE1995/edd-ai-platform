@@ -1,4 +1,5 @@
 import os
+import math
 from datetime import datetime, timedelta
 from fastapi.responses import FileResponse
 from typing import Optional, Dict, Any
@@ -18,14 +19,16 @@ router = APIRouter(prefix="/reports", tags=["报告资产"])
 async def get_my_reports(
     keyword: Optional[str] = None,
     risk_level: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(8, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    获取当前登录账号的尽调报告资产库列表：
+    获取当前登录账号的尽调报告资产库列表（支持分页与多维检索）：
     - 仅展示当前账号已生成报告的任务资产
     - 按 UTC 时间严格倒序排序 (最新的展示在最前面)
-    - 时间字段输出标准 ISO 8601 UTC 格式，供前端按用户本地时区渲染
+    - 接口数据层面进行物理分页，返回 total, page, page_size, total_pages
     """
     query = (
         select(DDReport, DDTask.task_no)
@@ -34,6 +37,7 @@ async def get_my_reports(
         .order_by(desc(DDReport.created_at))
     )
     if keyword:
+        keyword = keyword.strip()
         query = query.where(
             (DDReport.company_name.contains(keyword)) | 
             (DDReport.credit_code.contains(keyword)) |
@@ -43,7 +47,7 @@ async def get_my_reports(
     if risk_level:
         query = query.where(DDReport.risk_level == risk_level)
     
-    result = await db.execute(query.limit(200))
+    result = await db.execute(query)
     rows = result.all()
     
     data = []
@@ -73,9 +77,10 @@ async def get_my_reports(
 
     # 预置多任务预设报告（如果尚未存在）
     existing_companies = [d["company_name"] for d in data]
+    preset_reports = []
     if "杭州高新智能科技股份有限公司" not in existing_companies:
         hz_created = datetime.utcnow() - timedelta(days=2)
-        data.append({
+        preset_reports.append({
             "id": "rpt_hangzhou_preloan_001",
             "report_no": "RPT-39P-16320551",
             "task_no": "TSK2026083016320551A",
@@ -96,7 +101,7 @@ async def get_my_reports(
         })
     if "东莞市顺捷实业有限公司" not in existing_companies:
         sj_created = datetime.utcnow() - timedelta(days=1)
-        data.append({
+        preset_reports.append({
             "id": "rpt_shunjie_preloan_001",
             "report_no": "RNO1881255253482991616",
             "task_no": "TSK20260831094624B88X",
@@ -116,10 +121,41 @@ async def get_my_reports(
             "is_expired": False
         })
 
+    for pr in preset_reports:
+        # 对预置报告也做过滤匹配
+        match_keyword = True
+        if keyword:
+            kw_lower = keyword.lower()
+            match_keyword = (
+                kw_lower in pr["company_name"].lower() or 
+                kw_lower in pr["credit_code"].lower() or 
+                kw_lower in pr["report_no"].lower() or
+                kw_lower in pr["task_no"].lower()
+            )
+        match_risk = True
+        if risk_level and pr["risk_level"] != risk_level:
+            match_risk = False
+        if match_keyword and match_risk:
+            data.append(pr)
+
     # 全局严格按生成时间倒序排列 (最新生成的报告排在最前面)
     data.sort(key=lambda x: x.get("created_at") or "", reverse=True)
 
-    return {"code": 0, "data": data}
+    total = len(data)
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paged_items = data[start_idx:end_idx]
+
+    return {
+        "code": 0,
+        "data": paged_items,
+        "items": paged_items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages
+    }
 
 @router.get("/{report_id}")
 async def get_report_detail(

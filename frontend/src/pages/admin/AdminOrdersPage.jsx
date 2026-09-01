@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Receipt, Search, RefreshCw } from 'lucide-react';
-import { message } from 'antd';
+import { message, Pagination } from 'antd';
 import apiClient from '../../api/client';
 
 export default function AdminOrdersPage() {
@@ -10,16 +10,17 @@ export default function AdminOrdersPage() {
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (p = page, ps = pageSize) => {
     setLoading(true);
     try {
-      let url = `/admin/orders/list?page=${page}&page_size=15`;
-      if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+      let url = `/admin/orders/list?page=${p}&page_size=${ps}`;
+      if (keyword) url += `&keyword=${encodeURIComponent(keyword.trim())}`;
       if (statusFilter) url += `&status=${encodeURIComponent(statusFilter)}`;
       const res = await apiClient.get(url);
-      setOrders(res.data.items || []);
-      setTotal(res.data.total || 0);
+      setOrders(res.data?.items || res.items || []);
+      setTotal(res.data?.total || res.total || 0);
     } catch (err) {
       console.error(err);
       message.error('获取订单列表失败');
@@ -29,13 +30,13 @@ export default function AdminOrdersPage() {
   };
 
   useEffect(() => {
-    fetchOrders();
-  }, [page, statusFilter]);
+    fetchOrders(page, pageSize);
+  }, [page, pageSize, statusFilter]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(1);
-    fetchOrders();
+    fetchOrders(1, pageSize);
   };
 
   return (
@@ -147,6 +148,28 @@ export default function AdminOrdersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* 订单列表全量分页换页条 */}
+        {total > 0 && (
+          <div className="p-3.5 border-t border-zinc-200 flex items-center justify-between flex-wrap gap-4 bg-zinc-50/40">
+            <span className="text-xs text-zinc-500 font-mono">
+              共计 <strong className="text-slate-900 font-semibold">{total}</strong> 笔充值订单
+            </span>
+            <Pagination
+              current={page}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger
+              pageSizeOptions={['15', '30', '50', '100']}
+              onChange={(p, ps) => {
+                setPage(p);
+                setPageSize(ps);
+              }}
+              showQuickJumper
+              size="small"
+            />
+          </div>
+        )}
       </div>
 
     </div>

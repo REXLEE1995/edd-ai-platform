@@ -12,23 +12,28 @@ import {
   Calendar,
   Layers
 } from 'lucide-react';
-import { message } from 'antd';
+import { message, Pagination } from 'antd';
 import apiClient from '../../api/client';
 import { formatLocalTime } from '../../utils/date';
 
 export default function ReportAssetsPage() {
   const [reports, setReports] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(8);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
 
-  const fetchReports = async () => {
+  const fetchReports = async (p = page, ps = pageSize) => {
+    setLoading(true);
     try {
-      let url = '/v1/reports/list?';
-      if (keyword) url += `keyword=${encodeURIComponent(keyword)}&`;
+      let url = `/v1/reports/list?page=${p}&page_size=${ps}&`;
+      if (keyword) url += `keyword=${encodeURIComponent(keyword.trim())}&`;
       if (riskFilter) url += `risk_level=${encodeURIComponent(riskFilter)}&`;
       const res = await apiClient.get(url);
-      setReports(res.data || []);
+      setReports(res.items || res.data || []);
+      setTotal(res.total || 0);
     } catch (err) {
       console.error(err);
     } finally {
@@ -37,12 +42,13 @@ export default function ReportAssetsPage() {
   };
 
   useEffect(() => {
-    fetchReports();
-  }, [riskFilter]);
+    fetchReports(page, pageSize);
+  }, [page, pageSize, riskFilter]);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchReports();
+    setPage(1);
+    fetchReports(1, pageSize);
   };
 
   const getRiskBadge = (level, score) => {
@@ -179,6 +185,28 @@ export default function ReportAssetsPage() {
           ))
         )}
       </div>
+
+      {/* 报告资产库分页组件 */}
+      {total > 0 && (
+        <div className="mt-6 p-4 bg-white rounded-sm border border-slate-300 shadow-2xs flex items-center justify-between flex-wrap gap-4">
+          <span className="text-xs text-slate-500 font-mono">
+            共计 <strong className="text-slate-800 font-semibold">{total}</strong> 份企业尽调报告
+          </span>
+          <Pagination
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showSizeChanger
+            pageSizeOptions={['8', '16', '32', '50']}
+            onChange={(p, ps) => {
+              setPage(p);
+              setPageSize(ps);
+            }}
+            showQuickJumper
+            size="small"
+          />
+        </div>
+      )}
 
     </div>
   );
