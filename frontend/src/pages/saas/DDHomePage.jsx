@@ -30,10 +30,11 @@ export default function DDHomePage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    // 仅在显式传入非空参数时设置，不进行任何默认预填充
     if (location.state?.prefillCompany) {
       const p = location.state.prefillCompany;
-      setCompanyName(p.company_name || '');
-      setCreditCode(p.credit_code || '91440300MA5EXXXX99');
+      if (p.company_name) setCompanyName(p.company_name);
+      if (p.credit_code) setCreditCode(p.credit_code);
     }
   }, [location.state]);
 
@@ -190,7 +191,7 @@ export default function DDHomePage() {
                     type="text"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="请输入企业全称（如：东莞市顺捷实业有限公司）"
+                    placeholder="请输入企业完整注册全称（如：某某实业有限公司）"
                     className="w-full bg-transparent border-0 text-sm text-slate-900 font-medium focus:outline-none placeholder:text-slate-400 placeholder:text-xs"
                   />
                 </div>
@@ -210,7 +211,7 @@ export default function DDHomePage() {
                     type="text"
                     value={creditCode}
                     onChange={(e) => setCreditCode(e.target.value.toUpperCase())}
-                    placeholder="如：91441900MA4UQ8888X"
+                    placeholder="请输入18位统一代码（如：91441900MA4UQ****X）"
                     className="w-full bg-transparent border-0 text-sm text-slate-900 font-mono font-bold tracking-wide focus:outline-none placeholder:text-slate-400 placeholder:text-xs"
                     maxLength={18}
                   />

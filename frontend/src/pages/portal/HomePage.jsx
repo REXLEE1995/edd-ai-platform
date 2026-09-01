@@ -23,11 +23,11 @@ import {
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { userLogin } = useAuth();
+  const { user, userLogin } = useAuth();
   const [keyword, setKeyword] = useState('');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [phone, setPhone] = useState('13800138000');
-  const [code, setCode] = useState('123456');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [sendLoading, setSendLoading] = useState(false);
@@ -51,12 +51,7 @@ export default function HomePage() {
     try {
       const res = await apiClient.post('/v1/auth/send-code', { phone, scene: 'login' });
       setCountdown(60);
-      if (res?.data?.code) {
-        setCode(res.data.code);
-        message.success(`验证码发送成功 (测试环境验证码: ${res.data.code})`);
-      } else {
-        message.success(res?.message || '验证码已发送至手机，5分钟内有效');
-      }
+      message.success(res?.message || '短信验证码已成功发送至您的手机，5分钟内有效，请查收！');
     } catch (err) {
       message.error(err.response?.data?.detail || '短信发送失败，请稍后重试');
     } finally {
@@ -65,8 +60,15 @@ export default function HomePage() {
   };
 
   const handleTriggerExperience = (companyName) => {
+    const targetComp = (companyName || keyword || '').trim();
     if (companyName) {
       setKeyword(companyName);
+    }
+    if (user) {
+      navigate(targetComp ? `/app?company=${encodeURIComponent(targetComp)}` : '/app', {
+        state: targetComp ? { prefillCompany: { company_name: targetComp } } : undefined
+      });
+      return;
     }
     setIsAuthModalOpen(true);
   };
@@ -87,12 +89,13 @@ export default function HomePage() {
       const res = await userLogin(phone, code);
       setIsAuthModalOpen(false);
       if (res?.is_new_user) {
-        message.success('注册并登录成功！已为您赠送 2 次免费 AI 全景尽调体验额度');
+        message.success('注册并登录成功！已为您赠送 1 次免费 AI 全景尽调体验额度');
       } else {
         message.success(res?.message || '登录成功，欢迎回到工作台！');
       }
-      navigate(keyword ? `/app?company=${encodeURIComponent(keyword)}` : '/app', { 
-        state: { prefillCompany: { company_name: keyword.trim() || '东莞市顺捷实业有限公司' } } 
+      const targetComp = keyword.trim();
+      navigate(targetComp ? `/app?company=${encodeURIComponent(targetComp)}` : '/app', { 
+        state: targetComp ? { prefillCompany: { company_name: targetComp } } : undefined
       });
     } catch (err) {
       message.error(err.response?.data?.detail || '认证失败，请重试');
@@ -129,7 +132,7 @@ export default function HomePage() {
           官方中台直连 + 股权出资穿透与失信合规排查 + 银行信贷级企业全景尽调报告。支持沉浸式在线目录查阅与一键导出 A4 PDF 原件。
         </p>
 
-        {/* 一键免费体验 AI 尽调 CTA 核心入口 */}
+        {/* 核心行动 CTA 注册/登录入口 */}
         <div className="pt-4 max-w-lg mx-auto space-y-4">
           <button 
             type="button"
@@ -137,13 +140,13 @@ export default function HomePage() {
             className="inline-flex items-center justify-center px-8 py-3.5 rounded-md bg-[#0096DB] hover:bg-[#0084c2] text-white font-semibold text-sm shadow-glow-primary transition-all transform hover:-translate-y-0.5 cursor-pointer gap-2 border border-[#0084c2]"
           >
             <Sparkles className="w-4 h-4 text-white animate-pulse" />
-            <span>免费体验 AI 尽调</span>
+            <span>{user ? '进入工作台发起尽调' : '注册 / 登录并生成报告'}</span>
             <ArrowRight className="w-4 h-4 ml-0.5" />
           </button>
           
           <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5 text-zinc-700 font-medium">
-              <Check className="w-3.5 h-3.5 text-[#0096DB]" /> 新用户注册即赠 1 次额度
+              <Check className="w-3.5 h-3.5 text-[#0096DB]" /> 新用户首次登录赠送 1 次免费额度
             </span>
             <span className="text-zinc-300">•</span>
             <span className="flex items-center gap-1.5 text-zinc-700 font-medium">
@@ -347,7 +350,7 @@ export default function HomePage() {
             透明灵活的尽调加油包 · 按需充值永久有效
           </h2>
           <p className="text-xs sm:text-sm text-zinc-500">
-            新注册即赠送 2 次免费额度，支持按次加油，权益分级清晰，无任何隐形门槛
+            新用户首次注册登录即赠送 1 次免费额度，支持按次加油，权益分级清晰，无任何隐形门槛
           </p>
         </div>
 
@@ -633,10 +636,10 @@ export default function HomePage() {
               <Sparkles className="w-5 h-5 text-amber-500" />
             </div>
             <h3 className="text-lg font-bold text-slate-950 tracking-tight">
-              快速登录 / 注册享宇AI智评
+              快速注册 / 登录享宇AI智评
             </h3>
             <p className="text-xs text-zinc-500">
-              手机验证码一键登录，即刻获赠 <strong className="text-slate-900 font-semibold">2 次免费 AI 全景尽调</strong> 体验额度
+              手机验证码一键登录，新用户即刻获赠 <strong className="text-slate-900 font-semibold">1 次免费 AI 全景尽调</strong> 体验额度
             </p>
           </div>
 
@@ -665,8 +668,9 @@ export default function HomePage() {
                   type="text"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  placeholder="验证码 (本地测试填 123456)"
+                  placeholder="请输入 6 位短信验证码"
                   className="w-full bg-transparent border-0 text-xs text-slate-900 focus:outline-none font-mono placeholder:text-zinc-400"
+                  maxLength={6}
                   required
                 />
                 <button

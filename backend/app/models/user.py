@@ -62,9 +62,9 @@ class User(Base, TimestampMixin):
     # 额度与资产核心字段 (整数次数)
     balance_quota: Mapped[int] = mapped_column(
         Integer, 
-        default=2, 
+        default=1, 
         nullable=False,
-        comment="当前可用尽调额度余额 (次，新用户注册默认赠送 2 次)"
+        comment="当前可用尽调额度余额 (次，新用户首次注册登录默认赠送 1 次)"
     )
     total_recharge_quota: Mapped[int] = mapped_column(
         Integer, 

@@ -50,7 +50,7 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
     """
     手机号 + 验证码 统一注册/登录通道：
     1. 通过 SMSService 严格核验短信验证码与防刷存证流水 (sms_logs)；
-    2. 新手机号自动注册新账号，初始化并赠送 2 次 AI 全景尽调体验额度，直接进入工作台；
+    2. 新手机号自动注册新账号，首次登录初始化赠送 1 次 AI 全景尽调体验额度，直接进入工作台；
     3. 已注册手机号直接核验通过并完成登录。
     """
     phone = req.phone.strip()
@@ -67,16 +67,16 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
     is_new_user = False
     if not user:
         is_new_user = True
-        # 自动注册新用户并赠送 2 次全景尽调体验额度
+        # 自动注册新用户并赠送 1 次全景尽调体验额度
         user = User(
             id=f"user-{uuid.uuid4().hex[:12]}",
             phone=phone,
             hashed_password=get_password_hash(req.password or "123456"),
             company_name=f"企业用户_{phone[-4:]}",
-            balance_quota=2, # 注册即赠送 2 次免费额度
+            balance_quota=1, # 注册即赠送 1 次免费额度
             total_recharge_quota=0,
             total_consumed_quota=0,
-            total_gifted_quota=2,
+            total_gifted_quota=1,
             status="active",
             tags=["新注册用户", "赠送体验"]
         )
@@ -89,14 +89,14 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
             user_phone=user.phone,
             user_company=user.company_name,
             change_type="gift",
-            amount=2,
+            amount=1,
             balance_before=0,
-            balance_after=2,
+            balance_after=1,
             ref_type="system",
             ref_id="REG_GIFT",
             operator_type="system",
             operator_name="SYSTEM",
-            remark="新用户手机注册系统赠送体验额度"
+            remark="新用户首次登录系统赠送 1 次免费体验额度"
         )
         db.add(tx)
         await db.commit()
@@ -106,7 +106,7 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
             raise HTTPException(status_code=403, detail="该账户已被冻结，请联系平台客服解冻")
 
     token = create_access_token(subject=user.id, token_type="user")
-    success_msg = "注册并登录成功！已赠送 2 次免费尽调额度" if is_new_user else "登录成功，欢迎回到工作台！"
+    success_msg = "注册并登录成功！已为您赠送 1 次免费尽调额度" if is_new_user else "登录成功，欢迎回到工作台！"
 
     return {
         "access_token": token,
