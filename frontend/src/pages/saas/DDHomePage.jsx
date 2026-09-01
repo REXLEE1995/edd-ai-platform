@@ -93,7 +93,7 @@ export default function DDHomePage() {
   const hasQuota = (user?.balance_quota ?? 0) > 0;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
       
       {/* 头部标题与公文状态栏 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/80">

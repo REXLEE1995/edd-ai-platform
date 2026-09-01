@@ -191,7 +191,7 @@ export default function UserCenterPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
       
       {/* 头部个人基本信息卡片 (shadcn Card) */}
       <div className="shadcn-card bg-white/75 backdrop-blur-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-white/85 shadow-glass rounded-xl">
