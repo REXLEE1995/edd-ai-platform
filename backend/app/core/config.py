@@ -6,7 +6,7 @@ db_path_str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "享宇AI智评"
-    VERSION: str = "2.1.0"
+    VERSION: str = "2.2.0"
     API_V1_STR: str = "/api/v1"
     API_ADMIN_STR: str = "/api/admin"
 

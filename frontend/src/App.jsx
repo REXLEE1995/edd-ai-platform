@@ -1,15 +1,21 @@
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { ConfigProvider, theme } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
+import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ScrollToTop from './components/ScrollToTop';
 import AppRoutes from './routes/AppRoutes';
 
+dayjs.locale('zh-cn');
+
 export default function App() {
   return (
     <ConfigProvider
+      locale={zhCN}
       theme={{
         algorithm: theme.defaultAlgorithm,
         token: {
