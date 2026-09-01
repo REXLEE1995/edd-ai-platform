@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 from app.core.database import AsyncSessionLocal
+from app.core.config import settings
 from app.models.task import DDTask
 from app.models.report import DDReport
 from app.providers import get_weifengqi_provider, get_ic_provider, get_risk_provider
 from app.services.cleansing_service import DataCleansingService
 from app.services.file_storage_service import FileStorageService
+from app.services.ai_service import AIService
 
 logger = logging.getLogger("edd.tasks")
 
@@ -154,6 +156,26 @@ class TaskService:
                 raw_risk=raw_risk,
                 parsed_pdf_data=parsed_pdf_data
             )
+
+            # 若配置了 New-API Token 池网关，则通过网关调用大模型进行动态 CRO 裁决
+            if settings.LLM_PROVIDER in ["newapi", "openai", "deepseek"] and settings.NEW_API_KEY and settings.NEW_API_KEY != "sk-your-new-api-master-token":
+                append_log(f"【New-API 智能体网关】调度后端 Token 资源池 (模型: {settings.NEW_API_MODEL}) 执行大模型风控综合研判...")
+                await session.commit()
+                try:
+                    llm_ai_summary = await AIService.generate_enterprise_summary(
+                        company_name=company_name,
+                        credit_code=credit_code,
+                        basic_info=report_content.get("basic_info", {}),
+                        tax_info=raw_sources.get("tax_invoice_summary", {}),
+                        risk_info=raw_sources.get("judiciary_risk_summary", {})
+                    )
+                    if llm_ai_summary:
+                        ai_summary = llm_ai_summary
+                        report_content["score_card"]["ai_summary"] = ai_summary
+                        append_log("【New-API 智能体网关】大模型研判完成，全景洞察已深度融合。")
+                        await session.commit()
+                except Exception as e:
+                    logger.warning(f"[TaskService] New-API dynamic inference skipped: {e}")
 
             report_content["is_public_only"] = is_public_only
             report_content["is_locked"] = is_locked

@@ -18,6 +18,7 @@ from app.api.admin.dashboard import router as admin_dashboard_router
 from app.api.admin.users import router as admin_users_router
 from app.api.admin.quota import router as admin_quota_router
 from app.api.admin.orders import router as admin_orders_router
+from app.api.admin.settings import router as admin_settings_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,6 +56,7 @@ app.include_router(admin_dashboard_router, prefix="/api/admin")
 app.include_router(admin_users_router, prefix="/api/admin")
 app.include_router(admin_quota_router, prefix="/api/admin")
 app.include_router(admin_orders_router, prefix="/api/admin")
+app.include_router(admin_settings_router, prefix="/api/admin")
 
 @app.get("/")
 async def root():

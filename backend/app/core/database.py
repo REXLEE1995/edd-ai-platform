@@ -55,6 +55,16 @@ async def init_db():
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # SQLite 字段动态自愈补齐 (避免模型新增字段但在旧库中未执行 ALTER TABLE)
+        if "sqlite" in db_url:
+            try:
+                res = await conn.execute(text("PRAGMA table_info(dd_reports)"))
+                cols = [row[1] for row in res.fetchall()]
+                if "expired_at" not in cols:
+                    await conn.execute(text("ALTER TABLE dd_reports ADD COLUMN expired_at DATETIME"))
+            except Exception as e:
+                print(f"[DB Auto-Migration] dd_reports migration note: {e}")
     
     async with AsyncSessionLocal() as session:
         # 1. 检查并创建超管账号

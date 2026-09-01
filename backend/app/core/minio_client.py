@@ -66,12 +66,13 @@ class MinioClientManager:
                 # 尝试轻量列出 bucket 校验鉴权与连通
                 test_client.list_buckets()
                 chosen_endpoint = ep
-                # 正式客户端创建（使用标准连接池）
+                # 正式客户端创建（使用快速超时连接池，防止阻塞事件循环）
                 chosen_client = Minio(
                     endpoint=ep,
                     access_key=settings.MINIO_ACCESS_KEY,
                     secret_key=settings.MINIO_SECRET_KEY,
-                    secure=secure
+                    secure=secure,
+                    http_client=http_client
                 )
                 break
             except Exception:
@@ -79,11 +80,16 @@ class MinioClientManager:
 
         if not chosen_client:
             chosen_endpoint = raw_endpoint or "127.0.0.1:9000"
+            fallback_http_client = urllib3.PoolManager(
+                timeout=urllib3.Timeout(connect=1.0, read=2.0),
+                retries=urllib3.Retry(total=1)
+            )
             chosen_client = Minio(
                 endpoint=chosen_endpoint,
                 access_key=settings.MINIO_ACCESS_KEY,
                 secret_key=settings.MINIO_SECRET_KEY,
-                secure=secure
+                secure=secure,
+                http_client=fallback_http_client
             )
 
         self._active_endpoint = chosen_endpoint

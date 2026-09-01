@@ -54,7 +54,8 @@ export default function Navbar() {
                 { to: '/admin/dashboard', label: '运营大盘' },
                 { to: '/admin/users', label: '用户管理' },
                 { to: '/admin/quota', label: '额度调控' },
-                { to: '/admin/orders', label: '订单财务' }
+                { to: '/admin/orders', label: '订单财务' },
+                { to: '/admin/settings', label: 'AI 模型与 Token 配置' }
               ].map((item) => (
                 <Link 
                   key={item.to}

@@ -45,11 +45,17 @@ class Settings(BaseSettings):
     RISK_DATA_TIMEOUT_SECONDS: int = 15
 
     # ==========================================
-    # LLM 智能体配置
+    # LLM 智能体与 New-API Token 池网关配置
     # ==========================================
-    LLM_PROVIDER: str = "mock"  # "mock" | "openai" | "deepseek"
+    LLM_PROVIDER: str = "newapi"  # "mock" | "newapi" | "openai" | "deepseek"
+    NEW_API_BASE_URL: str = "http://127.0.0.1:3000/v1"
+    NEW_API_KEY: str = "sk-newapi-master-key"
+    NEW_API_MODEL: str = "deepseek-chat"
+    NEW_API_TIMEOUT_SECONDS: int = 60
+    
+    # 兼容通用 OpenAI 变量
     OPENAI_API_KEY: str = ""
-    OPENAI_API_BASE: str = "https://api.deepseek.com/v1"
+    OPENAI_API_BASE: str = "http://127.0.0.1:3000/v1"
 
     # Security
     SECRET_KEY: str = "edd-ai-platform-super-secure-local-dev-jwt-secret-key-2026"
@@ -59,7 +65,7 @@ class Settings(BaseSettings):
     # ==========================================
     # MinIO 对象存储配置
     # ==========================================
-    MINIO_ENDPOINT: str = "192.168.1.100:9000"
+    MINIO_ENDPOINT: str = "127.0.0.1:9000"
     MINIO_ACCESS_KEY: str = "admin"
     MINIO_SECRET_KEY: str = "admin123456"
     MINIO_BUCKET_NAME: str = "my-files"

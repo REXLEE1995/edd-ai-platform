@@ -467,11 +467,10 @@ export default function TaskCenterPage() {
                             {report.company_name}
                           </Link>
                         </h3>
-                        {getRiskBadge(report.risk_level, report.score)}
                       </div>
-                      <p className="text-xs text-slate-500 font-mono flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <p className="text-xs text-slate-500 font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span>任务单号: <strong className="text-slate-800">{report.task_no || report.task_id || report.report_no}</strong></span>
                         <span>统一代码: <strong className="text-slate-800">{report.credit_code}</strong></span>
-                        <span>报告编号: <strong className="text-slate-800">{report.report_no}</strong></span>
                         <span>生成时间: {formatLocalTime(report.created_at)}</span>
                       </p>
                     </div>

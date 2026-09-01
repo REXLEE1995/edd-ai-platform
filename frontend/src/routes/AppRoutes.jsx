@@ -20,6 +20,7 @@ import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminUsersPage from '../pages/admin/AdminUsersPage';
 import AdminQuotaPage from '../pages/admin/AdminQuotaPage';
 import AdminOrdersPage from '../pages/admin/AdminOrdersPage';
+import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
 
 export default function AppRoutes() {
   return (
@@ -48,6 +49,7 @@ export default function AppRoutes() {
       <Route path="/admin/users" element={<AdminUsersPage />} />
       <Route path="/admin/quota" element={<AdminQuotaPage />} />
       <Route path="/admin/orders" element={<AdminOrdersPage />} />
+      <Route path="/admin/settings" element={<AdminSettingsPage />} />
 
       {/* 404 Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
