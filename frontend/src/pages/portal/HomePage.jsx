@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal, message } from 'antd';
+import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { 
   Sparkles, 
@@ -28,6 +29,40 @@ export default function HomePage() {
   const [phone, setPhone] = useState('13800138000');
   const [code, setCode] = useState('123456');
   const [authLoading, setAuthLoading] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [sendLoading, setSendLoading] = useState(false);
+
+  useEffect(() => {
+    let timer;
+    if (countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  const handleSendCode = async () => {
+    if (!phone || phone.length < 11) {
+      message.warning('请先输入有效的 11 位手机号码');
+      return;
+    }
+    setSendLoading(true);
+    try {
+      const res = await apiClient.post('/v1/auth/send-code', { phone, scene: 'login' });
+      setCountdown(60);
+      if (res?.data?.code) {
+        setCode(res.data.code);
+        message.success(`验证码发送成功 (测试环境验证码: ${res.data.code})`);
+      } else {
+        message.success(res?.message || '验证码已发送至手机，5分钟内有效');
+      }
+    } catch (err) {
+      message.error(err.response?.data?.detail || '短信发送失败，请稍后重试');
+    } finally {
+      setSendLoading(false);
+    }
+  };
 
   const handleTriggerExperience = (companyName) => {
     if (companyName) {
@@ -42,15 +77,25 @@ export default function HomePage() {
       message.warning('请输入有效的 11 位手机号码');
       return;
     }
+    if (!code) {
+      message.warning('请输入短信验证码');
+      return;
+    }
 
     setAuthLoading(true);
     try {
-      await userLogin(phone, code);
+      const res = await userLogin(phone, code);
       setIsAuthModalOpen(false);
-      message.success('登录成功！已为您发放 1 次免费 AI 全景尽调体验额度');
-      navigate('/app', { state: { prefillCompany: { company_name: keyword.trim() || '东莞市顺捷实业有限公司' } } });
+      if (res?.is_new_user) {
+        message.success('注册并登录成功！已为您赠送 2 次免费 AI 全景尽调体验额度');
+      } else {
+        message.success(res?.message || '登录成功，欢迎回到工作台！');
+      }
+      navigate(keyword ? `/app?company=${encodeURIComponent(keyword)}` : '/app', { 
+        state: { prefillCompany: { company_name: keyword.trim() || '东莞市顺捷实业有限公司' } } 
+      });
     } catch (err) {
-      message.error(err.response?.data?.detail || '登录失败');
+      message.error(err.response?.data?.detail || '认证失败，请重试');
     } finally {
       setAuthLoading(false);
     }
@@ -626,10 +671,13 @@ export default function HomePage() {
                 />
                 <button
                   type="button"
-                  onClick={() => message.info('测试验证码已自动填充：123456')}
-                  className="text-xs text-slate-700 hover:text-slate-900 font-medium shrink-0 ml-2 hover:underline cursor-pointer"
+                  disabled={countdown > 0 || sendLoading}
+                  onClick={handleSendCode}
+                  className={`text-xs font-medium shrink-0 ml-2 cursor-pointer transition-colors ${
+                    countdown > 0 ? 'text-zinc-400 cursor-not-allowed' : 'text-[#0096DB] hover:text-[#007cb3] hover:underline'
+                  }`}
                 >
-                  获取验证码
+                  {sendLoading ? '发送中...' : countdown > 0 ? `${countdown}s 后重试` : '获取验证码'}
                 </button>
               </div>
             </div>
@@ -639,13 +687,13 @@ export default function HomePage() {
               disabled={authLoading}
               className="shadcn-button-primary w-full py-2.5 text-xs font-semibold shadow-xs"
             >
-              {authLoading ? '正在核验身份并初始化额度...' : '免费注册/登录并立即体验 AI 尽调'}
+              {authLoading ? '正在核验身份...' : '注册/登录'}
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </form>
 
           <div className="pt-3 border-t border-slate-200 text-center text-[11px] text-zinc-400">
-            <span>登录即代表同意并遵守</span>
+            <span>登录/注册即代表同意并遵守</span>
             <span className="text-zinc-600 hover:underline mx-1 cursor-pointer">《用户服务协议》</span>
             <span>与</span>
             <span className="text-zinc-600 hover:underline mx-1 cursor-pointer">《金融级数据隐私政策》</span>

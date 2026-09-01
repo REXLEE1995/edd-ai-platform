@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     RISK_DATA_APP_SECRET: str = ""
     RISK_DATA_TIMEOUT_SECONDS: int = 15
 
+    # 4. 短信网关发送服务 (SMS Gateway API - 手机号登录/注册验证码发送)
+    # 模式可选: "mock" (本地开发免发短信) | "http" (真实三方短信接口发起调用)
+    SMS_MODE: str = "mock"
+    SMS_GATEWAY_URL: str = "https://api.sms-gateway.com/v1/send"
+    SMS_ACCOUNT: str = ""           # 短信平台账号 / AppKey
+    SMS_PASSWORD: str = ""          # 短信平台密码 / AppSecret
+    SMS_SIGN_NAME: str = "享宇AI智评" # 短信签名
+    SMS_TEMPLATE_CODE: str = ""     # 短信模版ID (如适用)
+    SMS_CODE_EXPIRE_SECONDS: int = 300  # 验证码有效期 (秒，默认 5 分钟)
+
     # ==========================================
     # LLM 智能体与 New-API Token 池网关配置
     # ==========================================

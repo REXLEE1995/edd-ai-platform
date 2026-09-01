@@ -13,6 +13,8 @@ class AdminLoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    is_new_user: bool = False
+    message: Optional[str] = "登录成功"
     user: Optional[dict] = None
 
 class UserInfoSchema(BaseModel):

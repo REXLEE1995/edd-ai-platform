@@ -9,6 +9,7 @@ from app.models.audit import AdminAuditLog
 from app.models.file_record import TaskFile
 from app.models.third_party_api import SysThirdPartyApi
 from app.models.report_share import ReportShare
+from app.models.sms_log import SMSLog
 
 __all__ = [
     "Base",
@@ -24,4 +25,5 @@ __all__ = [
     "TaskFile",
     "SysThirdPartyApi",
     "ReportShare",
+    "SMSLog",
 ]

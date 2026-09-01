@@ -1,12 +1,15 @@
 import uuid
+from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import User
 from app.models.quota import QuotaTransaction
+from app.services.sms_service import SMSService
 from app.schemas.auth import (
     LoginWithPhoneRequest, 
     TokenResponse, 
@@ -18,34 +21,64 @@ from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["用户认证与个人中心"])
 
+class SendSMSRequest(BaseModel):
+    phone: str
+    scene: Optional[str] = "login"
+
 @router.post("/send-code")
-async def send_sms_code(phone: str):
+async def send_sms_code(
+    req: SendSMSRequest, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db)
+):
     """
-    模拟发送短信验证码 (本地开发模式固定返回 123456)
+    发送短信验证码接口 (支持三方网关 HTTP 调用与本地 Mock 模式，全量存证于 sms_logs 表)
     """
-    return {"code": 0, "message": "验证码已发送", "data": {"code": "123456"}}
+    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
+    ok, msg, data = await SMSService.send_verification_code(
+        session=db,
+        phone=req.phone,
+        scene=req.scene or "login",
+        client_ip=client_ip
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"code": 0, "message": msg, "data": data}
 
 @router.post("/login", response_model=TokenResponse)
 async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depends(get_db)):
     """
-    手机号免密/密码登录，若用户不存在则自动注册并赠送 2 次额度
+    手机号 + 验证码 统一注册/登录通道：
+    1. 通过 SMSService 严格核验短信验证码与防刷存证流水 (sms_logs)；
+    2. 新手机号自动注册新账号，初始化并赠送 2 次 AI 全景尽调体验额度，直接进入工作台；
+    3. 已注册手机号直接核验通过并完成登录。
     """
-    result = await db.execute(select(User).where(User.phone == req.phone))
+    phone = req.phone.strip()
+    code = (req.code or "").strip()
+
+    # 调用短信中台核验验证码
+    is_valid, verify_msg = await SMSService.verify_code(session=db, phone=phone, code=code, scene="login")
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=verify_msg)
+
+    result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
     
+    is_new_user = False
     if not user:
-        # 自动注册新用户
+        is_new_user = True
+        # 自动注册新用户并赠送 2 次全景尽调体验额度
         user = User(
             id=f"user-{uuid.uuid4().hex[:12]}",
-            phone=req.phone,
+            phone=phone,
             hashed_password=get_password_hash(req.password or "123456"),
-            company_name=f"企业用户_{req.phone[-4:]}",
-            balance_quota=1, # 注册即送 1 次
+            company_name=f"企业用户_{phone[-4:]}",
+            balance_quota=2, # 注册即赠送 2 次免费额度
             total_recharge_quota=0,
             total_consumed_quota=0,
-            total_gifted_quota=1,
+            total_gifted_quota=2,
             status="active",
-            tags=["新注册用户"]
+            tags=["新注册用户", "赠送体验"]
         )
         db.add(user)
         
@@ -56,26 +89,30 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
             user_phone=user.phone,
             user_company=user.company_name,
             change_type="gift",
-            amount=1,
+            amount=2,
             balance_before=0,
-            balance_after=1,
+            balance_after=2,
             ref_type="system",
             ref_id="REG_GIFT",
             operator_type="system",
             operator_name="SYSTEM",
-            remark="新用户注册系统赠送体验额度"
+            remark="新用户手机注册系统赠送体验额度"
         )
         db.add(tx)
         await db.commit()
         await db.refresh(user)
     else:
         if user.status == "frozen":
-            raise HTTPException(status_code=403, detail="该账户已被冻结，请联系客服")
+            raise HTTPException(status_code=403, detail="该账户已被冻结，请联系平台客服解冻")
 
     token = create_access_token(subject=user.id, token_type="user")
+    success_msg = "注册并登录成功！已赠送 2 次免费尽调额度" if is_new_user else "登录成功，欢迎回到工作台！"
+
     return {
         "access_token": token,
         "token_type": "bearer",
+        "is_new_user": is_new_user,
+        "message": success_msg,
         "user": {
             "id": user.id,
             "phone": user.phone,
@@ -83,6 +120,7 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
             "balance_quota": user.balance_quota,
             "total_recharge_quota": user.total_recharge_quota,
             "total_consumed_quota": user.total_consumed_quota,
+            "total_gifted_quota": user.total_gifted_quota,
             "status": user.status,
             "tags": user.tags or []
         }

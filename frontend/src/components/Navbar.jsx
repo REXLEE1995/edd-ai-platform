@@ -239,7 +239,7 @@ export default function Navbar() {
                 to="/auth/login"
                 className="shadcn-button-primary px-3.5 py-1.5 text-xs"
               >
-                登录工作台
+                注册/登录
               </Link>
             )}
           </div>
@@ -280,7 +280,7 @@ export default function Navbar() {
                 to="/auth/login"
                 className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-[#0096DB] hover:bg-cyan-50/50 transition-colors"
               >
-                登录
+                注册/登录
               </Link>
               <Link 
                 to="/app"

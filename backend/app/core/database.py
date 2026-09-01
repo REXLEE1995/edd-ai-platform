@@ -14,6 +14,7 @@ from app.models.order import Order
 from app.models.file_record import TaskFile
 from app.models.third_party_api import SysThirdPartyApi
 from app.models.report_share import ReportShare
+from app.models.sms_log import SMSLog
 
 # 确保 SQLite 本地数据目录存在并使用绝对路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

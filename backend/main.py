@@ -71,7 +71,7 @@ async def log_requests_middleware(request: Request, call_next):
     process_time = round((time.time() - start_time) * 1000, 1)
     path = request.url.path
     if not path.endswith("/health") and not path.endswith("/auth/me"):
-        logger.info(f"🌐 [{request.method}] {path} -> HTTP {response.status_code} ({process_time}ms)")
+        logger.info(f"[HTTP] [{request.method}] {path} -> HTTP {response.status_code} ({process_time}ms)")
     return response
 
 # 注册前台 SaaS 业务路由
