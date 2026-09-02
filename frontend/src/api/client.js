@@ -1,7 +1,14 @@
 import axios from 'axios';
 
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL) {
+    return window.APP_CONFIG.API_BASE_URL;
+  }
+  return import.meta.env.VITE_API_BASE_URL || '/api';
+};
+
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: getApiBaseUrl(),
   timeout: 30000,
 });
 

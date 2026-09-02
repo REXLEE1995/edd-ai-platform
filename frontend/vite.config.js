@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
@@ -13,37 +13,42 @@ try {
 
 const realDir = fs.realpathSync(__dirname);
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    dedupe: ['react', 'react-dom', 'antd'],
-    alias: {
-      'react': path.resolve(realDir, 'node_modules/react'),
-      'react-dom': path.resolve(realDir, 'node_modules/react-dom'),
-    }
-  },
-  root: realDir,
-  server: {
-    port: 5173,
-    host: true,
-    fs: {
-      strict: false,
-      allow: [realDir, __dirname]
-    },
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, realDir, '');
+  const apiTarget = env.VITE_API_TARGET || process.env.VITE_API_TARGET || 'http://127.0.0.1:8000';
+
+  return {
+    plugins: [react()],
+    resolve: {
+      dedupe: ['react', 'react-dom', 'antd'],
+      alias: {
+        'react': path.resolve(realDir, 'node_modules/react'),
+        'react-dom': path.resolve(realDir, 'node_modules/react-dom'),
       }
-    }
-  },
-  preview: {
-    port: 5173,
-    host: true,
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true
+    },
+    root: realDir,
+    server: {
+      port: 5173,
+      host: true,
+      fs: {
+        strict: false,
+        allow: [realDir, __dirname]
+      },
+      proxy: {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true
+        }
+      }
+    },
+    preview: {
+      port: 5173,
+      host: true,
+      proxy: {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true
+        }
       }
     }
   }
