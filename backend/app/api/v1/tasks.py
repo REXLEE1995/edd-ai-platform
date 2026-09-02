@@ -596,6 +596,7 @@ async def simulate_authorize_task(
 @router.get("/list")
 async def get_my_tasks(
     status: Optional[str] = None,
+    exclude_completed: Optional[bool] = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(8, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -608,6 +609,8 @@ async def get_my_tasks(
     query = select(DDTask).where(DDTask.user_id == user.id)
     if status:
         query = query.where(DDTask.status == status)
+    elif exclude_completed:
+        query = query.where(DDTask.status != "completed")
 
     # 统计总数
     total_res = await db.execute(select(func.count()).select_from(query.subquery()))

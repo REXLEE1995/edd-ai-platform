@@ -11,9 +11,9 @@ export default function Footer() {
   }
 
   return (
-    <footer className="border-t border-slate-300 bg-white py-12 mt-16 text-xs text-zinc-500">
+    <footer className="border-t border-slate-300 bg-white py-8 sm:py-12 mt-10 sm:mt-16 text-xs text-zinc-500">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-8 sm:mb-10">
           <div className="space-y-3">
             <div className="flex items-center space-x-2">
               <img src="/brand_logo.png" alt="享宇AI智评" className="w-5 h-5 object-contain" />

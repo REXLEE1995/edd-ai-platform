@@ -46,7 +46,7 @@ export default function App() {
 
             <div className="relative z-10 flex flex-col flex-1">
               <Navbar />
-              <main className="flex-1">
+              <main className="flex-1 pb-16 md:pb-0">
                 <AppRoutes />
               </main>
               <Footer />

@@ -19,6 +19,7 @@ import {
 import { message, Modal, Pagination } from 'antd';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import RechargeModal from '../../components/RechargeModal';
 
 export default function UserCenterPage() {
   const location = useLocation();
@@ -121,6 +122,7 @@ export default function UserCenterPage() {
   const [summary, setSummary] = useState(null);
   const [payingOrder, setPayingOrder] = useState(null);
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [rechargeModalOpen, setRechargeModalOpen] = useState(false);
   const [isProcessingPay, setIsProcessingPay] = useState(false);
 
   // 3. 流水数据与分页
@@ -195,102 +197,91 @@ export default function UserCenterPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 text-slate-900">
       
       {/* 头部个人基本信息卡片 (shadcn Card) */}
-      <div className="shadcn-card bg-white/75 backdrop-blur-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-white/85 shadow-glass rounded-xl">
-        <div className="flex items-center space-x-4">
-          <div className={`w-12 h-12 rounded-lg text-white flex items-center justify-center font-bold text-xl shadow-2xs ${
-            isRealNameVerified ? 'bg-gradient-to-br from-[#0096DB] to-[#29B47D]' : 'bg-zinc-400'
-          }`}>
-            {isRealNameVerified ? (userName?.[0] || '雄') : '未'}
-          </div>
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-xl font-bold text-slate-950 tracking-tight">
-                {isRealNameVerified ? (userName || '大雄') : '未实名用户'}
-              </h1>
-              <span className="shadcn-badge-secondary">
-                {isRealNameVerified ? '个人实名用户' : '个人普通用户'}
+      <div className="shadcn-card bg-white/75 backdrop-blur-xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 border border-white/85 shadow-glass rounded-xl sm:rounded-2xl">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-950 tracking-tight font-mono">
+              {user?.phone || '13800138000'}
+            </h1>
+            {isRealNameVerified ? (
+              <span className="shadcn-badge-success flex items-center gap-1 text-[10px] sm:text-xs">
+                <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                实名认证已通过
               </span>
-              {isRealNameVerified ? (
-                <span className="shadcn-badge-success flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  实名认证已通过
-                </span>
-              ) : (
-                <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 text-amber-800 px-2.5 py-0.5 text-xs font-medium gap-1">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  未实名认证
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500 font-mono">
-              <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-zinc-400" /> {user?.phone || '13800138000'}</span>
-              <span>实名认证: {isRealNameVerified ? <strong className="text-slate-800">440301********1234 (已核验)</strong> : <strong className="text-amber-700">待完成公安实名核身</strong>}</span>
-              <span>注册时间: <strong className="text-slate-800">2026-08-27</strong></span>
-            </div>
+            ) : (
+              <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px] sm:text-xs font-medium gap-1">
+                <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                未实名认证
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] sm:text-xs text-zinc-500 font-mono">
+            <span>实名: {isRealNameVerified ? <strong className="text-slate-800">440301********1234 (已核验)</strong> : <strong className="text-amber-700">待公安实名核身</strong>}</span>
+            <span>注册时间: <strong className="text-slate-800">2026-08-27</strong></span>
           </div>
         </div>
 
         {/* 快捷额度卡 */}
-        <div className="flex items-center gap-4 bg-white/60 backdrop-blur-md p-3 rounded-lg border border-white/80 self-start md:self-auto shadow-2xs">
-          <div className="text-right">
-            <span className="text-xs text-zinc-500 block">可用尽调额度</span>
-            <span className="text-2xl font-bold text-slate-950 font-mono leading-none">
+        <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 bg-white/60 backdrop-blur-md p-2.5 sm:p-3 rounded-xl border border-white/80 w-full md:w-auto shadow-2xs">
+          <div className="text-left md:text-right">
+            <span className="text-[10px] sm:text-xs text-zinc-500 block">可用尽调额度</span>
+            <span className="text-xl sm:text-2xl font-bold text-slate-950 font-mono leading-none">
               {isRealNameVerified ? (user?.balance_quota ?? 57) : Math.max(0, (user?.balance_quota ?? 57) - 1)} <span className="text-xs font-normal text-zinc-500">次</span>
             </span>
           </div>
           <button
             type="button"
-            onClick={() => switchTab('billing')}
-            className="shadcn-button-primary text-xs py-1.5 px-3"
+            onClick={() => setRechargeModalOpen(true)}
+            className="shadcn-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
             <CreditCard className="w-3.5 h-3.5" />
-            购买加油包
+            <span>购买加油包</span>
           </button>
         </div>
       </div>
 
       {/* Tab 导航栏 (shadcn 胶囊风格) */}
-      <div className="mt-6 flex items-center bg-slate-200/60 backdrop-blur-xl p-1 rounded-lg w-fit border border-white/60 shadow-xs">
+      <div className="mt-4 sm:mt-6 flex items-center bg-slate-200/60 backdrop-blur-xl p-1 rounded-xl w-full sm:w-fit border border-white/60 shadow-xs">
         <button
           type="button"
           onClick={() => switchTab('profile')}
-          className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'profile'
               ? 'bg-white text-slate-950 font-semibold shadow-xs border border-white/80 backdrop-blur-md'
               : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
-          <User className="w-3.5 h-3.5 text-slate-700" />
-          <span>个人资料与实名认证</span>
+          <User className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+          <span className="whitespace-nowrap">实名资料</span>
         </button>
 
         <button
           type="button"
           onClick={() => switchTab('billing')}
-          className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'billing'
               ? 'bg-white text-slate-950 font-semibold shadow-xs border border-white/80 backdrop-blur-md'
               : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
-          <Zap className="w-3.5 h-3.5 text-slate-700" />
-          <span>尽调额度加油包</span>
+          <Zap className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+          <span className="whitespace-nowrap">充值加油包</span>
         </button>
 
         <button
           type="button"
           onClick={() => switchTab('transactions')}
-          className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'transactions'
               ? 'bg-white text-slate-950 font-semibold shadow-xs border border-white/80 backdrop-blur-md'
               : 'text-zinc-600 hover:text-slate-900 border border-transparent'
           }`}
         >
-          <Receipt className="w-3.5 h-3.5 text-slate-700" />
-          <span>额度变动流水明细</span>
+          <Receipt className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+          <span className="whitespace-nowrap">变动流水</span>
         </button>
       </div>
 
@@ -786,6 +777,13 @@ export default function UserCenterPage() {
           </div>
         )}
       </Modal>
+
+      {/* 快捷额度充值浮窗 */}
+      <RechargeModal
+        open={rechargeModalOpen}
+        onClose={() => setRechargeModalOpen(false)}
+        onSuccess={fetchPackagesAndSummary}
+      />
 
     </div>
   );

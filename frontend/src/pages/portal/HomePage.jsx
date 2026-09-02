@@ -147,17 +147,17 @@ export default function HomePage() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-white/80 backdrop-blur-xl border border-white/90 shadow-xs hover:border-[#0ea5e9]/40 transition-all cursor-pointer group"
+            className="inline-flex items-center space-x-2 px-3 sm:px-4 py-1.5 rounded-full bg-white/80 backdrop-blur-xl border border-white/90 shadow-xs hover:border-[#0ea5e9]/40 transition-all cursor-pointer group max-w-[92vw] sm:max-w-none"
             onClick={() => handleTriggerExperience()}
           >
-            <span className="flex h-2 w-2 relative">
+            <span className="flex h-2 w-2 relative shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span className="text-xs font-semibold text-slate-700 tracking-wide">
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-700 tracking-wide truncate">
               官方中台直连 · 司法涉诉排查 · 股权穿透 · 智评大模型
             </span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
           </motion.div>
 
           {/* 主标题 (大字号、饱满行高、梯度渲染) */}
@@ -165,11 +165,11 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="space-y-4 max-w-6xl mx-auto"
+            className="space-y-3 sm:space-y-4 max-w-6xl mx-auto"
           >
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-950 leading-[1.18]">
-              <span>聚合官方中台与企业经营档案</span>
-              <span className="block mt-2 sm:mt-3 bg-clip-text text-transparent bg-gradient-to-r from-[#0070a4] via-[#0ea5e9] to-[#29B47D]">
+            <h1 className="text-[25px] xs:text-[28px] sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-950 leading-[1.28] sm:leading-[1.18]">
+              <span className="block">聚合官方中台与企业经营档案</span>
+              <span className="block mt-1.5 sm:mt-3 bg-clip-text text-transparent bg-gradient-to-r from-[#0070a4] via-[#0ea5e9] to-[#29B47D]">
                 生成银行信贷级企业全景深度尽调报告
               </span>
             </h1>
@@ -180,7 +180,7 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="text-base sm:text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed"
+            className="text-sm sm:text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed px-2 sm:px-0"
           >
             官方中台直连 + 股权出资穿透与失信合规排查 + 银行信贷级企业全景尽调报告。支持沉浸式在线目录查阅与一键导出 A4 PDF 原件。
           </motion.p>
@@ -204,16 +204,16 @@ export default function HomePage() {
               </button>
             </div>
             
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500 font-medium pt-1">
-              <span className="flex items-center gap-1.5 text-slate-700">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs text-slate-500 font-medium pt-1">
+              <span className="flex items-center gap-1.5 text-slate-700 text-[11px] sm:text-xs">
                 <Check className="w-4 h-4 text-[#0ea5e9] stroke-[2.5]" /> 新用户登录赠送 1 次免费额度
               </span>
-              <span className="text-slate-300">•</span>
-              <span className="flex items-center gap-1.5 text-slate-700">
+              <span className="text-slate-300 hidden sm:inline">•</span>
+              <span className="flex items-center gap-1.5 text-slate-700 text-[11px] sm:text-xs">
                 <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" /> 官方中台全息数据直连
               </span>
-              <span className="text-slate-300">•</span>
-              <span className="flex items-center gap-1.5 text-slate-700">
+              <span className="text-slate-300 hidden sm:inline">•</span>
+              <span className="flex items-center gap-1.5 text-slate-700 text-[11px] sm:text-xs">
                 <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" /> A4 PDF 原件一键导出
               </span>
             </div>
@@ -222,27 +222,27 @@ export default function HomePage() {
           {/* 4 维硬实力信任指标条 (Apple 风格拟态磨砂卡片) */}
           <motion.div 
             {...fadeInUp}
-            className="pt-6 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-5xl mx-auto text-left"
+            className="pt-4 sm:pt-6 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 max-w-5xl mx-auto text-left"
           >
-            <div className="p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
-              <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono block">全维度</span>
+            <div className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
+              <span className="text-xl sm:text-3xl font-extrabold text-slate-900 font-mono block">全维度</span>
               <span className="text-xs font-bold text-slate-800 mt-1 block">官方数据聚合</span>
-              <span className="text-[11px] text-slate-500 mt-0.5 block">覆盖市监/裁判文书/执行网</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 block truncate">覆盖市监/裁判文书</span>
             </div>
-            <div className="p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
-              <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono block">多层级</span>
-              <span className="text-xs font-bold text-slate-800 mt-1 block">股权穿透与实控人图谱</span>
-              <span className="text-[11px] text-slate-500 mt-0.5 block">最终受益人穿透核验</span>
+            <div className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
+              <span className="text-xl sm:text-3xl font-extrabold text-slate-900 font-mono block">多层级</span>
+              <span className="text-xs font-bold text-slate-800 mt-1 block">股权与实控人</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 block truncate">最终受益人穿透核验</span>
             </div>
-            <div className="p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
-              <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono block">100%</span>
-              <span className="text-xs font-bold text-slate-800 mt-1 block">司法失信红线排查</span>
-              <span className="text-[11px] text-slate-500 mt-0.5 block">限高令/异常名录/行政处罚</span>
+            <div className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
+              <span className="text-xl sm:text-3xl font-extrabold text-slate-900 font-mono block">100%</span>
+              <span className="text-xs font-bold text-slate-800 mt-1 block">司法合规排查</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 block truncate">限高/异常名录/处罚</span>
             </div>
-            <div className="p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
-              <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono block">全景报告</span>
+            <div className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl bg-white/70 backdrop-blur-xl border border-white/80 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all">
+              <span className="text-xl sm:text-3xl font-extrabold text-slate-900 font-mono block">全景报告</span>
               <span className="text-xs font-bold text-slate-800 mt-1 block">银行级尽调报告</span>
-              <span className="text-[11px] text-slate-500 mt-0.5 block">全维度穿透与PDF原件导出</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 block truncate">全维度PDF原件导出</span>
             </div>
           </motion.div>
 

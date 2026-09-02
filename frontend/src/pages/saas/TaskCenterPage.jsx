@@ -104,9 +104,10 @@ export default function TaskCenterPage() {
 
   const fetchTasks = async (p = taskPage, ps = taskPageSize) => {
     try {
-      const res = await apiClient.get(`/v1/tasks/list?page=${p}&page_size=${ps}`);
-      setTasks(res.items || res.data || []);
-      setTaskTotal(res.total || (res.data?.length ?? 0));
+      const res = await apiClient.get(`/v1/tasks/list?exclude_completed=true&page=${p}&page_size=${ps}`);
+      const list = (res.items || res.data || []).filter(t => t.status !== 'completed');
+      setTasks(list);
+      setTaskTotal(list.length);
     } catch (err) {
       console.error(err);
     } finally {
@@ -277,14 +278,14 @@ export default function TaskCenterPage() {
   const activeTasks = tasks.filter(t => t.status !== 'completed');
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-slate-900">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 text-slate-900">
       
       {/* 头部标题与操作 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 sm:pb-6 border-b border-slate-200/80">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-slate-950 flex items-center gap-2.5 tracking-tight">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-[#0ea5e9] text-white flex items-center justify-center shadow-xs border border-white/50 backdrop-blur-md">
-              <Clock className="w-4 h-4" />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-950 flex items-center gap-2 tracking-tight">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-sky-400 to-[#0ea5e9] text-white flex items-center justify-center shadow-xs border border-white/50 backdrop-blur-md shrink-0">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
             <span>尽调任务与报告资产中心</span>
           </h1>
@@ -293,11 +294,11 @@ export default function TaskCenterPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={() => setOpenShareManagement(true)}
-            className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 hover:border-[#0ea5e9] hover:text-[#0284c7] shadow-xs"
+            className="shadcn-button-outline text-xs py-1.5 px-2.5 sm:px-3 flex items-center gap-1.5 hover:border-[#0ea5e9] hover:text-[#0284c7] shadow-xs"
             title="查看与管理我创建的报告加密分享"
           >
             <FolderLock className="w-3.5 h-3.5 text-[#0ea5e9]" />
@@ -310,15 +311,15 @@ export default function TaskCenterPage() {
               fetchTasks();
               fetchReports();
             }}
-            className="shadcn-button-outline text-xs py-1.5 px-3 shadow-xs hover:border-[#0ea5e9] hover:text-[#0284c7]"
+            className="shadcn-button-outline text-xs py-1.5 px-2.5 sm:px-3 shadow-xs hover:border-[#0ea5e9] hover:text-[#0284c7]"
           >
             <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-            刷新
+            <span>刷新</span>
           </button>
 
           <Link
             to="/app"
-            className="shadcn-button-primary text-xs py-1.5 px-3.5"
+            className="shadcn-button-primary text-xs py-1.5 px-3 sm:px-3.5"
           >
             <span>发起新尽调</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -327,18 +328,18 @@ export default function TaskCenterPage() {
       </div>
 
       {/* 玻璃拟态 Tabs 胶囊切换栏 */}
-      <div className="mt-6 flex items-center bg-slate-200/60 backdrop-blur-xl p-1 rounded-lg w-fit border border-white/60 shadow-xs">
+      <div className="mt-4 sm:mt-6 flex items-center bg-slate-200/60 backdrop-blur-xl p-1 rounded-xl w-full sm:w-fit border border-white/60 shadow-xs">
         <button
           type="button"
           onClick={() => switchTab('tasks')}
-          className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'tasks'
               ? 'bg-white text-[#0284c7] font-semibold shadow-xs border border-white/80 backdrop-blur-md'
               : 'text-slate-600 hover:text-[#0ea5e9] hover:bg-white/40 border border-transparent'
           }`}
         >
-          <Activity className={`w-3.5 h-3.5 ${activeTab === 'tasks' ? 'text-[#0ea5e9]' : 'text-slate-500'}`} />
-          <span>进行中的尽调任务</span>
+          <Activity className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'tasks' ? 'text-[#0ea5e9]' : 'text-slate-500'}`} />
+          <span className="whitespace-nowrap">进行中的尽调</span>
           <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold font-mono ${
             activeTab === 'tasks' ? 'bg-cyan-50 text-[#0284c7] border border-cyan-200/60' : 'bg-slate-300/80 text-slate-700'
           }`}>
@@ -349,14 +350,14 @@ export default function TaskCenterPage() {
         <button
           type="button"
           onClick={() => switchTab('reports')}
-          className={`px-3.5 py-1.5 text-xs font-medium rounded-md flex items-center gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'reports'
               ? 'bg-white text-[#0284c7] font-semibold shadow-xs border border-white/80 backdrop-blur-md'
               : 'text-slate-600 hover:text-[#0ea5e9] hover:bg-white/40 border border-transparent'
           }`}
         >
-          <FileText className={`w-3.5 h-3.5 ${activeTab === 'reports' ? 'text-[#0ea5e9]' : 'text-slate-500'}`} />
-          <span>历史尽调报告资产库</span>
+          <FileText className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'reports' ? 'text-[#0ea5e9]' : 'text-slate-500'}`} />
+          <span className="whitespace-nowrap">历史尽调报告</span>
           <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold font-mono ${
             activeTab === 'reports' ? 'bg-cyan-50 text-[#0284c7] border border-cyan-200/60' : 'bg-slate-300/80 text-slate-700'
           }`}>
@@ -423,35 +424,15 @@ export default function TaskCenterPage() {
                           </button>
                         )}
 
-                        {task.status === 'completed' && task.report_id && (
-                          <Link
-                            to={`/app/reports/${task.report_id}`}
-                            className="shadcn-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs"
-                          >
-                            <span>查看尽调报告</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </Link>
-                        )}
-
                         <button
                           type="button"
                           onClick={() => handleSyncTask(task)}
                           disabled={syncingTaskId === task.id}
-                          className="shadcn-button-outline text-xs py-1.5 px-2.5 flex items-center gap-1 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
+                          className="shadcn-button-outline text-xs py-1.5 px-2.5 flex items-center gap-1.5 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
                           title="刷新/同步三方授权状态"
                         >
                           <RefreshCw className={`w-3.5 h-3.5 ${syncingTaskId === task.id ? 'animate-spin text-[#0096DB]' : 'text-slate-500'}`} />
-                          <span className="hidden sm:inline">同步状态</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTask(task)}
-                          className="shadcn-button-outline text-xs py-1.5 px-2.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200/80 shadow-xs"
-                          title="删除取消任务"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">删除</span>
+                          <span>同步状态</span>
                         </button>
                       </div>
                     </div>
@@ -561,32 +542,32 @@ export default function TaskCenterPage() {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         {/* 6位密码加密分享入口 */}
                         <button
                           type="button"
                           onClick={() => setSelectedReportForShare(report)}
-                          className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
+                          className="flex-1 sm:flex-initial shadcn-button-outline text-xs py-1.5 px-2.5 sm:px-3 flex items-center justify-center gap-1 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
                           title="设置 6 位密码加密分享此报告"
                         >
                           <Share2 className="w-3.5 h-3.5 text-[#0096DB]" />
-                          <span>分享报告</span>
+                          <span>分享</span>
                         </button>
 
                         <a
                           href={report.pdf_url || '/sample_report.pdf'}
                           download={`${report.company_name}_尽调报告.pdf`}
-                          className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+                          className="flex-1 sm:flex-initial shadcn-button-outline text-xs py-1.5 px-2.5 sm:px-3 flex items-center justify-center gap-1 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
                         >
                           <Download className="w-3.5 h-3.5 text-slate-600" />
-                          <span>下载 PDF 原件</span>
+                          <span>下载PDF</span>
                         </a>
 
                         <Link
                           to={`/app/reports/${report.id}`}
-                          className="shadcn-button-primary text-xs py-1.5 px-3.5"
+                          className="w-full sm:w-auto shadcn-button-primary text-xs py-1.5 px-3.5 flex items-center justify-center gap-1.5"
                         >
-                          <span>在线沉浸查阅</span>
+                          <span>在线查阅</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </Link>
                       </div>

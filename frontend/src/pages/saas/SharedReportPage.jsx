@@ -21,7 +21,7 @@ import {
   Eye,
   Bot
 } from 'lucide-react';
-import { message } from 'antd';
+import { message, Drawer } from 'antd';
 import apiClient from '../../api/client';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
@@ -137,6 +137,7 @@ export default function SharedReportPage() {
   const [catalogQuery, setCatalogQuery] = useState('');
   const [expandedSections, setExpandedSections] = useState({});
   const [summaryExpanded, setSummaryExpanded] = useState(true);
+  const [mobileTocOpen, setMobileTocOpen] = useState(false);
 
   // 1. 初始化拉取分享卡片前置信息
   useEffect(() => {
@@ -455,29 +456,41 @@ export default function SharedReportPage() {
 
       {/* 顶部二级导航 */}
       <header className="sticky top-0 z-40 border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-7 h-7 rounded-md bg-white/80 p-0.5 border border-white/80 shadow-xs flex items-center justify-center overflow-hidden backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-white/80 p-0.5 border border-white/80 shadow-xs flex items-center justify-center overflow-hidden backdrop-blur-md shrink-0">
               <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">
-              <h1 className="font-bold text-base sm:text-lg text-slate-950 tracking-tight truncate">
+              <h1 className="font-bold text-sm sm:text-base lg:text-lg text-slate-950 tracking-tight truncate max-w-[150px] xs:max-w-[200px] sm:max-w-none">
                 {report?.company_name}
               </h1>
-              <p className="text-xs text-slate-500 font-mono">
-                信用评分: <strong className="text-[#0ea5e9] font-bold">{report?.score}分</strong> · 建议授信: {report?.suggested_quota_min}~{report?.suggested_quota_max} 万元
+              <p className="text-[10px] sm:text-xs text-slate-500 font-mono truncate">
+                评分: <strong className="text-[#0ea5e9] font-bold">{report?.score}分</strong> · 建议授信: {report?.suggested_quota_min}~{report?.suggested_quota_max} 万元
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* 📱 移动端专属：大纲目录抽屉展开按钮 */}
+            <button
+              type="button"
+              onClick={() => setMobileTocOpen(true)}
+              className="lg:hidden shadcn-button-outline text-xs py-1.5 px-2.5 flex items-center gap-1 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+              title="查看报告大纲目录"
+            >
+              <Bookmark className="w-3.5 h-3.5 text-[#0096DB]" />
+              <span>目录</span>
+            </button>
+
             <a
               href={targetPdfUrl}
               download={`${report?.company_name}_企业尽调报告.pdf`}
-              className="shadcn-button-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5"
+              className="shadcn-button-primary text-xs py-1.5 px-2.5 sm:px-3.5 flex items-center gap-1"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>下载 PDF 原件</span>
+              <span className="hidden sm:inline">下载 PDF 原件</span>
+              <span className="sm:hidden">下载</span>
             </a>
           </div>
         </div>
@@ -621,6 +634,54 @@ export default function SharedReportPage() {
         </main>
 
       </div>
+
+      {/* 📱 移动端专属：报告大纲目录抽屉 */}
+      <Drawer
+        title={
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+              <Bookmark className="w-4 h-4 text-[#0096DB]" />
+              报告大纲目录
+            </span>
+            <span className="text-xs font-mono text-slate-400">共 {totalPages} 页</span>
+          </div>
+        }
+        placement="left"
+        width={300}
+        open={mobileTocOpen}
+        onClose={() => setMobileTocOpen(false)}
+        styles={{ body: { padding: '12px' } }}
+      >
+        <div className="space-y-1 text-xs">
+          {filteredCatalog.map((sec, idx) => (
+            <div key={sec.id || idx} className="space-y-0.5">
+              <div
+                onClick={() => {
+                  scrollToPage(sec.start_page || 1);
+                  setMobileTocOpen(false);
+                }}
+                className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-cyan-50 hover:text-[#0070a4] cursor-pointer"
+              >
+                <span className="truncate pr-2">{sec.title}</span>
+                <span className="text-[11px] font-mono text-slate-400 shrink-0 font-medium">P.{sec.start_page || 1}</span>
+              </div>
+              {sec.children?.map((sub, sIdx) => (
+                <div
+                  key={sub.id || sIdx}
+                  onClick={() => {
+                    scrollToPage(sub.page);
+                    setMobileTocOpen(false);
+                  }}
+                  className="ml-3 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-600 hover:text-[#0070a4] hover:bg-cyan-50/50 cursor-pointer flex items-center justify-between"
+                >
+                  <span className="truncate pr-1">{sub.title}</span>
+                  <span className="text-[10px] font-mono text-slate-400 shrink-0">P.{sub.page}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </Drawer>
 
     </div>
   );

@@ -197,6 +197,7 @@ export default function ReportReaderPage() {
   const [copied, setCopied] = useState(false);
   const [isOverallAiSummaryOpen, setIsOverallAiSummaryOpen] = useState(false);
   const [openShareModal, setOpenShareModal] = useState(false);
+  const [mobileTocOpen, setMobileTocOpen] = useState(false);
   const sidebarNavRef = useRef(null);
   const chatBottomRef = useRef(null);
 
@@ -606,51 +607,63 @@ export default function ReportReaderPage() {
     <div className="min-h-screen text-slate-900 antialiased pb-28">
       
       {/* 顶部公文状态栏 (PC 紧凑固定导航，吸附在主Navbar下方) */}
-      <header className="sticky top-14 z-40 border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
+      <header className="sticky top-[60px] sm:top-[66px] z-40 border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-xs">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
           
           {/* 左侧：返回 + 企业名称与统一社会信用代码 */}
-          <div className="flex items-center gap-3.5 min-w-0 flex-1">
+          <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
             <Link 
               to="/app/tasks" 
-              className="shadcn-button-outline text-xs py-1.5 px-2.5 shrink-0 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
+              className="shadcn-button-outline text-xs py-1.5 px-2 sm:px-2.5 shrink-0 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
               title="返回任务中心"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>返回</span>
+              <span className="hidden sm:inline">返回</span>
             </Link>
 
-            <div className="h-5 w-px bg-slate-200/80 shrink-0"></div>
+            <div className="h-4 sm:h-5 w-px bg-slate-200/80 shrink-0"></div>
 
-            <div className="min-w-0 flex items-center gap-3 flex-wrap">
-              <h1 className="font-bold text-base sm:text-lg text-slate-950 tracking-tight truncate">
+            <div className="min-w-0 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3">
+              <h1 className="font-bold text-sm sm:text-base lg:text-lg text-slate-950 tracking-tight truncate max-w-[140px] xs:max-w-[180px] sm:max-w-xs md:max-w-md">
                 {report?.company_name || '东莞市顺捷实业有限公司'}
               </h1>
-              <span className="text-xs text-slate-500 font-mono">
-                统一代码: <strong className="font-medium text-slate-800">{report?.credit_code || '91441900MA4W6BGB8T'}</strong>
+              <span className="text-[10px] sm:text-xs text-slate-500 font-mono truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">
+                <span className="hidden sm:inline">统一代码: </span><strong className="font-medium text-slate-800">{report?.credit_code || '91441900MA4W6BGB8T'}</strong>
               </span>
             </div>
           </div>
 
-          {/* 右侧：分享报告 + 下载 PDF 原件 */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* 右侧：目录抽屉按钮(移动端专享) + 分享报告 + 下载 PDF 原件 */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* 📱 移动端专属：大纲目录抽屉展开按钮 */}
+            <button
+              type="button"
+              onClick={() => setMobileTocOpen(true)}
+              className="lg:hidden shadcn-button-outline text-xs py-1.5 px-2 sm:px-2.5 flex items-center gap-1 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+              title="查看报告大纲目录"
+            >
+              <Bookmark className="w-3.5 h-3.5 text-[#0096DB]" />
+              <span>目录</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setOpenShareModal(true)}
-              className="shadcn-button-outline text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+              className="shadcn-button-outline text-xs py-1.5 px-2 sm:px-3 flex items-center gap-1 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
               title="设置 6 位密码加密分享此报告"
             >
               <Share2 className="w-3.5 h-3.5 text-[#0096DB]" />
-              <span>分享报告</span>
+              <span className="hidden sm:inline">分享报告</span>
             </button>
 
             <a 
               href={targetPdfUrl}
               download={`${report?.company_name || '企业尽调报告'}.pdf`}
-              className="shadcn-button-primary text-xs py-1.5 px-3.5 whitespace-nowrap flex items-center gap-1.5"
+              className="shadcn-button-primary text-xs py-1.5 px-2.5 sm:px-3.5 whitespace-nowrap flex items-center gap-1"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>下载 PDF 原件</span>
+              <span className="hidden sm:inline">下载 PDF</span>
+              <span className="sm:hidden">下载</span>
             </a>
           </div>
         </div>
@@ -1168,6 +1181,71 @@ export default function ReportReaderPage() {
           <ChevronLeft className="w-3.5 h-3.5 text-white/80 group-hover:-translate-x-0.5 transition-transform" />
         </button>
       </aside>
+
+      {/* 📱 移动端专属：报告大纲目录抽屉 */}
+      <Drawer
+        title={
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+              <Bookmark className="w-4 h-4 text-[#0096DB]" />
+              报告大纲目录
+            </span>
+            <span className="text-xs font-mono text-slate-400">共 {totalPages} 页</span>
+          </div>
+        }
+        placement="left"
+        width={300}
+        open={mobileTocOpen}
+        onClose={() => setMobileTocOpen(false)}
+        styles={{ body: { padding: '12px' } }}
+      >
+        <div className="space-y-1 text-xs">
+          {PDF_TOC_CATALOG.map((item) => {
+            const isParentActive = activeChapterId === item.id;
+            return (
+              <div key={item.id} className="space-y-0.5">
+                <div
+                  onClick={() => {
+                    jumpToPage(item.page);
+                    setMobileTocOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-xl font-medium transition-all flex items-center justify-between cursor-pointer ${
+                    isParentActive 
+                      ? 'bg-cyan-50 text-[#0070a4] font-bold border-l-3 border-[#0096DB]' 
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="truncate pr-2">{item.title}</span>
+                  <span className="text-[11px] font-mono text-slate-400 shrink-0 font-medium">
+                    P.{item.page}
+                  </span>
+                </div>
+                {item.children && item.children.length > 0 && (
+                  <div className="pl-3 space-y-0.5 border-l border-slate-100 ml-2">
+                    {item.children.map((child) => (
+                      <div
+                        key={child.id}
+                        onClick={() => {
+                          jumpToPage(child.page);
+                          setMobileTocOpen(false);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] flex items-center justify-between cursor-pointer ${
+                          activeSubId === child.id
+                            ? 'text-[#0084c2] font-bold bg-cyan-50/60'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="truncate pr-1">{child.title}</span>
+                        <span className="text-[10px] font-mono text-slate-400 shrink-0">P.{child.page}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Drawer>
 
       {/* 报告加密分享弹窗 (6 位访问密码设置) */}
       <ShareReportModal

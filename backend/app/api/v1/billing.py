@@ -53,15 +53,16 @@ async def create_recharge_order(
         raise HTTPException(status_code=400, detail="所选充值套餐不存在")
 
     order_no = f"ORD{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:4].upper()}"
+    quota_pts = pkg.get("quota_points") or pkg.get("quota_count", 1)
     order = Order(
-        id=f"order-{uuid.uuid4().hex}",
+        id=str(uuid.uuid4()),
         order_no=order_no,
         user_id=user.id,
         user_phone=user.phone,
         package_id=pkg["id"],
         package_name=pkg["name"],
         amount=pkg["price"],
-        quota_points=pkg["quota_count"],
+        quota_points=quota_pts,
         pay_type=req.pay_type,
         status="pending"
     )
@@ -70,6 +71,7 @@ async def create_recharge_order(
     await db.refresh(order)
 
     # 模拟支付二维码与支付参数
+    qr_img = f"https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=weixin%3A%2F%2Fwxpay%2Fbizpayurl%3Fpr%3DMOCK_{order.order_no}"
     return {
         "code": 0,
         "message": "充值订单创建成功",
@@ -80,7 +82,8 @@ async def create_recharge_order(
             "quota_points": order.quota_points,
             "pay_type": order.pay_type,
             "package_name": order.package_name,
-            "qrcode_url": f"weixin://wxpay/bizpayurl?pr=MOCK_{order.order_no}" if req.pay_type == "wechat" else None,
+            "pay_qrcode_url": qr_img,
+            "qrcode_url": qr_img,
             "pay_url": f"https://openapi.alipay.com/gateway.do?out_trade_no={order.order_no}" if req.pay_type == "alipay" else None,
             "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S") if order.created_at else ""
         }
