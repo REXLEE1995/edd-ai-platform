@@ -304,7 +304,7 @@ export default function SharedReportPage() {
         {/* 顶部简易 Navbar */}
         <header className="relative z-10 px-6 py-4 flex items-center justify-between border-b border-white/60 bg-white/70 backdrop-blur-xl shadow-xs">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-md bg-white p-0.5 border border-slate-200/80 shadow-xs flex items-center justify-center overflow-hidden">
+            <div className="w-7 h-7 flex items-center justify-center shrink-0">
               <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <span className="font-bold text-sm text-slate-900 tracking-tight">享宇AI智评</span>
@@ -458,7 +458,7 @@ export default function SharedReportPage() {
       <header className="sticky top-0 z-40 border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-xs">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-white/80 p-0.5 border border-white/80 shadow-xs flex items-center justify-center overflow-hidden backdrop-blur-md shrink-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0">
               <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">

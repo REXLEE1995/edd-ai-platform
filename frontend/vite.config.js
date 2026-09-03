@@ -15,7 +15,7 @@ const realDir = fs.realpathSync(__dirname);
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, realDir, '');
-  const apiTarget = env.VITE_API_TARGET || process.env.VITE_API_TARGET || 'http://127.0.0.1:8000';
+  const apiTarget = env.VITE_API_TARGET || process.env.VITE_API_TARGET || 'http://192.168.110.234:8000';
 
   return {
     plugins: [react()],

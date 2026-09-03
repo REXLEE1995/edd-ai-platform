@@ -14,32 +14,6 @@ echo "  享宇AI智评 - 企业尽调系统 (本地全栈一键启动)"
 echo "========================================================"
 echo ""
 
-# 1. 创建 MinIO 数据存储目录
-mkdir -p "$DIR/backend/data/minio_data"
-
-# 2. 检查并启动 MinIO 服务
-if ! lsof -i :9000 >/dev/null 2>&1; then
-    echo "[1/3] 正在启动 MinIO 对象存储 (http://127.0.0.1:9000, 控制台: http://127.0.0.1:9001)..."
-    MINIO_ROOT_USER=admin MINIO_ROOT_PASSWORD=admin123456 /opt/homebrew/bin/minio server \
-        --address 127.0.0.1:9000 \
-        --console-address 127.0.0.1:9001 \
-        "$DIR/backend/data/minio_data" > "$DIR/backend/data/minio.log" 2>&1 &
-    sleep 1
-    echo "      MinIO 启动成功 (PID: $!)"
-else
-    echo "[1/3] MinIO 服务已在 9000 端口运行。"
-fi
-
-# 3. 启动 FastAPI 后端服务
-if ! lsof -i :8000 >/dev/null 2>&1; then
-    echo "[2/3] 正在启动 FastAPI 后端服务 (http://127.0.0.1:8000)..."
-    cd "$DIR/backend"
-    ./.venv/bin/python main.py > "$DIR/backend/data/backend.log" 2>&1 &
-    echo "      后端服务启动成功 (PID: $!)"
-    cd "$DIR"
-else
-    echo "[2/3] 后端服务已在 8000 端口运行。"
-fi
 
 # 4. 启动 Vite 前端服务
 if ! lsof -i :5173 >/dev/null 2>&1; then

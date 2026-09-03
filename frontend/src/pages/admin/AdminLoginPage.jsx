@@ -29,8 +29,8 @@ export default function AdminLoginPage() {
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-16 text-slate-900">
       <div className="max-w-md w-full shadcn-card bg-white/85 backdrop-blur-2xl p-8 space-y-6 border border-white/90 shadow-glass">
         <div className="text-center space-y-1.5">
-          <div className="w-12 h-12 rounded-lg bg-white/80 p-1.5 border border-slate-200/80 mx-auto flex items-center justify-center mb-2 shadow-xs backdrop-blur-md overflow-hidden">
-            <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
+          <div className="w-12 h-12 mx-auto flex items-center justify-center mb-2">
+            <img src="/brand_logo.png" alt="Logo" className="w-10 h-10 object-contain" />
           </div>
           <h2 className="text-xl font-bold text-slate-950 tracking-tight">运营管理后台登录</h2>
           <p className="text-xs text-slate-500">

@@ -28,8 +28,21 @@ import {
   Cpu,
   BarChart3,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  ArrowUp,
+  X,
+  Navigation
 } from 'lucide-react';
+
+// 页面快速锚点配置
+const NAV_SECTIONS = [
+  { id: 'section-hero', title: '平台概览', icon: Sparkles },
+  { id: 'section-demo', title: '全景演示', icon: FileText },
+  { id: 'section-sources', title: '四大数据源', icon: Layers },
+  { id: 'section-scenarios', title: '业务场景', icon: Compass },
+  { id: 'section-pricing', title: '尽调加油包', icon: Gift },
+  { id: 'section-security', title: '安全合规', icon: ShieldCheck },
+];
 
 // Apple 风格动画变体
 const fadeInUp = {
@@ -61,6 +74,11 @@ export default function HomePage() {
   const [countdown, setCountdown] = useState(0);
   const [sendLoading, setSendLoading] = useState(false);
 
+  // 悬浮导航与置顶状态
+  const [activeSection, setActiveSection] = useState('section-hero');
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
   useEffect(() => {
     let timer;
     if (countdown > 0) {
@@ -70,6 +88,53 @@ export default function HomePage() {
     }
     return () => clearInterval(timer);
   }, [countdown]);
+
+  // 监听页面滚动，计算高亮章节与置顶按钮显隐
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      setShowBackToTop(scrollY > 280);
+
+      const sectionElements = NAV_SECTIONS.map(sec => ({
+        id: sec.id,
+        el: document.getElementById(sec.id)
+      })).filter(item => item.el);
+
+      for (let i = sectionElements.length - 1; i >= 0; i--) {
+        const item = sectionElements[i];
+        const rect = item.el.getBoundingClientRect();
+        if (rect.top <= 200) {
+          setActiveSection(item.id);
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const navOffset = 80;
+      const elementPosition = el.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - navOffset;
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+      setIsMobileNavOpen(false);
+    }
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
 
   const handleSendCode = async () => {
     if (!phone || phone.length < 11) {
@@ -136,10 +201,101 @@ export default function HomePage() {
   return (
     <div className="relative min-h-screen bg-[#f8fafc] text-slate-900 antialiased selection:bg-cyan-100 selection:text-cyan-900 overflow-x-hidden">
       
+      {/* 桌面端左侧悬浮导航 (Apple / Linear SaaS 拟态质感，适度放大更易点击阅读) */}
+      <aside aria-label="页面快速导航" className="hidden lg:flex fixed left-4 xl:left-8 top-1/2 -translate-y-1/2 z-40 flex-col items-start gap-1.5 p-2.5 sm:p-3 rounded-2xl bg-white/90 backdrop-blur-2xl border border-white/95 shadow-[0_16px_45px_-8px_rgba(0,0,0,0.1)] transition-all min-w-[152px]">
+        <div className="px-3 py-1.5 mb-1 text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100 w-full">
+          <Compass className="w-3.5 h-3.5 text-[#0096DB]" />
+          <span>快速直达</span>
+        </div>
+        {NAV_SECTIONS.map((sec) => {
+          const Icon = sec.icon;
+          const isActive = activeSection === sec.id;
+          return (
+            <button
+              key={sec.id}
+              type="button"
+              onClick={() => scrollToSection(sec.id)}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] sm:text-sm transition-all group text-left cursor-pointer ${
+                isActive
+                  ? 'bg-gradient-to-r from-cyan-50 via-sky-50/70 to-blue-50/40 text-[#0070a4] font-bold border-l-2 border-[#0096DB] shadow-2xs'
+                  : 'text-slate-600 font-medium hover:text-slate-950 hover:bg-slate-50'
+              }`}
+            >
+              <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                isActive ? 'bg-[#0096DB] text-white shadow-xs' : 'text-slate-400 group-hover:text-slate-700 bg-slate-100/80'
+              }`}>
+                <Icon className="w-3.5 h-3.5" />
+              </div>
+              <span className="tracking-normal whitespace-nowrap">{sec.title}</span>
+              {isActive && (
+                <span className="ml-auto w-2 h-2 rounded-full bg-[#0096DB] animate-pulse" />
+              )}
+            </button>
+          );
+        })}
+      </aside>
+
+      {/* 移动端左下角悬浮定位胶囊 (不遮挡主体内容，轻触弹出快速跳转清单) */}
+      <div className="lg:hidden fixed left-4 bottom-20 z-40">
+        <button
+          type="button"
+          onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/95 backdrop-blur-xl border border-white/90 shadow-glass text-slate-800 font-semibold text-xs active:scale-95 transition-all shadow-md hover:border-[#0096DB]/40 cursor-pointer"
+        >
+          <Compass className="w-3.5 h-3.5 text-[#0096DB] animate-spin" style={{ animationDuration: '10s' }} />
+          <span>{NAV_SECTIONS.find(s => s.id === activeSection)?.title || '定位导航'}</span>
+          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isMobileNavOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {/* 移动端快速跳转弹出卡片 (向上展开，清晰可见) */}
+        {isMobileNavOpen && (
+          <div className="absolute left-0 bottom-full mb-2 w-44 rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/90 shadow-2xl p-2 space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
+            <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+              <span>快速直达章节</span>
+              <button type="button" onClick={() => setIsMobileNavOpen(false)} className="text-slate-400 hover:text-slate-600 p-0.5">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            {NAV_SECTIONS.map((sec) => {
+              const Icon = sec.icon;
+              const isActive = activeSection === sec.id;
+              return (
+                <button
+                  key={sec.id}
+                  type="button"
+                  onClick={() => scrollToSection(sec.id)}
+                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold transition-all text-left cursor-pointer ${
+                    isActive
+                      ? 'bg-cyan-50 text-[#0070a4] font-bold border-l-2 border-[#0096DB]'
+                      : 'text-slate-600 active:bg-slate-100'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#0096DB]' : 'text-slate-400'}`} />
+                  <span className="truncate">{sec.title}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 右侧置顶悬浮按钮 (桌面与手机端自适应避让底栏) */}
+      <button
+        type="button"
+        onClick={scrollToTop}
+        aria-label="回到顶部"
+        className={`fixed right-4 sm:right-6 lg:right-8 bottom-20 lg:bottom-8 z-40 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/90 backdrop-blur-xl border border-white/90 shadow-glass text-slate-700 hover:text-white hover:bg-gradient-to-tr hover:from-[#0096DB] hover:to-[#0ea5e9] flex items-center justify-center transition-all duration-300 group cursor-pointer active:scale-90 ${
+          showBackToTop ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-90 pointer-events-none'
+        }`}
+        title="回到顶部"
+      >
+        <ArrowUp className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-y-0.5" />
+      </button>
+
       {/* ========================================================================= */}
       {/* 1. Hero 核心首屏：大字号视觉震撼与苹果风排版 */}
       {/* ========================================================================= */}
-      <section className="relative pt-20 pb-16 sm:pt-28 sm:pb-24 overflow-hidden">
+      <section id="section-hero" className="relative pt-20 pb-16 sm:pt-28 sm:pb-24 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
           
           {/* 顶部微徽标 (Pill Badge) */}
@@ -252,7 +408,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 2. 苹果风格交互式产品体验看板 (Interactive Product Showcase) */}
       {/* ========================================================================= */}
-      <section className="py-12 sm:py-20 relative">
+      <section id="section-demo" className="py-12 sm:py-20 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           
           <motion.div {...fadeInUp} className="text-center max-w-3xl mx-auto space-y-3">
@@ -397,7 +553,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 3. 权威数据源矩阵与数据全面性 (Authoritative Multi-Source Data Grid) */}
       {/* ========================================================================= */}
-      <section className="py-16 sm:py-24 bg-white border-y border-slate-200/80">
+      <section id="section-sources" className="py-16 sm:py-24 bg-white border-y border-slate-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
           <motion.div {...fadeInUp} className="text-center max-w-4xl mx-auto space-y-3">
@@ -418,78 +574,78 @@ export default function HomePage() {
             initial="initial"
             whileInView="whileInView"
             viewport={{ once: true, margin: "-60px" }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6"
           >
             
             {/* 1. 工商市监 */}
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-5">
-              <div className="space-y-3.5">
-                <div className="w-12 h-12 rounded-xl bg-cyan-50 border border-cyan-200/60 flex items-center justify-center text-[#0096DB] shadow-xs">
-                  <Building2 className="w-6 h-6" />
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-3 sm:space-y-5">
+              <div className="space-y-2 sm:space-y-3.5">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-cyan-50 border border-cyan-200/60 flex items-center justify-center text-[#0096DB] shadow-xs">
+                  <Building2 className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">官方市监工商中台</h3>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                <h3 className="text-xs sm:text-lg font-bold text-slate-900 leading-snug">官方市监工商中台</h3>
+                <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                   聚合国家企业信用信息公示系统全量底账，毫秒级提取登记照面、注册与实缴到位率、董监高治理架构、对外投资与 15 项历史工商变更加权频率。
                 </p>
               </div>
-              <ul className="pt-4 border-t border-slate-100 text-xs text-slate-700 space-y-2 font-medium">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#0ea5e9] shrink-0" /> 多层级穿透识别实际控制人</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#0ea5e9] shrink-0" /> 认缴/实缴出资到位率穿透</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-[#0ea5e9] shrink-0" /> 董监高关联任职全景排查</li>
+              <ul className="pt-2.5 sm:pt-4 border-t border-slate-100 text-[10px] sm:text-xs text-slate-700 space-y-1.5 sm:space-y-2 font-medium">
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0ea5e9] shrink-0" /> <span className="truncate">多层级穿透识别实际控制人</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0ea5e9] shrink-0" /> <span className="truncate">认缴/实缴出资到位率穿透</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0ea5e9] shrink-0" /> <span className="truncate">董监高关联任职全景排查</span></li>
               </ul>
             </motion.div>
 
             {/* 2. 司法合规 */}
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-5">
-              <div className="space-y-3.5">
-                <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-xs">
-                  <Scale className="w-6 h-6" />
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-3 sm:space-y-5">
+              <div className="space-y-2 sm:space-y-3.5">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 shadow-xs">
+                  <Scale className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">最高法与司法合规雷达</h3>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                <h3 className="text-xs sm:text-lg font-bold text-slate-900 leading-snug">最高法与司法合规雷达</h3>
+                <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                   自研司法合规排查雷达，全景扫描裁判文书网、全国失信被执行人名录、限制高消费令、经营异常名录、环保行政处罚及金融机构动产抵质押敞口。
                 </p>
               </div>
-              <ul className="pt-4 border-t border-slate-100 text-xs text-slate-700 space-y-2 font-medium">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-600 shrink-0" /> 裁判文书案由深度分类审查</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-600 shrink-0" /> 五大红线指标秒级交叉排查</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-600 shrink-0" /> 动产抵押与大股东质押率穿透</li>
+              <ul className="pt-2.5 sm:pt-4 border-t border-slate-100 text-[10px] sm:text-xs text-slate-700 space-y-1.5 sm:space-y-2 font-medium">
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 shrink-0" /> <span className="truncate">裁判文书案由深度分类审查</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 shrink-0" /> <span className="truncate">五大红线指标秒级交叉排查</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 shrink-0" /> <span className="truncate">动产抵押与大股东质押率穿透</span></li>
               </ul>
             </motion.div>
 
             {/* 3. 股权穿透与实控人 */}
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-5">
-              <div className="space-y-3.5">
-                <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-200/60 flex items-center justify-center text-sky-600 shadow-xs">
-                  <Users className="w-6 h-6" />
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-3 sm:space-y-5">
+              <div className="space-y-2 sm:space-y-3.5">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-sky-50 border border-sky-200/60 flex items-center justify-center text-sky-600 shadow-xs">
+                  <Users className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">股权穿透与实控人图谱</h3>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                <h3 className="text-xs sm:text-lg font-bold text-slate-900 leading-snug">股权穿透与实控人图谱</h3>
+                <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                   多层级股权链条向上穿透至自然人或国资主体，精准识别最终实控人与受益所有人，排查隐性关联方与交叉持股风险。
                 </p>
               </div>
-              <ul className="pt-4 border-t border-slate-100 text-xs text-slate-700 space-y-2 font-medium">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-sky-600 shrink-0" /> 最终受益所有人穿透识别</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-sky-600 shrink-0" /> 股东出资历史与实缴核验</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-sky-600 shrink-0" /> 对外投资全景关联图谱</li>
+              <ul className="pt-2.5 sm:pt-4 border-t border-slate-100 text-[10px] sm:text-xs text-slate-700 space-y-1.5 sm:space-y-2 font-medium">
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600 shrink-0" /> <span className="truncate">最终受益所有人穿透识别</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600 shrink-0" /> <span className="truncate">股东出资历史与实缴核验</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600 shrink-0" /> <span className="truncate">对外投资全景关联图谱</span></li>
               </ul>
             </motion.div>
 
             {/* 4. 供应链客商与经营态势 */}
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-5">
-              <div className="space-y-3.5">
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600 shadow-xs">
-                  <Truck className="w-6 h-6" />
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[#0ea5e9]/60 hover:-translate-y-1 transition-all flex flex-col justify-between space-y-3 sm:space-y-5">
+              <div className="space-y-2 sm:space-y-3.5">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600 shadow-xs">
+                  <Truck className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">供应链与经营态势排查</h3>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                <h3 className="text-xs sm:text-lg font-bold text-slate-900 leading-snug">供应链与经营态势排查</h3>
+                <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                   聚合行业上下游主要客商信息与经营动态，结合知识产权、资质许可与招投标档案，全景呈现企业持续经营能力。
                 </p>
               </div>
-              <ul className="pt-4 border-t border-slate-100 text-xs text-slate-700 space-y-2 font-medium">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600 shrink-0" /> 核心资质许可与行政许可</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600 shrink-0" /> 知识产权与专利商标资产</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600 shrink-0" /> 招投标与重大经营事件排查</li>
+              <ul className="pt-2.5 sm:pt-4 border-t border-slate-100 text-[10px] sm:text-xs text-slate-700 space-y-1.5 sm:space-y-2 font-medium">
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> <span className="truncate">核心资质许可与行政许可</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> <span className="truncate">知识产权与专利商标资产</span></li>
+                <li className="flex items-center gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> <span className="truncate">招投标与重大经营事件排查</span></li>
               </ul>
             </motion.div>
 
@@ -501,18 +657,18 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 4. 行业应用场景 (Enterprise Scenarios) */}
       {/* ========================================================================= */}
-      <section className="py-16 sm:py-24 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+      <section id="section-scenarios" className="py-12 sm:py-24 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 sm:space-y-12">
           
-          <motion.div {...fadeInUp} className="text-center max-w-4xl mx-auto space-y-3">
+          <motion.div {...fadeInUp} className="text-center max-w-4xl mx-auto space-y-2.5 sm:space-y-3">
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0084c2] uppercase tracking-wider bg-cyan-50/80 px-3 py-1 rounded-full border border-cyan-200/60">
               <Compass className="w-3.5 h-3.5 text-[#0096DB]" />
               <span>INDUSTRY SOLUTIONS & USE CASES</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-950">
+            <h2 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-950">
               金融机构与供应链核心企业四大业务场景落地
             </h2>
-            <p className="text-sm sm:text-base text-slate-600">
+            <p className="text-xs sm:text-base text-slate-600">
               赋能普惠信贷、供应链准入、融资租赁与股权投资全流程降本增效
             </p>
           </motion.div>
@@ -522,36 +678,36 @@ export default function HomePage() {
             initial="initial"
             whileInView="whileInView"
             viewport={{ once: true, margin: "-60px" }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6"
           >
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-3.5">
-              <span className="text-xs font-mono font-bold text-[#0070a4] px-3 py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 01</span>
-              <h3 className="text-base font-bold text-slate-900">商业银行普惠信贷审批</h3>
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-2 sm:space-y-3.5">
+              <span className="text-[10px] sm:text-xs font-mono font-bold text-[#0070a4] px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 01</span>
+              <h3 className="text-xs sm:text-base font-bold text-slate-900 leading-snug">商业银行普惠信贷审批</h3>
+              <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                 贷前 0 接触快速初审，金税强授权精准测算商业参考额度（¥300~500万），尽调会材料秒级生成。
               </p>
             </motion.div>
 
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-3.5">
-              <span className="text-xs font-mono font-bold text-[#0070a4] px-3 py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 02</span>
-              <h3 className="text-base font-bold text-slate-900">核心企业供应链准入年审</h3>
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-2 sm:space-y-3.5">
+              <span className="text-[10px] sm:text-xs font-mono font-bold text-[#0070a4] px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 02</span>
+              <h3 className="text-xs sm:text-base font-bold text-slate-900 leading-snug">核心企业供应链准入年审</h3>
+              <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                 批量导入 100+ 供应商统一代码，排查司法失信被执行、大股东质押套现及空壳虚开发票，杜绝关联舞弊。
               </p>
             </motion.div>
 
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-3.5">
-              <span className="text-xs font-mono font-bold text-[#0070a4] px-3 py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 03</span>
-              <h3 className="text-base font-bold text-slate-900">融资租赁与商业保理尽调</h3>
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-2 sm:space-y-3.5">
+              <span className="text-[10px] sm:text-xs font-mono font-bold text-[#0070a4] px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 03</span>
+              <h3 className="text-xs sm:text-base font-bold text-slate-900 leading-snug">融资租赁与商业保理尽调</h3>
+              <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                 以月度用电与物流运费强拟合度核验承租企业实体经营活跃度，严防应收账款重复质押与空头承租。
               </p>
             </motion.div>
 
-            <motion.div variants={fadeInUp} className="p-6 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-3.5">
-              <span className="text-xs font-mono font-bold text-[#0070a4] px-3 py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 04</span>
-              <h3 className="text-base font-bold text-slate-900">产业基金与股权投前风控</h3>
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            <motion.div variants={fadeInUp} className="p-3.5 sm:p-6 rounded-xl sm:rounded-2xl bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass hover:shadow-md hover:-translate-y-1 transition-all space-y-2 sm:space-y-3.5">
+              <span className="text-[10px] sm:text-xs font-mono font-bold text-[#0070a4] px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 04</span>
+              <h3 className="text-xs sm:text-base font-bold text-slate-900 leading-snug">产业基金与股权投前风控</h3>
+              <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
                 多层级穿透实际控制人与最终受益人股份，溯源 15 项工商变更历史与环保处罚记录，出具投决会尽调底稿。
               </p>
             </motion.div>
@@ -563,7 +719,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 5. 分级权益商业化加油包 (Tiered Pricing & Packages) */}
       {/* ========================================================================= */}
-      <section className="py-16 sm:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+      <section id="section-pricing" className="py-16 sm:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
         
         <motion.div {...fadeInUp} className="text-center max-w-4xl mx-auto space-y-3">
           <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0084c2] uppercase tracking-wider bg-cyan-50/80 px-3 py-1 rounded-full border border-cyan-200/60">
@@ -601,44 +757,44 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 全维数据体系 4 宫格拆解 */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-            <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200/60 space-y-1.5 shadow-2xs">
-              <div className="font-bold text-slate-900 flex items-center justify-between">
-                <span>市监工商数据中台</span>
-                <span className="text-[#0096DB] font-mono text-[11px] font-semibold">自研中台</span>
+          {/* 全维数据体系 4 宫格拆解 (移动端 2 列网格自适应) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 text-xs">
+            <div className="p-3 sm:p-4 bg-slate-50/70 rounded-xl border border-slate-200/60 space-y-1 sm:space-y-1.5 shadow-2xs">
+              <div className="font-bold text-slate-900 flex items-center justify-between text-xs sm:text-sm">
+                <span>市监工商中台</span>
+                <span className="text-[#0096DB] font-mono text-[10px] sm:text-[11px] font-semibold">自研中台</span>
               </div>
-              <p className="text-slate-600 leading-relaxed text-[11px]">
+              <p className="text-slate-600 leading-relaxed text-[10px] sm:text-[11px] line-clamp-3 sm:line-clamp-none">
                 市监照面登记、实缴出资到位率穿透、董监高治理体系、15项工商变更轨迹、对外投资图谱及实际控制人。
               </p>
             </div>
 
-            <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200/60 space-y-1.5 shadow-2xs">
-              <div className="font-bold text-slate-900 flex items-center justify-between">
-                <span>司法与行政合规中台</span>
-                <span className="text-[#0096DB] font-mono text-[11px] font-semibold">实时穿透</span>
+            <div className="p-3 sm:p-4 bg-slate-50/70 rounded-xl border border-slate-200/60 space-y-1 sm:space-y-1.5 shadow-2xs">
+              <div className="font-bold text-slate-900 flex items-center justify-between text-xs sm:text-sm">
+                <span>司法合规中台</span>
+                <span className="text-[#0096DB] font-mono text-[10px] sm:text-[11px] font-semibold">实时穿透</span>
               </div>
-              <p className="text-slate-600 leading-relaxed text-[11px]">
+              <p className="text-slate-600 leading-relaxed text-[10px] sm:text-[11px] line-clamp-3 sm:line-clamp-none">
                 最高法裁判文书涉诉案由审查、失信被执行人红线、限制高消费令、经营异常名录、环保处罚与动产抵质押。
               </p>
             </div>
 
-            <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200/60 space-y-1.5 shadow-2xs">
-              <div className="font-bold text-slate-900 flex items-center justify-between">
-                <span>股权与经营态势中台</span>
-                <span className="text-[#0096DB] font-mono text-[11px] font-semibold">穿透核验</span>
+            <div className="p-3 sm:p-4 bg-slate-50/70 rounded-xl border border-slate-200/60 space-y-1 sm:space-y-1.5 shadow-2xs">
+              <div className="font-bold text-slate-900 flex items-center justify-between text-xs sm:text-sm">
+                <span>股权态势中台</span>
+                <span className="text-[#0096DB] font-mono text-[10px] sm:text-[11px] font-semibold">穿透核验</span>
               </div>
-              <p className="text-slate-600 leading-relaxed text-[11px]">
+              <p className="text-slate-600 leading-relaxed text-[10px] sm:text-[11px] line-clamp-3 sm:line-clamp-none">
                 多层级股权架构向上穿透、最终受益所有人识别、对外关联投资图谱与主要客商经营态势。
               </p>
             </div>
 
-            <div className="p-4 bg-cyan-50/60 rounded-xl border border-cyan-200/60 space-y-1.5 shadow-2xs">
-              <div className="font-bold text-[#0070a4] flex items-center justify-between">
-                <span>全景报告与PDF导出</span>
-                <span className="text-[#0096DB] font-mono text-[11px] font-semibold">享宇AI智评</span>
+            <div className="p-3 sm:p-4 bg-cyan-50/60 rounded-xl border border-cyan-200/60 space-y-1 sm:space-y-1.5 shadow-2xs">
+              <div className="font-bold text-[#0070a4] flex items-center justify-between text-xs sm:text-sm">
+                <span>全景报告导出</span>
+                <span className="text-[#0096DB] font-mono text-[10px] sm:text-[11px] font-semibold">享宇AI智评</span>
               </div>
-              <p className="text-slate-700 leading-relaxed text-[11px]">
+              <p className="text-slate-700 leading-relaxed text-[10px] sm:text-[11px] line-clamp-3 sm:line-clamp-none">
                 集成全景大纲目录索引、深度尽调报告全文，支持在线高清沉浸式查阅与 A4 PDF 原件导出。
               </p>
             </div>
@@ -804,7 +960,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 6. 金融级合规与数据安全保障 (Security & Compliance) */}
       {/* ========================================================================= */}
-      <section className="py-16 sm:py-24 bg-white border-t border-slate-200/80">
+      <section id="section-security" className="py-16 sm:py-24 bg-white border-t border-slate-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
           <motion.div {...fadeInUp} className="text-center max-w-4xl mx-auto space-y-3">
@@ -913,8 +1069,8 @@ export default function HomePage() {
       >
         <div className="space-y-6 pt-1">
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-full bg-cyan-50 border border-cyan-200/80 mx-auto flex items-center justify-center text-[#0096DB] shadow-xs">
-              <Sparkles className="w-6 h-6 text-[#0096DB]" />
+            <div className="w-12 h-12 mx-auto flex items-center justify-center">
+              <img src="/brand_logo.png" alt="享宇AI智评" className="w-10 h-10 object-contain" />
             </div>
             <h3 className="text-lg font-bold text-slate-950 tracking-tight">
               快速注册 / 登录享宇AI智评

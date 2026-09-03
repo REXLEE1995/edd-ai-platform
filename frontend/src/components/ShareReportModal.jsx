@@ -180,7 +180,7 @@ export default function ShareReportModal({ report, open, onClose, onShareUpdated
       footer={null}
       width={540}
       title={
-        <div className="flex items-center gap-2.5 text-base font-bold text-slate-950 pb-2 border-b border-slate-100/80">
+        <div className="flex items-center gap-2.5 text-base font-bold text-slate-950 pb-2 border-b border-slate-100/80 pr-10">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-[#0ea5e9] text-white flex items-center justify-center shadow-xs border border-white/50 backdrop-blur-md">
             <Share2 className="w-4 h-4" />
           </div>

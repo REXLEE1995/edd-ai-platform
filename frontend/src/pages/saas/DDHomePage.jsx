@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { 
   Building,
   Building2, 
@@ -14,7 +14,8 @@ import {
   Truck, 
   Bookmark, 
   Hash,
-  Users
+  Users,
+  LogIn
 } from 'lucide-react';
 import { message } from 'antd';
 import apiClient from '../../api/client';
@@ -22,9 +23,9 @@ import { useAuth } from '../../context/AuthContext';
 import RechargeModal from '../../components/RechargeModal';
 
 export default function DDHomePage() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const { user, refreshUserProfile } = useAuth();
+  const location = useLocation();
+  const { user, refreshUserProfile, openLoginModal } = useAuth();
 
   const [companyName, setCompanyName] = useState('');
   const [creditCode, setCreditCode] = useState('');
@@ -32,17 +33,21 @@ export default function DDHomePage() {
   const [rechargeModalOpen, setRechargeModalOpen] = useState(false);
 
   useEffect(() => {
-    // 仅在显式传入非空参数时设置，不进行任何默认预填充
-    if (location.state?.prefillCompany) {
-      const p = location.state.prefillCompany;
+    const p = location.state?.prefill;
+    if (p) {
       if (p.company_name) setCompanyName(p.company_name);
       if (p.credit_code) setCreditCode(p.credit_code);
     }
   }, [location.state]);
 
   const handleStartDD = async () => {
+    if (!user) {
+      openLoginModal();
+      return;
+    }
+
     const trimmedName = companyName.trim();
-    const trimmedCode = creditCode.trim();
+    const trimmedCode = creditCode.trim().toUpperCase();
 
     if (!trimmedName) {
       message.warning('请输入目标企业全称');
@@ -113,7 +118,7 @@ export default function DDHomePage() {
           </p>
         </div>
 
-        {user && (
+        {user ? (
           <div className="shadcn-card px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 bg-white/80 backdrop-blur-xl border border-white/90 shadow-glass rounded-xl">
             <div className="text-left sm:text-right">
               <span className="text-[11px] sm:text-xs text-slate-500 block">可用尽调额度</span>
@@ -130,29 +135,31 @@ export default function DDHomePage() {
               充值额度
             </button>
           </div>
+        ) : (
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/60">
+            <Users className="w-3.5 h-3.5 text-slate-400" />
+            <span>登录后调阅与充值额度</span>
+          </div>
         )}
       </div>
 
-      {/* 额度不足提示 Banner */}
-      {!hasQuota && (
-        <div className="mt-4 sm:mt-6 p-3.5 sm:p-4 rounded-xl bg-amber-50/80 backdrop-blur-sm border border-amber-200/80 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-start justify-between gap-3 shadow-xs">
-          <div className="flex items-start gap-2.5">
-            <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-            <div className="space-y-0.5 sm:space-y-1">
-              <div className="font-bold text-xs sm:text-sm text-amber-900">
-                当前可用尽调额度为 0 次
-              </div>
-              <p className="text-amber-800 leading-relaxed text-[11px] sm:text-xs">
-                发起全景尽调需消耗 1 次尽调额度（生成企业全景尽调报告，长期归档随时调阅）。请先在线购买额度加油包。
-              </p>
+      {/* 登录提示 Banner (仅未登录时轻量提示) */}
+      {!user && (
+        <div className="mt-4 sm:mt-6 p-3 sm:p-3.5 rounded-xl bg-cyan-50/70 backdrop-blur-sm border border-cyan-200/70 text-xs text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-[#0096DB] shrink-0" />
+            <div className="text-slate-600 text-[11px] sm:text-xs">
+              <span className="font-semibold text-slate-800">提示：</span>
+              您当前处于未登录状态，可直接填写企业信息，点击发起时将自动调起快捷登录，输入内容自动保留。
             </div>
           </div>
           <button
             type="button"
-            onClick={() => setRechargeModalOpen(true)}
-            className="w-full sm:w-auto text-center px-3.5 py-2 sm:py-1.5 rounded-lg bg-amber-900 hover:bg-amber-950 text-white font-semibold text-xs shrink-0 transition-colors cursor-pointer shadow-xs"
+            onClick={openLoginModal}
+            className="text-xs text-[#0096DB] hover:text-[#0070a4] font-medium shrink-0 hover:underline inline-flex items-center gap-1 cursor-pointer self-end sm:self-auto"
           >
-            立即充值
+            <span>已有账号？去登录</span>
+            <ArrowRight className="w-3 h-3" />
           </button>
         </div>
       )}
@@ -176,54 +183,75 @@ export default function DDHomePage() {
             </span>
           </div>
 
-          {/* 突出的双核心输入区域 */}
-          <div className="p-3.5 sm:p-5 bg-white/60 backdrop-blur-md rounded-xl border border-slate-200/70 space-y-3 sm:space-y-4 shadow-2xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          {/* 突出的双核心输入区域 (强化边框与高亮对比，让用户一眼锁定) */}
+          <div className="p-4 sm:p-5 bg-gradient-to-b from-sky-50/40 via-white to-white rounded-xl border-2 border-sky-200/90 shadow-[0_4px_20px_-4px_rgba(0,150,219,0.12)] space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* 企业全称 */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    企业全称 <span className="text-rose-500">*</span>
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-bold text-slate-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-3.5 bg-[#0096DB] rounded-full inline-block"></span>
+                    企业全称 <span className="text-rose-500 font-bold">*</span>
                   </span>
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal">须与营业执照一致</span>
+                  <span className="text-[11px] text-slate-400 font-normal">须与营业执照完全一致</span>
                 </label>
-                <div className="flex items-center bg-white/90 border border-slate-200/90 rounded-xl px-3 sm:px-3.5 py-2 sm:py-2.5 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 transition-all shadow-2xs">
-                  <Building className="w-4 h-4 text-slate-400 mr-2 sm:mr-2.5 shrink-0" />
+                <div className="flex items-center bg-white border-2 border-slate-300/80 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 focus-within:border-[#0096DB] focus-within:ring-4 focus-within:ring-[#0096DB]/15 transition-all shadow-xs">
+                  <Building className="w-4 h-4 text-[#0096DB] mr-2.5 shrink-0" />
                   <input
                     type="text"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="请输入企业完整注册全称（如：某某实业有限公司）"
-                    className="w-full bg-transparent border-0 text-xs sm:text-sm text-slate-900 font-medium focus:outline-none placeholder:text-slate-400"
+                    placeholder="请输入企业完整注册全称（如：杭州某某科技有限公司）"
+                    className="w-full bg-transparent border-0 text-xs sm:text-sm text-slate-950 font-semibold focus:outline-none placeholder:text-slate-400 placeholder:font-normal"
                   />
                 </div>
               </div>
 
               {/* 统一社会信用代码 */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    统一社会信用代码 (18位) <span className="text-rose-500">*</span>
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-bold text-slate-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-3.5 bg-[#0096DB] rounded-full inline-block"></span>
+                    统一社会信用代码 (18位) <span className="text-rose-500 font-bold">*</span>
                   </span>
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal">18位大写英数</span>
+                  <span className="text-[11px] text-slate-400 font-normal">18位大写英文字母与数字</span>
                 </label>
-                <div className="flex items-center bg-white/90 border border-slate-200/90 rounded-xl px-3 sm:px-3.5 py-2 sm:py-2.5 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 transition-all shadow-2xs">
-                  <Hash className="w-4 h-4 text-slate-400 mr-2 sm:mr-2.5 shrink-0" />
+                <div className="flex items-center bg-white border-2 border-slate-300/80 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 focus-within:border-[#0096DB] focus-within:ring-4 focus-within:ring-[#0096DB]/15 transition-all shadow-xs">
+                  <Hash className="w-4 h-4 text-[#0096DB] mr-2.5 shrink-0" />
                   <input
                     type="text"
                     value={creditCode}
                     onChange={(e) => setCreditCode(e.target.value.toUpperCase())}
-                    placeholder="请输入18位统一代码（如：91441900MA4UQ****X）"
-                    className="w-full bg-transparent border-0 text-xs sm:text-sm text-slate-900 font-mono font-bold tracking-wide focus:outline-none placeholder:text-slate-400"
+                    placeholder="请输入18位统一代码（如：91330108MA28W****X）"
+                    className="w-full bg-transparent border-0 text-xs sm:text-sm text-slate-950 font-mono font-bold tracking-wide focus:outline-none placeholder:text-slate-400 placeholder:font-normal"
                     maxLength={18}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="pt-2.5 sm:pt-3 border-t border-slate-100 text-[11px] sm:text-xs text-slate-600 flex items-start gap-1.5 sm:gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-[#0096DB] shrink-0 mt-0.5" />
-              <span>提示：请核对企业全称与信用代码，确认无误后点击发起。系统将对接官方工商与司法全息数据中台。</span>
+            {/* 一键发起核心操作行：紧跟在企业与代码信息下一行 */}
+            <div className="pt-3.5 border-t border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="text-[11px] sm:text-xs text-slate-600 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#0096DB] shrink-0" />
+                <span>消耗规则：消耗 <strong className="text-[#0096DB] font-semibold">1 次尽调额度 = 生成 1 份全景报告</strong>（长期归档随时调阅）</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStartDD}
+                disabled={submitting}
+                className="shadcn-button-primary w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transition-all shrink-0"
+              >
+                <span>
+                  {submitting 
+                    ? '尽调流水线调度中...' 
+                    : (user 
+                        ? (hasQuota ? '一键发起企业全景尽调 (消耗 1 次额度)' : '额度不足，去充值') 
+                        : '一键发起企业全景尽调')}
+                </span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -241,30 +269,30 @@ export default function DDHomePage() {
           </div>
 
           <div className="space-y-2.5 sm:space-y-3 pt-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 text-xs">
-              <div className="p-2.5 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 text-xs">
+              <div className="p-2 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-1.5 sm:gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
                 <Building className="w-3.5 h-3.5 text-[#0096DB] shrink-0" />
-                <span className="font-semibold text-[11px] sm:text-xs">市监工商主体照面与董监高治理</span>
+                <span className="font-semibold text-[10px] sm:text-xs truncate">市监工商与治理</span>
               </div>
-              <div className="p-2.5 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
+              <div className="p-2 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-1.5 sm:gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
                 <Users className="w-3.5 h-3.5 text-[#0096DB] shrink-0" />
-                <span className="font-semibold text-[11px] sm:text-xs">股权出资穿透与最终实控人图谱</span>
+                <span className="font-semibold text-[10px] sm:text-xs truncate">股权出资与实控人</span>
               </div>
-              <div className="p-2.5 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
+              <div className="p-2 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-1.5 sm:gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
                 <Scale className="w-3.5 h-3.5 text-[#0096DB] shrink-0" />
-                <span className="font-semibold text-[11px] sm:text-xs">司法涉诉裁判、失信与行政处罚</span>
+                <span className="font-semibold text-[10px] sm:text-xs truncate">司法涉诉与合规排查</span>
               </div>
-              <div className="p-2.5 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
+              <div className="p-2 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-1.5 sm:gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#0096DB] shrink-0" />
-                <span className="font-semibold text-[11px] sm:text-xs">经营异常名录与动产抵质押排查</span>
+                <span className="font-semibold text-[10px] sm:text-xs truncate">经营异常与动产抵押</span>
               </div>
-              <div className="p-2.5 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
+              <div className="p-2 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-1.5 sm:gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
                 <Truck className="w-3.5 h-3.5 text-[#0096DB] shrink-0" />
-                <span className="font-semibold text-[11px] sm:text-xs">供应链客商分布与产业经营态势</span>
+                <span className="font-semibold text-[10px] sm:text-xs truncate">客商分布与经营态势</span>
               </div>
-              <div className="p-2.5 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
+              <div className="p-2 sm:p-3 bg-white/70 backdrop-blur-sm border border-slate-200/70 rounded-lg flex items-center gap-1.5 sm:gap-2 text-slate-800 shadow-2xs hover:border-[#0096DB]/40 transition-colors">
                 <Bookmark className="w-3.5 h-3.5 text-[#0096DB] shrink-0" />
-                <span className="font-semibold text-[11px] sm:text-xs">企业全景尽调报告全文与原件下载</span>
+                <span className="font-semibold text-[10px] sm:text-xs truncate">尽调报告与PDF下载</span>
               </div>
             </div>
             
@@ -273,23 +301,6 @@ export default function DDHomePage() {
               <span>【授权说明】任务发起后将实时生成专属授权链接与二维码，支持复制分享或由企业法定代表人微信扫码确认授权。</span>
             </div>
           </div>
-        </div>
-
-        {/* 3. 一键发起按钮栏 */}
-        <div className="pt-2 sm:pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <span className="text-[11px] sm:text-xs text-slate-500">
-            消耗规则：消耗 <strong className="text-[#0096DB] font-semibold">1 次尽调额度 = 生成 1 份全景报告</strong>（长期归档随时调阅）
-          </span>
-
-          <button
-            type="button"
-            onClick={handleStartDD}
-            disabled={submitting}
-            className="shadcn-button-primary w-full sm:w-auto px-6 sm:px-8 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-md"
-          >
-            <span>{submitting ? '尽调流水线调度中...' : (hasQuota ? '一键发起企业全景尽调 (消耗 1 次额度)' : '额度不足，去充值')}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
         </div>
 
       </div>

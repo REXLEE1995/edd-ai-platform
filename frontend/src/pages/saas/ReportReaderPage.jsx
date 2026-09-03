@@ -40,7 +40,7 @@ import {
   Check,
   Clock
 } from 'lucide-react';
-import { message, Drawer, Modal, Tooltip } from 'antd';
+import { message, Drawer, Modal, Tooltip, Popconfirm } from 'antd';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { formatLocalTime } from '../../utils/date';
@@ -51,8 +51,23 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 import reportShunjieData from '../../mock/report_shunjie_preloan.json';
 import reportHangzhouData from '../../mock/report_hangzhou_preloan.json';
-import { Send, CornerDownLeft, RefreshCw } from 'lucide-react';
+import { Send, CornerDownLeft, RefreshCw, X, ArrowDown, Columns, PanelRight } from 'lucide-react';
 import ShareReportModal from '../../components/ShareReportModal';
+import { marked } from 'marked';
+
+marked.setOptions({
+  breaks: true,
+  gfm: true
+});
+
+const renderMarkdown = (content) => {
+  if (!content) return '';
+  try {
+    return marked.parse(String(content));
+  } catch (e) {
+    return String(content);
+  }
+};
 
 // 极简微核 HTML5 Canvas 逐页流式渲染组件 (纯矢量直接从 sample_report.pdf 读取，0 图片依赖)
 function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
@@ -146,8 +161,8 @@ function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
         isCurrentVisible ? 'border-[#0ea5e9] ring-2 ring-[#0ea5e9]/20 shadow-md' : 'border-slate-200/80'
       }`}
     >
-      {/* 原生 HTML5 Canvas 渲染区域 */}
-      <div className="w-full bg-white relative flex items-center justify-center min-h-[700px]">
+      {/* 原生 HTML5 Canvas 渲染区域：采用严格固定的标准 A4 页面比例 (aspect-[595/842]) 杜绝异步渲染过程中的高度突变与页码跳动 */}
+      <div className="w-full bg-white relative flex items-center justify-center aspect-[595/842] min-h-[500px]">
         {loading && !rendered && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-400 space-y-2">
             <div className="w-6 h-6 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
@@ -198,6 +213,8 @@ export default function ReportReaderPage() {
   const [isOverallAiSummaryOpen, setIsOverallAiSummaryOpen] = useState(false);
   const [openShareModal, setOpenShareModal] = useState(false);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
   const sidebarNavRef = useRef(null);
   const chatBottomRef = useRef(null);
 
@@ -225,22 +242,57 @@ export default function ReportReaderPage() {
   }, [isHangzhouReport]);
 
   const DEFAULT_REPORT_META = report?.content?.report_meta || activeArchiveData.report_meta;
-  const OVERALL_SUMMARY = report?.content?.overall_ai_summary || activeArchiveData.overall_ai_summary;
-  const PDF_TOC_CATALOG = report?.content?.toc_catalog || activeArchiveData.toc_catalog;
+
+  // 研判总结数据 (严格从 GET /api/v1/reports/{report_id}/summary 真实接口加载，若远程无数据或报错则为 null，严禁假数据展示)
+  const OVERALL_SUMMARY = useMemo(() => {
+    if (!summaryData) return null;
+    const profile = summaryData.enterprise_profile;
+    const riskList = Array.isArray(summaryData.risk_assessment) ? summaryData.risk_assessment : [];
+    if (!profile && riskList.length === 0) return null;
+
+    return {
+      chapterNo: "00",
+      title: "全景综合尽调总结",
+      subtitle: "企业综合画像与全景深度风控研判",
+      summary: profile || '',
+      key_points: riskList,
+      keyPoints: riskList
+    };
+  }, [summaryData]);
+
+  // 6. 统一提取报告目录大纲 (完全按照后端接口返回数据驱动，0 本地额外偏移篡改)
+  const PDF_TOC_CATALOG = report?.content?.toc_catalog || activeArchiveData.toc_catalog || [];
+
   const STRUCTURED_FACTS = report?.content?.structured_facts || activeArchiveData.structured_facts || {};
 
-  // 严格从 MinIO 对象存储服务端点加载该笔任务的真实 PDF 存证文件流 (0 本地静态文件依赖)
-  const targetPdfUrl = reportId ? `/api/v1/reports/${reportId}/pdf` : null;
+  // 严格从真实远程后端与 MinIO 服务端点加载该笔任务的真实 PDF 存证文件流 (绝不调用本地接口)
+  const remoteApiHost = (typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL)
+    ? window.APP_CONFIG.API_BASE_URL.replace(/\/api\/?$/, '')
+    : 'http://192.168.110.234:8000';
 
-  // 动态构建各章节 AI 深度研判字典
-  const AI_CHAPTER_INSIGHTS = useMemo(() => ({
-    'overall': OVERALL_SUMMARY,
-    ...Object.fromEntries(
-      PDF_TOC_CATALOG
-        .filter(item => item.has_ai_summary && item.ai_insight)
-        .map(item => [item.id, item.ai_insight])
-    )
-  }), [OVERALL_SUMMARY, PDF_TOC_CATALOG]);
+  const targetPdfUrl = useMemo(() => {
+    if (!reportId) return null;
+    const rawPdfUrl = report?.pdf_url;
+    if (rawPdfUrl && (rawPdfUrl.startsWith('http://') || rawPdfUrl.startsWith('https://'))) {
+      return rawPdfUrl;
+    }
+    const path = rawPdfUrl ? (rawPdfUrl.startsWith('/') ? rawPdfUrl : `/${rawPdfUrl}`) : `/api/v1/reports/${reportId}/pdf`;
+    return `${remoteApiHost}${path}`;
+  }, [reportId, report?.pdf_url, remoteApiHost]);
+
+  // 动态构建各章节 AI 深度研判字典 (仅在真实存在总结时注入)
+  const AI_CHAPTER_INSIGHTS = useMemo(() => {
+    const insights = {};
+    if (OVERALL_SUMMARY) {
+      insights['overall'] = OVERALL_SUMMARY;
+    }
+    PDF_TOC_CATALOG
+      .filter(item => item.has_ai_summary && item.ai_insight)
+      .forEach(item => {
+        insights[item.id] = item.ai_insight;
+      });
+    return insights;
+  }, [OVERALL_SUMMARY, PDF_TOC_CATALOG]);
 
   // 异步流式加载 PDF 原生文件 (带单例缓存，直接连接 MinIO 流式存证输出)
   useEffect(() => {
@@ -262,186 +314,327 @@ export default function ReportReaderPage() {
     };
   }, [targetPdfUrl]);
 
+  // 响应式屏幕检测 (1024px 以下切换为移动端抽屉，1024px 及以上分栏并排工作台)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // 对话历史记录与输入状态
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
 
-  // 预设快捷追问 Prompts
-  const QUICK_PROMPTS = [
-    { label: '🔍 涉税合规穿透', prompt: '请详细核查该企业近 36 个月的增值税与所得税申报是否存在异常波动或未申报？' },
-    { label: '📊 营收与偿债测算', prompt: '请基于该企业的开票规模和毛利率，测算其最大负债承载力与还款保障倍数。' },
-    { label: '📝 生成审贷专审意见', prompt: '请以银行高级信贷审批官的口吻，输出一份 300 字的标准审贷专审结论与风控建议。' },
-    { label: '⚖️ 司法涉诉排查', prompt: '排查该企业及其实际控制人是否存在被执行、限制高消费或重大行政处罚？' }
-  ];
+  // AI 助手展现模式：'drawer' (默认展开在顶层浮层，不挤压报告) | 'docked' (分栏平铺并排，铺满屏幕右侧)
+  const [aiViewMode, setAiViewMode] = useState('drawer');
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+  const isUserAtBottomRef = useRef(true);
+  const chatScrollContainerRef = useRef(null);
+  const pdfScrollContainerRef = useRef(null);
 
-  // 点击左侧大纲的【✨ AI总结】按钮：联动知识库并滑出抽屉
-  const handleOpenAiChapter = (chapterId) => {
-    setSelectedAiChapterId(chapterId);
-    const insight = AI_CHAPTER_INSIGHTS[chapterId];
-    if (!insight) return;
-    const chNum = insight.chapter_no || insight.chapterNo || '';
-    const userPrompt = `请帮我针对【${chNum ? chNum + ' ' : ''}${insight.title}】板块进行深度总结与关键指标提炼。`;
-
-    setChatMessages(prev => [
-      ...prev,
-      {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        text: userPrompt,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      },
-      {
-        id: `ai-${Date.now() + 1}`,
-        role: 'ai',
-        insightKey: chapterId,
-        data: insight,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }
-    ]);
-    setIsAiDrawerOpen(true);
+  // 平滑或直接滚动至对话最新底部 (默认置底)
+  const scrollToBottom = (smooth = false) => {
+    isUserAtBottomRef.current = true;
+    setShowScrollBottomBtn(false);
     setTimeout(() => {
-      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+      if (chatBottomRef.current) {
+        chatBottomRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+      }
+    }, 30);
   };
 
-  // 发送多轮对话消息
+  // 监听对话流滚动：用户向上拉动时不强行拉回底部，且显示“回到底部”悬浮按钮
+  const handleChatScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    const atBottom = distanceToBottom < 60;
+    isUserAtBottomRef.current = atBottom;
+    setShowScrollBottomBtn(!atBottom);
+  };
+
+  // 每次打开 AI 面板或切换视图模式时，默认平稳置底
+  useEffect(() => {
+    if (isAiDrawerOpen) {
+      scrollToBottom(false);
+    }
+  }, [isAiDrawerOpen, aiViewMode]);
+
+  // 100 次全局提问额度管理
+  const MAX_USER_QUESTIONS = 100;
+  const userQuestionsCount = useMemo(() => {
+    return chatMessages.filter(m => m.role === 'user').length;
+  }, [chatMessages]);
+  const remainingQuestions = Math.max(0, MAX_USER_QUESTIONS - userQuestionsCount);
+  const isQuotaExceeded = userQuestionsCount >= MAX_USER_QUESTIONS;
+
+  // 输入框自适应高度拉伸 Ref
+  const textareaRef = useRef(null);
+
+  // 输入变化时动态自适应拉伸高度 (最小 38px，最高可拉伸至 160px，超高后平滑滚动)
+  const handleInputChange = (e) => {
+    setChatInput(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollH = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollH, 38), 160)}px`;
+    }
+  };
+
+  // 统一复制方法 (支持提问内容与 AI 回复)
+  const handleCopyText = (text, type = '内容') => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    message.success(`已复制该条${type}！`);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // 预设快捷追问 Prompts (去除 emoji icon，保持视觉纯粹简洁)
+  const QUICK_PROMPTS = [
+    { label: '涉税合规穿透', prompt: '请详细核查该企业近 36 个月的增值税与所得税申报是否存在异常波动或未申报？' },
+    { label: '营收与偿债测算', prompt: '请基于该企业的开票规模和毛利率，测算其最大负债承载力与还款保障倍数。' },
+    { label: '生成审贷专审意见', prompt: '请以银行高级信贷审批官的口吻，输出一份 300 字的标准审贷专审结论与风控建议。' },
+    { label: '司法涉诉排查', prompt: '排查该企业及其实际控制人是否存在被执行、限制高消费或重大行政处罚？' }
+  ];
+
+  const abortControllerRef = useRef(null);
+
+  // 1. 发起报告 AI 流式问答 (POST /api/v1/reports/{report_id}/chat/stream - SSE 协议)
+  const handleStreamChat = async ({
+    queryType = 'DEFAULT',
+    catalogKey = null,
+    catalogName = null,
+    content
+  }) => {
+    if (!content || isAiThinking) return;
+
+    // 校验 100 次提问配额
+    if (userQuestionsCount >= MAX_USER_QUESTIONS) {
+      message.warning('当前报告提问次数已达到 100 次上限，无法继续发起提问');
+      return;
+    }
+
+    // 若有未完成的流式任务，主动中止
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const userMsgId = `user-${Date.now()}`;
+    const aiMsgId = `ai-${Date.now() + 1}`;
+    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+    const newUserMsg = {
+      id: userMsgId,
+      role: 'user',
+      text: content,
+      timestamp: currentTime,
+      query_type: queryType,
+      catalog_name: catalogName
+    };
+
+    const newAiMsg = {
+      id: aiMsgId,
+      role: 'assistant',
+      text: '',
+      isStreaming: true,
+      timestamp: currentTime,
+      query_type: queryType,
+      catalog_name: catalogName
+    };
+
+    // 提取多轮历史上下文 (最多取最近 6 条)
+    const historyPayload = chatMessages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-6)
+      .map(m => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.text || ''
+      }));
+
+    setChatMessages(prev => [...prev, newUserMsg, newAiMsg]);
+    setIsAiDrawerOpen(true);
+    setIsAiThinking(true);
+
+    // 提问时默认平稳置底
+    scrollToBottom(false);
+
+    try {
+      const apiBase = (typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL)
+        ? window.APP_CONFIG.API_BASE_URL
+        : '/api';
+      const streamUrl = `${apiBase.replace(/\/$/, '')}/v1/reports/${reportId}/chat/stream`;
+
+      const token = localStorage.getItem('edd_user_token') || localStorage.getItem('edd_admin_token');
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          query_type: queryType,
+          catalog_key: catalogKey,
+          catalog_name: catalogName,
+          content: content,
+          history: historyPayload
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.message || `请求失败 (${response.status})`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data:')) continue;
+
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === '[DONE]') {
+            break;
+          }
+
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.delta) {
+              setChatMessages(prev =>
+                prev.map(m =>
+                  m.id === aiMsgId ? { ...m, text: (m.text || '') + parsed.delta } : m
+                )
+              );
+              // 仅当用户未上拉时，才随打字自动滚到底部
+              if (isUserAtBottomRef.current) {
+                chatBottomRef.current?.scrollIntoView({ behavior: 'auto' });
+              }
+            }
+            if (parsed.status === 'done') {
+              break;
+            }
+          } catch (e) {
+            // 忽略单帧 JSON 解析异常
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log('Stream request aborted');
+      } else {
+        console.error('Chat stream failed:', err);
+        setChatMessages(prev =>
+          prev.map(m =>
+            m.id === aiMsgId
+              ? { ...m, text: (m.text || '') + `\n\n*(请求异常: ${err.message || '网络连接中断'})*` }
+              : m
+          )
+        );
+      }
+    } finally {
+      setIsAiThinking(false);
+      setChatMessages(prev =>
+        prev.map(m => (m.id === aiMsgId ? { ...m, isStreaming: false } : m))
+      );
+      if (isUserAtBottomRef.current) {
+        scrollToBottom(true);
+      }
+    }
+  };
+
+  // 2. 目录章节定向解读 (用户点击左侧大纲的【✨ AI总结】)
+  const handleOpenAiChapter = (chapterId) => {
+    setSelectedAiChapterId(chapterId);
+    const chapterItem = PDF_TOC_CATALOG.find(item => item.id === chapterId);
+    const chNum = chapterItem?.chapter_no || chapterItem?.chapterNo || '';
+    const chTitle = chapterItem?.title || '目标章节';
+    const catalogName = `${chNum ? chNum + ' ' : ''}${chTitle}`.trim();
+
+    const promptContent = `请仅根据知识库中【${catalogName}】这部分的目录进行总结回答，不要超出该目录下的内容，不衍生额外问题。`;
+
+    handleStreamChat({
+      queryType: 'CATALOG_SPECIFIC',
+      catalogKey: chapterId,
+      catalogName: catalogName,
+      content: promptContent
+    });
+  };
+
+  // 3. 自由问答 (用户在底部输入框输入自定义问题，或点击快捷胶囊)
   const handleSendMessage = (textToSend) => {
     const query = (textToSend || chatInput || '').trim();
     if (!query || isAiThinking) return;
 
+    if (userQuestionsCount >= MAX_USER_QUESTIONS) {
+      message.warning('当前报告提问次数已达到 100 次上限，无法继续发起提问');
+      return;
+    }
+
     setChatInput('');
-    const userMsgId = `user-${Date.now()}`;
-    const userTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
 
-    setChatMessages(prev => [
-      ...prev,
-      {
-        id: userMsgId,
-        role: 'user',
-        text: query,
-        timestamp: userTimestamp
+    handleStreamChat({
+      queryType: 'DEFAULT',
+      catalogKey: null,
+      catalogName: null,
+      content: query
+    });
+  };
+
+  // 4. 加载当前报告的历史会话现场 (GET /api/v1/reports/{report_id}/chat/history)
+  const fetchChatHistory = async () => {
+    if (!reportId) return;
+    try {
+      const res = await apiClient.get(`/v1/reports/${reportId}/chat/history`);
+      if (res && res.code === 200 && Array.isArray(res.data)) {
+        const mapped = res.data.map(item => ({
+          id: item.id || `hist-${Date.now()}-${Math.random()}`,
+          role: item.role === 'assistant' ? 'assistant' : 'user',
+          text: item.content || '',
+          timestamp: item.created_at ? item.created_at.slice(11, 19) : '',
+          query_type: item.query_type,
+          catalog_name: item.catalog_name
+        }));
+        setChatMessages(mapped);
       }
-    ]);
+    } catch (err) {
+      console.warn(`[Chat History] 拉取历史对话失败 (${reportId}):`, err?.message);
+    }
+  };
 
-    setIsAiThinking(true);
-    setTimeout(() => {
-      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
-
-    // 智能对话引擎响应 (严格约束人设：享宇森云企业智评大模型，基于报告原件实时多维解析)
-    setTimeout(() => {
-      let aiResponseText = '';
-      const compName = DEFAULT_REPORT_META?.company_name || '目标企业';
-      const corpFact = STRUCTURED_FACTS?.corporate_governance || {};
-      const taxFact = STRUCTURED_FACTS?.taxation_and_compliance || {};
-      const invFact = STRUCTURED_FACTS?.invoicing_and_operations || {};
-      const finFact = STRUCTURED_FACTS?.financial_ratios_and_warning || {};
-      const litFact = STRUCTURED_FACTS?.litigation_and_legal_risks || {};
-
-      // 1. 法人与法定代表人变更 / 高管信息
-      if (query.includes('法人') || query.includes('法定代表人') || query.includes('法人代表') || (query.includes('变更') && (query.includes('人') || query.includes('高管') || query.includes('工商')))) {
-        const legalRep = corpFact.legal_representative || '吕顺光';
-
-        aiResponseText = `【${compName} · 法人与工商变更专项穿透】\n\n` +
-          `一、当前法定代表人及高管信息：\n` +
-          `  • 当前法定代表人：${legalRep}（任执行董事、经理、财务负责人，持股 90.00% 为实际控制人） [见报告 P.10]；\n` +
-          `  • 监事：叶来生（曾于 2018~2019 年任法定代表人） [见报告 P.11]。\n\n` +
-          `二、历史法人变更轨迹：\n` +
-          `  1. 2019-05-07：法定代表人由【叶来生】变更为【吕顺光】（沿用至今） [见报告 P.12]；\n` +
-          `  2. 2018-06-04：法定代表人由【吕顺光】变更为【叶来生】 [见报告 P.12]；\n\n` +
-          `三、近三年其他核心工商变更记录：\n` +
-          `  • 2023-01-03：新增自然人股东黄月英（持股10%），企业类型变更为自然人投资或控股 [见报告 P.11]；\n` +
-          `  • 2021-03-31：住所变更为广东省东莞市清溪镇新寓街5号，经营范围新增餐饮服务 [见报告 P.11]；\n` +
-          `  • 2018-05-02：注册资本由 50 万元增资扩股至 500 万元 [见报告 P.12]。\n\n` +
-          `💡 享宇森云风控研判：经核验报告原件，该企业法定代表人的变更均在创始核心团队内部流转，未发生外部恶意代持或股权纠纷，变更轨迹合规真实。`;
-      } 
-      // 2. 股东与股权结构 / 实控人 / 出资实缴
-      else if (query.includes('股东') || query.includes('股权') || query.includes('实控') || query.includes('控股') || query.includes('出资') || query.includes('实缴')) {
-        const shareholders = corpFact.shareholders || [
-          { name: '吕顺光', ratio: '90.00%', subscribed: '450.00 万元', paid_in: '450.00 万元' },
-          { name: '黄月英', ratio: '10.00%', subscribed: '50.00 万元', paid_in: '50.00 万元' }
-        ];
-        const shText = shareholders.map(s => `  • ${s.name}：持股比例 ${s.ratio}，认缴 ${s.subscribed}，实缴到位率 100%`).join('\n');
-
-        aiResponseText = `【${compName} · 股权结构与实控人穿透】\n\n` +
-          `一、注册资本与实缴情况：\n` +
-          `  • 注册资本：${corpFact.registered_capital || '500.00 万元'}；\n` +
-          `  • 实缴资本：${corpFact.paid_in_capital || '500.00 万元 (实缴到位率 100%)'} [见报告 P.10]。\n\n` +
-          `二、股东持股明细：\n` +
-          `${shText}\n\n` +
-          `三、实际控制人穿透结论：\n` +
-          `  • 最终受益所有人及实际控制人为【吕顺光】，直接持股 90.00%，控制权高度集中，表决权稳固。\n\n` +
-          `💡 享宇森云风控研判：经报告原件验资核验，实缴资本 100% 到位，无虚假注资或抽逃出资风险，股权层级清晰。`;
-      }
-      // 3. 涉税合规 / 增值税 / 所得税 / 欠税
-      else if (query.includes('税') || query.includes('纳税') || query.includes('申报') || query.includes('欠税')) {
-        aiResponseText = `【${compName} · 涉税合规专项穿透】\n\n` +
-          `1. 增值税申报状态：${taxFact.vat_36m_filing_status || '36个月连续正常申报 (36/36期)'} [见报告 P.31]；\n` +
-          `2. 企业所得税申报：${taxFact.cit_36m_filing_status || '12个季度连续按期申报 (12/12期)'} [见报告 P.32]；\n` +
-          `3. 纳税信用等级：评定为 ${taxFact.tax_credit_rating || 'A 级 (优良纳税人)'}，历史无欠税及重大税务处罚记录。\n\n` +
-          `💡 享宇森云风控结论：税务合规基本盘扎实，三流核验一致，未发现虚开或偷漏税风险。`;
-      } 
-      // 4. 营收 / 发票 / 开票 / 采购 / 销售 / 客户
-      else if (query.includes('营收') || query.includes('发票') || query.includes('开票') || query.includes('销售') || query.includes('采购') || query.includes('客户')) {
-        aiResponseText = `【${compName} · 经营开票与供应链分析】\n\n` +
-          `1. 销项开票规模：近 12 个月实现有效销项开票 ${invFact.last_12m_sales_revenue || '4063.73 万元'}，近 3 年累计开票 ${invFact.total_3y_invoices_amount || '1.36 亿元'}（共 899 份） [见报告 P.15]；\n` +
-          `2. 发票健康度：红字及作废发票比率仅为 ${invFact.invoice_void_rate || '0.42%'}（远低于行业预警线 3.0%），发票真实可信度高；\n` +
-          `3. 上下游集中度：前五大客户集中度 ${invFact.top5_customers_concentration || '41.20%'}，前五大供应商集中度 ${invFact.top5_suppliers_concentration || '36.80%'} [见报告 P.17, P.24]。\n\n` +
-          `💡 享宇森云经营研判：开票时序与生产经营节奏匹配，未发现虚开对倒冲票现象。`;
-      } 
-      // 5. 财务指标 / 毛利 / 负债 / 偿债能力 / 预警
-      else if (query.includes('财务') || query.includes('毛利') || query.includes('净利') || query.includes('负债') || query.includes('偿债') || query.includes('利息')) {
-        aiResponseText = `【${compName} · 财务报表与偿债能力测算】\n\n` +
-          `1. 盈利能力：综合毛利率 ${finFact.gross_profit_margin || '24.34%'}（显著高于模具制造行业中位数 ${finFact.industry_median_margin || '14.48%'}，超额溢价 +9.86%） [见报告 P.33]；\n` +
-          `2. 资本结构：资产负债率 ${finFact.asset_liability_ratio || '46.30%'}，整体处于健康安全区间；\n` +
-          `3. 偿债保障：利息保障倍数 ${finFact.interest_coverage_ratio || '4.82 倍'}，经营性现金流对现有借款本息覆盖充足 [见报告 P.35]。\n\n` +
-          `💡 享宇森云财务研判：盈利定价能力优良，无高杠杆扩张风险，偿债缓冲垫厚实。`;
-      } 
-      // 6. 司法涉诉 / 失信 / 限高 / 处罚 / 环保
-      else if (query.includes('司法') || query.includes('诉讼') || query.includes('失信') || query.includes('处罚') || query.includes('限高') || query.includes('被执行')) {
-        aiResponseText = `【${compName} · 司法涉诉与合规穿透排查】\n\n` +
-          `1. 失信被执行人：全国法院失信被执行人名单排查记录为 ${litFact.dishonest_executor_count || 0} 次 [见报告 P.37]；\n` +
-          `2. 限制高消费令：实控人及企业限制消费令记录为 ${litFact.high_consumption_limit_count || 0} 次 [见报告 P.38]；\n` +
-          `3. 重大行政处罚：近 36 个月市监、环保与安全生产处罚为 ${litFact.administrative_penalty_count || 0} 笔。\n\n` +
-          `💡 享宇森云风控结论：未触碰银行信贷准入的“一票否决”负面清单，法律合规风险低。`;
-      } 
-      // 7. 审贷审批专审报告 / 授信额度建议
-      else if (query.includes('审贷') || query.includes('专审') || query.includes('意见') || query.includes('授信') || query.includes('额度') || query.includes('建议')) {
-        aiResponseText = `【${compName} · 银行信贷审批专审结论】\n\n` +
-          `一、审贷准入结论：【准入支持 / 建议授信 ¥5,000,000 元】\n\n` +
-          `二、核心支撑依据：\n` +
-          `  • 信用评级：综合评分 702 分，评定为 B+ 级，居行业前 15%；\n` +
-          `  • 经营支撑：近 12 个月开票 4063.73 万元，3年累计开票 1.36 亿元；\n` +
-          `  • 资本到位：注册资本 500 万 100% 实缴，吕顺光持股 90% 股权稳固；\n` +
-          `  • 合规合规：司法、市监、环保处罚均为 0，无任何失信限高。\n\n` +
-          `三、风控落地要求：\n` +
-          `  要求实际控制人吕顺光提供个人无限连带责任保证担保，按季度监控销项发票波动。`;
-      } 
-      // 8. 兜底全景综合回答
-      else {
-        aiResponseText = `基于【${compName}】企业尽调报告原件的实时深度解析：\n\n` +
-          `经核验报告原件，您询问的「${query}」核心情况如下：\n` +
-          `• 法定代表人：${corpFact.legal_representative || '吕顺光'}（持股 90%，100%实缴） [见报告 P.10]；\n` +
-          `• 信用评级：综合评分 702 分（B+级），近 12 个月开票 4063.73 万元；\n` +
-          `• 合规状态：36 个月增值税正常申报率 100%，失信被执行与限高记录为 0。\n\n` +
-          `如需进一步了解，您可以点击下方的快捷穿透主题或直接输入具体指标问题。`;
-      }
-
-      setChatMessages(prev => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          role: 'ai_text',
-          text: aiResponseText,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
-      setIsAiThinking(false);
-      setTimeout(() => {
-        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }, 400);
+  // 5. 清空当前报告的历史会话现场 (DELETE /api/v1/reports/{report_id}/chat/history)
+  const handleClearHistory = async () => {
+    try {
+      await apiClient.delete(`/v1/reports/${reportId}/chat/history`);
+      setChatMessages([]);
+      message.success('该报告的历史对话已成功清空');
+    } catch (err) {
+      console.error('清空历史对话失败:', err);
+      message.error('清空失败，请稍后重试');
+    }
   };
 
   const handleCopyAiInsight = (text) => {
@@ -461,6 +654,8 @@ export default function ReportReaderPage() {
   useEffect(() => {
     if (reportId) {
       fetchReportDetail();
+      fetchReportSummary();
+      fetchChatHistory();
     } else {
       setLoading(false);
     }
@@ -480,8 +675,37 @@ export default function ReportReaderPage() {
     }
   };
 
+  // 研判总结数据 (步骤 5 产物 - GET /api/v1/reports/{report_id}/summary)
+  const fetchReportSummary = async () => {
+    if (!reportId) {
+      setSummaryData(null);
+      return;
+    }
+    setLoadingSummary(true);
+    try {
+      const res = await apiClient.get(`/v1/reports/${reportId}/summary`);
+      // 严格检查真实接口返回
+      if (res && res.code === 0 && res.data) {
+        setSummaryData(res.data);
+      } else if (res && (res.enterprise_profile || (Array.isArray(res.risk_assessment) && res.risk_assessment.length > 0))) {
+        setSummaryData(res);
+      } else {
+        setSummaryData(null);
+      }
+    } catch (err) {
+      console.warn(`[Summary API] 远程接口无总结数据或未生成 (${reportId}):`, err?.response?.status || err?.message);
+      setSummaryData(null);
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
+
   // 核心区间定位算法：根据当前 activePage 动态计算当前活跃的父章节和子导航项 (跨页保持持续高亮)
   const { activeChapterId, activeSubId } = useMemo(() => {
+    if (!PDF_TOC_CATALOG || PDF_TOC_CATALOG.length === 0) {
+      return { activeChapterId: null, activeSubId: null };
+    }
+
     let matchedChapter = PDF_TOC_CATALOG[0];
     for (let i = PDF_TOC_CATALOG.length - 1; i >= 0; i--) {
       if (activePage >= PDF_TOC_CATALOG[i].page) {
@@ -491,11 +715,17 @@ export default function ReportReaderPage() {
     }
 
     let matchedSub = null;
-    if (matchedChapter.children && matchedChapter.children.length > 0) {
-      for (let k = matchedChapter.children.length - 1; k >= 0; k--) {
-        if (activePage >= matchedChapter.children[k].page) {
-          matchedSub = matchedChapter.children[k];
-          break;
+    if (matchedChapter?.children && matchedChapter.children.length > 0) {
+      // 优先精准匹配当前页对应的小节 (若当前页有多个小节，取该页第一个)
+      const exactMatches = matchedChapter.children.filter(c => c.page === activePage);
+      if (exactMatches.length > 0) {
+        matchedSub = exactMatches[0];
+      } else {
+        for (let k = matchedChapter.children.length - 1; k >= 0; k--) {
+          if (activePage >= matchedChapter.children[k].page) {
+            matchedSub = matchedChapter.children[k];
+            break;
+          }
         }
       }
       if (!matchedSub) {
@@ -507,7 +737,7 @@ export default function ReportReaderPage() {
       activeChapterId: matchedChapter.id,
       activeSubId: matchedSub ? matchedSub.id : null
     };
-  }, [activePage]);
+  }, [PDF_TOC_CATALOG, activePage]);
 
   // 当进入新章节时，确保该章节在左侧大纲中处于展开状态
   useEffect(() => {
@@ -519,28 +749,32 @@ export default function ReportReaderPage() {
     }
   }, [activeChapterId]);
 
-  // 100% 可靠的精准平滑滚动跳转至指定 PDF 页面
+  // 100% 可靠的精准平滑滚动跳转至指定 PDF 页面 (利用恒定静态 offsetTop 差值，绝不受帧间插值或动态加载干扰)
   const jumpToPage = (pageNum) => {
     const p = Math.max(1, Math.min(totalPages, Number(pageNum) || 1));
     setActivePage(p);
 
     const targetEl = document.getElementById(`pdf-page-${p}`);
-    if (targetEl) {
-      const headerOffset = isOverallAiSummaryOpen ? 240 : 185; // 顶部全局导航(64px) + 报告状态栏(56px) + 吸顶AI智能总结条 + 边距偏移
-      const elementPosition = targetEl.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
-
-      window.scrollTo({
-        top: offsetPosition,
+    const pdfContainer = pdfScrollContainerRef.current;
+    if (targetEl && pdfContainer) {
+      const stickyHeader = pdfContainer.querySelector('.sticky');
+      const stickyHeight = stickyHeader ? stickyHeader.offsetHeight : 0;
+      // targetEl.offsetTop 与 pdfContainer.offsetTop 处于完全一致的静态文档流坐标系，永不随滚动状态发生任何帧间波动
+      const targetScroll = Math.max(0, targetEl.offsetTop - pdfContainer.offsetTop - stickyHeight - 8);
+      pdfContainer.scrollTo({
+        top: targetScroll,
         behavior: 'smooth'
       });
+    } else if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
-  // 监听右侧页面滚动，实时感知当前视口中的页码
+  // 监听中栏独立滚动或全局滚动，实时感知当前视口中的页码
   useEffect(() => {
+    const container = pdfScrollContainerRef.current;
     const handleScroll = () => {
-      const scrollPosition = window.scrollY + 180;
+      const scrollPosition = (container ? container.scrollTop : window.scrollY) + 180;
       for (let p = totalPages; p >= 1; p--) {
         const el = document.getElementById(`pdf-page-${p}`);
         if (el && scrollPosition >= el.offsetTop) {
@@ -550,9 +784,16 @@ export default function ReportReaderPage() {
       }
     };
 
+    if (container) {
+      container.addEventListener('scroll', handleScroll, { passive: true });
+    }
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+
+    return () => {
+      if (container) container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [totalPages]);
 
   // 核心随动：当 activeSubId 或 activeChapterId 变化时，左侧侧边栏内部自动跟随滚动，保持高亮项可见 (不影响主页面滚动)
   useEffect(() => {
@@ -594,6 +835,304 @@ export default function ReportReaderPage() {
     }
   };
 
+  // 渲染 AI 智能问答对话面板 (支持桌面端分栏平铺与顶层浮层共用)
+  const renderAiChatContent = () => (
+    <div className="flex flex-col h-full bg-[#fafafa]">
+      {/* 顶部 Header */}
+      <div className="flex items-center justify-between px-3.5 py-3 bg-white border-b border-zinc-200 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-md bg-[#0096DB] flex items-center justify-center text-white shadow-2xs shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-sm sm:text-base text-slate-950 truncate leading-tight">
+                享宇森云 AI 智能审贷风控助手
+              </span>
+            </div>
+            <span className="text-xs text-zinc-500 block truncate">
+              享宇森云企业智评大模型 · 实时报告解析
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {/* 提问额度徽标 (不能超过100次) */}
+          <span 
+            className={`text-xs font-mono px-2.5 py-0.5 rounded-full border ${
+              remainingQuestions <= 10 
+                ? 'bg-amber-50 text-amber-700 border-amber-200 font-semibold' 
+                : 'bg-slate-50 text-slate-600 border-slate-200 font-medium'
+            }`} 
+            title={`当前报告提问额度：已提问 ${userQuestionsCount} 次 / 上限 ${MAX_USER_QUESTIONS} 次`}
+          >
+            提问 {userQuestionsCount}/{MAX_USER_QUESTIONS}
+          </span>
+
+          {/* 视图模式切换按钮 (平铺 ⇋ 浮层) */}
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={() => setAiViewMode(prev => prev === 'docked' ? 'drawer' : 'docked')}
+              className="px-2.5 py-1 rounded-lg text-slate-700 hover:text-[#0096DB] hover:bg-cyan-50 border border-slate-200/90 transition-all cursor-pointer flex items-center gap-1 text-xs shadow-2xs font-medium"
+              title={aiViewMode === 'docked' ? "切换为顶层浮层 (抽屉覆盖)" : "切换为分栏平铺 (左右并排)"}
+            >
+              {aiViewMode === 'docked' ? (
+                <>
+                  <PanelRight className="w-3.5 h-3.5 text-[#0096DB]" />
+                  <span>浮层</span>
+                </>
+              ) : (
+                <>
+                  <Columns className="w-3.5 h-3.5 text-[#0096DB]" />
+                  <span>平铺</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {chatMessages.length > 0 && (
+            <Popconfirm
+              title="清空对话历史"
+              description="确定清空当前报告的所有 AI 对话记录吗？"
+              onConfirm={handleClearHistory}
+              okText="确定清空"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              placement="bottomRight"
+            >
+              <button
+                type="button"
+                className="text-xs text-zinc-500 hover:text-rose-600 transition-colors cursor-pointer px-2 py-1 font-medium rounded-lg hover:bg-rose-50"
+                title="清空当前报告对话历史"
+              >
+                清空
+              </button>
+            </Popconfirm>
+          )}
+
+          {/* 收起面板按钮 */}
+          <button
+            type="button"
+            onClick={() => setIsAiDrawerOpen(false)}
+            className="p-1 rounded-md text-zinc-400 hover:text-slate-800 hover:bg-zinc-100 transition-colors cursor-pointer"
+            title="收起 AI 问答面板"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* 对话流容器 (支持内部独立滚动、上拉浏览不被强制滚底) */}
+      <div 
+        ref={chatScrollContainerRef}
+        onScroll={handleChatScroll}
+        className="flex-1 p-3.5 space-y-3.5 overflow-y-auto overscroll-contain min-h-0 relative scrollbar-thin"
+      >
+        {chatMessages.length === 0 ? (
+          <div className="py-12 text-center space-y-3 px-4">
+            <div className="w-10 h-10 rounded-full bg-cyan-50 border border-cyan-100 text-[#0096DB] mx-auto flex items-center justify-center shadow-2xs">
+              <Sparkles className="w-5 h-5 text-[#0096DB] animate-pulse" />
+            </div>
+            <h4 className="font-bold text-sm sm:text-base text-slate-950">享宇森云 AI 智能审贷风控助手</h4>
+            <p className="text-xs sm:text-sm text-zinc-500 leading-relaxed max-w-xs mx-auto">
+              已与左侧尽调报告原件实现<strong className="text-slate-800">同屏联动解析</strong>，支持点击目录旁 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-cyan-50 text-[#0084c2] border border-cyan-200 font-medium text-xs"><Sparkles className="w-3 h-3 text-[#0096DB]" /> AI总结</span> 调阅章节研判，或直接在下方输入框自由提问。
+            </p>
+            {/* 推荐问题气泡 (无 icon，更简洁现代且字体舒适) */}
+            <div className="pt-2 flex flex-wrap justify-center gap-2 max-w-sm mx-auto">
+              {QUICK_PROMPTS.map((qp, qIdx) => (
+                <button
+                  key={qIdx}
+                  type="button"
+                  onClick={() => handleSendMessage(qp.prompt)}
+                  disabled={isQuotaExceeded || isAiThinking}
+                  className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-white hover:bg-cyan-50 hover:text-[#0084c2] hover:border-cyan-200 text-slate-700 border border-slate-200 transition-all shadow-2xs cursor-pointer text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {qp.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          chatMessages.map((msg, index) => {
+            if (msg.role === 'user') {
+              return (
+                <div key={msg.id || index} className="flex items-start justify-end gap-2 pl-8">
+                  <div className="bg-[#0096DB] text-white p-3.5 sm:p-4 rounded-xl rounded-tr-xs shadow-2xs text-sm sm:text-base leading-relaxed max-w-[90%] group">
+                    {msg.catalog_name && msg.query_type === 'CATALOG_SPECIFIC' && (
+                      <div className="text-xs text-white/95 font-medium mb-1.5 flex items-center gap-1.5">
+                        <span className="bg-white/20 px-2 py-0.5 rounded text-xs">目录章节</span>
+                        <span>{msg.catalog_name}</span>
+                      </div>
+                    )}
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    {/* 用户提问支持直接复制 */}
+                    <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-white/20 text-xs sm:text-sm text-white/80">
+                      <span className="font-mono">{msg.timestamp || '刚刚'}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(msg.text, '提问内容')}
+                        className="inline-flex items-center gap-1 hover:text-white transition-colors cursor-pointer px-2 py-0.5 rounded hover:bg-white/15"
+                        title="复制此条提问"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>复制</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
+                    我
+                  </div>
+                </div>
+              );
+            }
+
+            // AI 回复渲染 (纯 Markdown 格式 + 沉浸式思考加载状态 + 流式打字机光标 + 直接复制)
+            const aiContent = msg.text || '';
+            return (
+              <div key={msg.id || index} className="flex items-start gap-2.5 pr-2">
+                <div className="w-8 h-8 rounded-lg bg-[#0096DB] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <div className="flex-1 max-w-[94%]">
+                  <div className="bg-white p-4 sm:p-5 rounded-xl rounded-tl-xs border border-zinc-200 shadow-2xs space-y-2.5 text-sm sm:text-base text-slate-900 leading-relaxed">
+                    {aiContent ? (
+                      <div 
+                        className="ai-markdown-content"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(aiContent) }}
+                      />
+                    ) : (
+                      <div className="py-3 px-1 space-y-2.5">
+                        <div className="flex items-center gap-2 text-sm sm:text-base font-semibold text-slate-800">
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#0096DB]"></span>
+                          </span>
+                          <span>享宇森云 AI 正在深入研判本题...</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-600 pl-3.5 py-2 bg-cyan-50/60 rounded-lg border border-cyan-100">
+                          <div className="flex space-x-1">
+                            <span className="w-1.5 h-1.5 bg-[#0096DB] rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                            <span className="w-1.5 h-1.5 bg-[#0096DB] rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                            <span className="w-1.5 h-1.5 bg-[#0096DB] rounded-full animate-bounce"></span>
+                          </div>
+                          <span className="text-zinc-700 font-mono text-xs sm:text-sm">
+                            正在检索知识库 · 核验涉税工商及财务底稿
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {msg.isStreaming && aiContent && (
+                      <span className="inline-block w-2 h-4.5 ml-1 bg-[#0096DB] animate-pulse align-middle rounded-xs" />
+                    )}
+                    <div className="flex items-center justify-between pt-2.5 border-t border-zinc-100 text-xs sm:text-sm text-zinc-500">
+                      <span className="font-mono">{msg.timestamp || '刚刚'} · 享宇森云大模型</span>
+                      {aiContent && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(aiContent, 'AI 总结与分析')}
+                          className="shadcn-button-outline text-xs sm:text-sm py-1 px-3 flex items-center gap-1.5 cursor-pointer hover:border-[#0096DB] hover:text-[#0096DB]"
+                          title="复制该条 AI 研判结果"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>复制此条</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        {/* 用户上拉浏览时呈现快速回到底部按钮 */}
+        {showScrollBottomBtn && (
+          <div className="sticky bottom-2 flex justify-center w-full pointer-events-none z-30">
+            <button
+              type="button"
+              onClick={() => scrollToBottom(true)}
+              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1 bg-white/95 backdrop-blur-md text-slate-700 text-xs font-medium rounded-full shadow-md border border-slate-200 hover:text-[#0096DB] hover:border-cyan-300 hover:shadow-lg transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
+              title="滚动回最新对话底部"
+            >
+              <ArrowDown className="w-3.5 h-3.5 text-[#0096DB]" />
+              <span>回到底部</span>
+            </button>
+          </div>
+        )}
+
+        <div ref={chatBottomRef} />
+      </div>
+
+      {/* 底部对话输入区域 */}
+      <div className="p-3 bg-white border-t border-zinc-200 shrink-0 space-y-2">
+        {/* 顶部快捷追问胶囊 (无 icon，样式优化为更轻量质感的圆角标签，更舒适易触达) */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {QUICK_PROMPTS.map((qp, qIdx) => (
+            <button
+              key={qIdx}
+              type="button"
+              disabled={isQuotaExceeded || isAiThinking}
+              onClick={() => handleSendMessage(qp.prompt)}
+              className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-slate-100 hover:bg-cyan-50 hover:text-[#0070a4] hover:border-cyan-300 text-slate-700 border border-slate-200 transition-all shrink-0 cursor-pointer shadow-2xs active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {qp.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 自动拉伸输入框与发送按钮 */}
+        <div className={`flex items-end gap-2 bg-zinc-50 border rounded-xl p-1.5 sm:p-2 transition-all ${
+          isQuotaExceeded 
+            ? 'border-amber-200 bg-amber-50/30' 
+            : 'border-zinc-200 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 focus-within:bg-white'
+        }`}>
+          <textarea
+            ref={textareaRef}
+            value={chatInput}
+            onChange={handleInputChange}
+            disabled={isQuotaExceeded || isAiThinking}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
+            placeholder={
+              isQuotaExceeded 
+                ? '当前报告提问已达到 100 次上限' 
+                : '输入风控、税务、工商或信贷等研判问题...'
+            }
+            rows={1}
+            style={{ minHeight: '36px', maxHeight: '140px' }}
+            className="w-full bg-transparent border-0 resize-none text-xs sm:text-sm text-slate-900 placeholder:text-zinc-400 placeholder:text-[11px] sm:placeholder:text-xs placeholder:leading-tight focus:outline-none px-2 py-1 leading-relaxed overflow-y-auto transition-[height] duration-75 disabled:cursor-not-allowed disabled:text-zinc-400"
+          />
+          <button
+            type="button"
+            disabled={!chatInput.trim() || isAiThinking || isQuotaExceeded}
+            onClick={() => handleSendMessage()}
+            className={`p-2 rounded-lg transition-all shrink-0 flex items-center justify-center ${
+              chatInput.trim() && !isAiThinking && !isQuotaExceeded
+                ? 'bg-[#0096DB] text-white shadow-2xs cursor-pointer hover:bg-[#0084c2] active:scale-95'
+                : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+            }`}
+            title={isQuotaExceeded ? '提问次数已达上限' : '发送提问 (Enter)'}
+          >
+            <Send className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 底部状态提示条 */}
+        <div className="flex items-center justify-between text-[11px] sm:text-xs text-slate-500 px-1 pt-0.5 font-medium">
+          <span>基于尽调报告原件实时多维解析</span>
+          <span className="font-mono">
+            剩余提问: <strong className={remainingQuestions <= 10 ? 'text-amber-600 font-bold' : 'text-slate-800 font-bold'}>{remainingQuestions}</strong>/100 次
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="min-h-[75vh] flex flex-col items-center justify-center space-y-3 text-slate-500 text-sm">
@@ -604,42 +1143,62 @@ export default function ReportReaderPage() {
   }
 
   return (
-    <div className="min-h-screen text-slate-900 antialiased pb-28">
+    <div className="h-[calc(100vh-60px)] sm:h-[calc(100vh-66px)] flex flex-col overflow-hidden bg-[#f8fafc] text-slate-900 antialiased">
       
-      {/* 顶部公文状态栏 (PC 紧凑固定导航，吸附在主Navbar下方) */}
-      <header className="sticky top-[60px] sm:top-[66px] z-40 border-b border-white/70 bg-white/70 backdrop-blur-xl shadow-xs">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
+      {/* 顶部公文状态栏 (固定紧凑顶栏，不占页面滚动，宽度与工作台保持一致) */}
+      <header className="shrink-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-xs">
+        <div className={`mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all duration-200 ${
+          isAiDrawerOpen && aiViewMode === 'docked' && !isMobile ? 'w-full' : 'max-w-7xl'
+        }`}>
           
-          {/* 左侧：返回 + 企业名称与统一社会信用代码 */}
-          <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
+          {/* 左侧：返回 + 企业名称与统一社会信用代码 (移动端隐藏企业名称，保障返回按钮绝对完整可见) */}
+          <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
             <Link 
               to="/app/tasks" 
-              className="shadcn-button-outline text-xs py-1.5 px-2 sm:px-2.5 shrink-0 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs"
+              className="shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 shrink-0 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs flex items-center gap-1.5"
               title="返回任务中心"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">返回</span>
+              <ArrowLeft className="w-4 h-4" />
+              <span className="inline font-medium">返回</span>
             </Link>
 
-            <div className="h-4 sm:h-5 w-px bg-slate-200/80 shrink-0"></div>
-
-            <div className="min-w-0 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3">
-              <h1 className="font-bold text-sm sm:text-base lg:text-lg text-slate-950 tracking-tight truncate max-w-[140px] xs:max-w-[180px] sm:max-w-xs md:max-w-md">
-                {report?.company_name || '东莞市顺捷实业有限公司'}
-              </h1>
-              <span className="text-[10px] sm:text-xs text-slate-500 font-mono truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">
-                <span className="hidden sm:inline">统一代码: </span><strong className="font-medium text-slate-800">{report?.credit_code || '91441900MA4W6BGB8T'}</strong>
-              </span>
+            {/* 企业主体信息：在桌面/平板端显示，移动端隐藏避免挤压按钮 */}
+            <div className="max-sm:!hidden sm:flex items-center gap-3 min-w-0">
+              <div className="h-4 sm:h-5 w-px bg-slate-200/80 shrink-0"></div>
+              <div className="min-w-0 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3">
+                <h1 className="font-bold text-sm sm:text-base lg:text-lg text-slate-950 tracking-tight truncate max-w-xs md:max-w-md">
+                  {report?.company_name || '东莞市顺捷实业有限公司'}
+                </h1>
+                <span className="text-xs sm:text-sm text-slate-500 font-mono truncate">
+                  <span>统一代码: </span><strong className="font-medium text-slate-800">{report?.credit_code || '91441900MA4W6BGB8T'}</strong>
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* 右侧：目录抽屉按钮(移动端专享) + 分享报告 + 下载 PDF 原件 */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* 右侧：AI问答分栏快捷开关 + 目录抽屉按钮(移动端专享) + 分享报告 + 下载 PDF 原件 */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* AI 问答分栏快捷开关 (移动端使用 max-sm:!hidden 强行隐藏此按钮，避免被全局按钮样式 display:inline-flex 覆盖) */}
+            <button
+              type="button"
+              onClick={() => setIsAiDrawerOpen(prev => !prev)}
+              className={`max-sm:!hidden sm:flex shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 items-center gap-1.5 shadow-xs transition-all cursor-pointer ${
+                isAiDrawerOpen 
+                  ? 'bg-cyan-50/90 border-cyan-300 text-[#0070a4] font-semibold' 
+                  : 'text-slate-700 hover:border-[#0096DB] hover:text-[#0096DB]'
+              }`}
+              title={isAiDrawerOpen ? "收起 AI 问答分栏" : "展开 AI 问答分栏 (与报告同屏并排查看)"}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#0096DB]" />
+              <span>AI 助手</span>
+              <span className="text-xs font-mono text-zinc-400">({userQuestionsCount}/100)</span>
+            </button>
+
             {/* 📱 移动端专属：大纲目录抽屉展开按钮 */}
             <button
               type="button"
               onClick={() => setMobileTocOpen(true)}
-              className="lg:hidden shadcn-button-outline text-xs py-1.5 px-2 sm:px-2.5 flex items-center gap-1 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+              className="lg:hidden shadcn-button-outline text-xs sm:text-sm py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB] cursor-pointer"
               title="查看报告大纲目录"
             >
               <Bookmark className="w-3.5 h-3.5 text-[#0096DB]" />
@@ -649,19 +1208,19 @@ export default function ReportReaderPage() {
             <button
               type="button"
               onClick={() => setOpenShareModal(true)}
-              className="shadcn-button-outline text-xs py-1.5 px-2 sm:px-3 flex items-center gap-1 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
+              className="shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
               title="设置 6 位密码加密分享此报告"
             >
               <Share2 className="w-3.5 h-3.5 text-[#0096DB]" />
-              <span className="hidden sm:inline">分享报告</span>
+              <span className="hidden sm:inline font-medium">分享报告</span>
             </button>
 
             <a 
               href={targetPdfUrl}
               download={`${report?.company_name || '企业尽调报告'}.pdf`}
-              className="shadcn-button-primary text-xs py-1.5 px-2.5 sm:px-3.5 whitespace-nowrap flex items-center gap-1"
+              className="shadcn-button-primary text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 whitespace-nowrap flex items-center gap-1.5 font-medium"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-4 h-4" />
               <span className="hidden sm:inline">下载 PDF</span>
               <span className="sm:hidden">下载</span>
             </a>
@@ -669,37 +1228,44 @@ export default function ReportReaderPage() {
         </div>
       </header>
 
-      {/* 核心工作台容器 (左侧大纲树 + 右侧高保真无缝文档流) */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* 核心工作台容器 (填满视口剩余全部高度，三栏独立滚动，零下边距留白，零双滚动条) */}
+      <div className="flex-1 min-h-0 w-full overflow-hidden">
+        <div className={`h-full mx-auto flex items-stretch gap-3 lg:gap-4 p-2 sm:p-3 lg:p-4 transition-all duration-200 ${
+          isAiDrawerOpen && aiViewMode === 'docked' && !isMobile 
+            ? 'w-full' 
+            : 'max-w-7xl'
+        }`}>
         
-        {/* 左栏：PDF 目录大纲树状导航 (Col 3, 紧凑型 Sticky 侧边栏，顶部大纲与搜索固定，目录独立滚动) */}
-        <aside 
-          className="hidden lg:flex lg:flex-col lg:col-span-3 xl:col-span-3 sticky top-[115px] bg-white/75 backdrop-blur-xl rounded-2xl border border-white/80 shadow-glass p-3.5 h-[calc(100vh-135px)] z-20"
-        >
+          {/* 左栏：PDF 目录大纲树状导航 (独立内部纵向滚动，不干扰中栏文档与右栏AI) */}
+          <aside 
+            className={`hidden lg:flex lg:flex-col shrink-0 bg-white/80 backdrop-blur-xl rounded-xl border border-slate-200/80 shadow-xs p-3 h-full z-20 transition-all duration-200 ${
+              isAiDrawerOpen && aiViewMode === 'docked' ? 'w-56 xl:w-60' : 'w-64 xl:w-72'
+            }`}
+          >
           {/* 1. 固定在顶部的 报告大纲标题 + 搜索章节输入框 */}
           <div className="shrink-0 space-y-2.5 pb-3 border-b border-slate-100">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
-                <Bookmark className="w-3.5 h-3.5 text-[#0096DB]" />
+              <h3 className="text-sm font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Bookmark className="w-4 h-4 text-[#0096DB]" />
                 <span>报告大纲</span>
               </h3>
             </div>
 
             {/* 搜索框 */}
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="搜索章节..."
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-lg focus:outline-none focus:border-[#0096DB] focus:bg-white/90 focus:ring-2 focus:ring-[#0096DB]/15 transition-all placeholder:text-slate-400"
+                className="w-full pl-8 pr-2.5 py-1.5 text-xs sm:text-sm bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-lg focus:outline-none focus:border-[#0096DB] focus:bg-white/90 focus:ring-2 focus:ring-[#0096DB]/15 transition-all placeholder:text-slate-400"
               />
             </div>
           </div>
 
           {/* 2. 目录项列表 (独立纵向平滑滚动，默认全部展开) */}
-          <nav ref={sidebarNavRef} className="flex-1 overflow-y-auto py-2 space-y-1 text-xs scroll-smooth pr-1">
+          <nav ref={sidebarNavRef} className="flex-1 overflow-y-auto py-2 space-y-1 text-xs sm:text-sm scroll-smooth pr-1">
             {PDF_TOC_CATALOG.map((item) => {
               const isExpanded = !collapsedSections[item.id];
               const isParentActive = activeChapterId === item.id;
@@ -735,7 +1301,7 @@ export default function ReportReaderPage() {
                       ) : (
                         <span className="w-3.5 h-3.5 inline-block shrink-0" />
                       )}
-                      <span className="truncate" title={item.title}>{item.title}</span>
+                      <span className="truncate text-xs sm:text-sm" title={item.title}>{item.title}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -746,14 +1312,14 @@ export default function ReportReaderPage() {
                             e.stopPropagation();
                             handleOpenAiChapter(item.id);
                           }}
-                          className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-50 hover:bg-cyan-100/90 text-[#0084c2] flex items-center gap-0.5 transition-all border border-cyan-200/90 shadow-2xs cursor-pointer"
+                          className="px-2 py-0.5 rounded-md text-xs font-semibold bg-cyan-50 hover:bg-cyan-100 text-[#0084c2] flex items-center gap-0.5 transition-all border border-cyan-200/90 shadow-2xs cursor-pointer"
                           title="点击查看此板块 AI 深度总结"
                         >
-                          <Sparkles className="w-2.5 h-2.5 text-[#0096DB]" />
+                          <Sparkles className="w-3 h-3 text-[#0096DB]" />
                           <span>AI总结</span>
                         </button>
                       )}
-                      <span className="text-[11px] font-mono text-zinc-400 group-hover:text-[#0084c2] font-medium">
+                      <span className="text-xs font-mono text-zinc-400 group-hover:text-[#0084c2] font-medium">
                         P.{item.page}
                       </span>
                     </div>
@@ -769,15 +1335,15 @@ export default function ReportReaderPage() {
                             key={sub.id}
                             id={`toc-sub-${sub.id}`}
                             onClick={() => jumpToPage(sub.page)}
-                            className={`w-full text-left py-1 px-2 rounded-md text-[11px] cursor-pointer flex items-center justify-between truncate transition-all scroll-mt-24 ${
+                            className={`w-full text-left py-1 px-2 rounded-md text-xs sm:text-[13px] cursor-pointer flex items-center justify-between truncate transition-all scroll-mt-24 ${
                               isSubActive 
                                 ? 'bg-cyan-50 text-slate-950 font-semibold shadow-2xs border-l-2 border-[#0096DB] pl-1.5' 
-                                : 'text-zinc-500 hover:text-[#0096DB] hover:bg-cyan-50/40'
+                                : 'text-slate-600 hover:text-[#0096DB] hover:bg-cyan-50/40'
                             }`}
                             title={sub.title}
                           >
                             <span className="truncate pr-1">{sub.title}</span>
-                            <span className="font-mono text-[10px] text-zinc-400 shrink-0">P.{sub.page}</span>
+                            <span className="font-mono text-xs text-zinc-400 shrink-0">P.{sub.page}</span>
                           </div>
                         );
                       })}
@@ -789,7 +1355,7 @@ export default function ReportReaderPage() {
           </nav>
 
           {/* 3. 固定在底部的 展开/折叠全部 */}
-          <div className="shrink-0 pt-2 border-t border-slate-200 flex justify-between items-center text-[11px] text-zinc-500">
+          <div className="shrink-0 pt-2 border-t border-slate-200 flex justify-between items-center text-xs text-zinc-500">
             <span>共 {totalPages} 页</span>
             <button
               type="button"
@@ -811,88 +1377,96 @@ export default function ReportReaderPage() {
 
         </aside>
 
-        {/* 右栏：纯原生 Web 连续文档流 (Col 9) */}
-        <main className="lg:col-span-9 xl:col-span-9 flex flex-col items-center">
+        {/* 中栏：PDF 连续阅读器 (独立内部纵向滚动，与左侧大纲和右侧 AI 助手互不干扰) */}
+        <main 
+          ref={pdfScrollContainerRef}
+          className="flex-1 min-w-0 h-full overflow-y-auto overscroll-contain flex flex-col items-center py-2 px-1 sm:px-2 rounded-xl bg-slate-100/50 border border-slate-200/60 shadow-2xs scrollbar-thin"
+        >
           
-          <div className="w-full max-w-[1020px] space-y-6">
+          <div className="w-full max-w-[1020px] space-y-4">
             
-            {/* 全景综合尽调 AI 智能总结卡片 (吸顶固定 sticky top-[115px]，支持展开/收起) */}
-            <div className="shadcn-card sticky top-[115px] z-30 bg-white/75 backdrop-blur-xl overflow-hidden shadow-glass border border-white/80 rounded-xl transition-all">
-              
-              {/* 顶栏收起/展开控制条 */}
-              <div 
-                onClick={() => setIsOverallAiSummaryOpen(!isOverallAiSummaryOpen)}
-                className="px-4 py-3 bg-cyan-50/40 backdrop-blur-md hover:bg-cyan-50/60 flex items-center justify-between cursor-pointer border-b border-cyan-100/70 transition-colors select-none"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-6 h-6 rounded-md bg-gradient-to-br from-sky-400 to-[#0ea5e9] text-white flex items-center justify-center shadow-2xs shrink-0">
-                    <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
-                  </div>
-                  <span className="font-bold text-xs text-slate-950">
-                    享宇AI智评 · 全景综合尽调 AI 智能总结
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-zinc-500 flex items-center gap-0.5 font-medium">
-                    {isOverallAiSummaryOpen ? '收起总结' : '展开全景总结'}
-                    {isOverallAiSummaryOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </span>
-                </div>
-              </div>
-
-              {/* 展开后的全景总结内容 */}
-              {isOverallAiSummaryOpen && (
-                <div className="p-5 bg-white/75 backdrop-blur-xl space-y-4 text-xs max-h-[calc(100vh-200px)] overflow-y-auto border-t border-slate-100/80">
-                  
-                  {/* 核心总括 */}
-                  <div className="p-4 bg-cyan-50/40 backdrop-blur-md rounded-lg border border-cyan-100/80 space-y-1.5">
-                    <strong className="text-slate-950 block text-xs flex items-center gap-1.5 font-bold">
-                      <Sparkles className="w-3.5 h-3.5 text-[#0ea5e9]" />
-                      企业信用全景综合画像：
-                    </strong>
-                    <p className="text-zinc-700 leading-relaxed text-xs">
-                      {OVERALL_SUMMARY.summary}
-                    </p>
+            {/* 全景综合尽调 AI 智能总结卡片 (sticky top-0 紧贴阅读器顶部，不再留出 115px 白条空洞) */}
+            {OVERALL_SUMMARY && (
+              <div className="shadcn-card sticky top-0 z-20 bg-white/95 backdrop-blur-xl overflow-hidden shadow-sm border border-slate-200/80 rounded-xl transition-all">
+                
+                {/* 顶栏收起/展开控制条 */}
+                <div 
+                  onClick={() => setIsOverallAiSummaryOpen(!isOverallAiSummaryOpen)}
+                  className={`px-4 py-3 bg-cyan-50/40 backdrop-blur-md hover:bg-cyan-50/60 flex items-center justify-between cursor-pointer ${isOverallAiSummaryOpen ? 'border-b border-cyan-100/70' : ''} transition-colors select-none`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-6 h-6 rounded-md bg-gradient-to-br from-sky-400 to-[#0ea5e9] text-white flex items-center justify-center shadow-2xs shrink-0">
+                      <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
+                    </div>
+                    <span className="font-bold text-xs sm:text-sm text-slate-950">
+                      享宇AI智评 · 全景综合尽调 AI 智能总结
+                    </span>
                   </div>
 
-                  {/* 全景深度研判要点 */}
-                  <div className="space-y-2.5 p-4 bg-slate-50/70 backdrop-blur-md border border-slate-200/70 rounded-lg">
-                    <strong className="text-xs font-bold text-slate-950 block flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                      <span className="w-1.5 h-3 bg-[#0ea5e9] rounded-full"></span>
-                      📑 全景深度研判要点与风控审查结论：
-                    </strong>
-                    <div className="space-y-2 text-zinc-700 text-xs">
-                      {(OVERALL_SUMMARY?.key_points || OVERALL_SUMMARY?.keyPoints || [
-                        "【工商与治理】注册与实缴资本 500 万元 100% 实缴到位；法定代表人吕顺光持股 90%、黄月英持股 10%，15 项历史工商变更轨迹真实。",
-                        "【经营与涉税】近 12 个月有效销项开票 4063.73 万元，红废比仅 0.42%，36 个月涉税申报矩阵 100% 正常无偷漏税记录。",
-                        "【司法与合规】全国失信被执行人及限高记录为 0，历史涉诉案件已完全出清合规，环保与市监处罚记录为 0。"
-                      ]).map((kp, idx) => (
-                        <div key={idx} className="flex items-start gap-2.5 leading-relaxed bg-white/80 backdrop-blur-md p-3 rounded-md border border-white/90 shadow-2xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#0ea5e9] shrink-0 mt-1.5"></span>
-                          <span className="leading-relaxed text-zinc-800">{kp}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs sm:text-sm text-zinc-500 flex items-center gap-0.5 font-medium">
+                      {isOverallAiSummaryOpen ? '收起总结' : '展开全景总结'}
+                      {isOverallAiSummaryOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 展开后的全景总结内容 (紧凑排版，收缩行距与边距，提升移动端与大屏阅读舒适度) */}
+                {isOverallAiSummaryOpen && (
+                  <div className="p-3 sm:p-4 bg-white/75 backdrop-blur-xl space-y-3 text-xs sm:text-sm max-h-[calc(100vh-220px)] overflow-y-auto border-t border-slate-100/80">
+                    
+                    {/* 核心总括 */}
+                    {OVERALL_SUMMARY.summary && (
+                      <div className="p-2.5 sm:p-3 bg-cyan-50/45 backdrop-blur-md rounded-lg border border-cyan-100/80 space-y-1">
+                        <strong className="text-slate-950 block text-xs sm:text-sm flex items-center gap-1.5 font-bold">
+                          <Sparkles className="w-3.5 h-3.5 text-[#0ea5e9]" />
+                          企业信用全景综合画像：
+                        </strong>
+                        <p className="text-zinc-700 leading-relaxed text-xs sm:text-sm">
+                          {OVERALL_SUMMARY.summary}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 全景深度研判要点 */}
+                    {OVERALL_SUMMARY.key_points && OVERALL_SUMMARY.key_points.length > 0 && (
+                      <div className="space-y-2 p-2.5 sm:p-3 bg-slate-50/70 backdrop-blur-md border border-slate-200/70 rounded-lg">
+                        <strong className="text-xs sm:text-sm font-bold text-slate-950 block flex items-center gap-1.5 border-b border-slate-200/70 pb-1.5">
+                          <span className="w-1.5 h-3 bg-[#0ea5e9] rounded-full"></span>
+                          📑 全景深度研判要点与风控审查结论：
+                        </strong>
+                        <div className="space-y-1.5 text-zinc-700 text-xs sm:text-sm">
+                          {OVERALL_SUMMARY.key_points.map((kp, idx) => (
+                            <div key={idx} className="flex items-start gap-2 bg-white/90 backdrop-blur-md py-1.5 px-2.5 rounded-md border border-white/95 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#0ea5e9] shrink-0 mt-1.5"></span>
+                              <span className="leading-relaxed text-zinc-800 text-xs sm:text-sm">{kp}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                    )}
+
+                    {/* 底部快捷操作 */}
+                    <div className="flex items-center justify-between pt-1 text-xs text-zinc-400">
+                      <span>基于多源权威数据中台拟合生成 · 支持随时调阅</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pointsText = (OVERALL_SUMMARY.key_points || []).map((p, i) => `${i + 1}. ${p}`).join('\n');
+                          handleCopyAiInsight(
+                            `【享宇AI智评 · 全景综合尽调 AI 总结】\n\n【企业信用全景综合画像】\n${OVERALL_SUMMARY.summary}\n\n【全景深度研判要点与风控审查结论】\n${pointsText}\n\n（来源：官方中台与全息档案数据）`
+                          );
+                        }}
+                        className="shadcn-button-outline text-xs py-1 px-2.5 flex items-center gap-1.5"
+                      >
+                        <Copy className="w-3 h-3 text-zinc-400" />
+                        <span>{copied ? '已复制' : '复制全景总结'}</span>
+                      </button>
                     </div>
                   </div>
-
-                  {/* 底部快捷操作 */}
-                  <div className="flex items-center justify-between pt-1 text-[11px] text-zinc-400">
-                    <span>基于多源权威数据中台拟合生成 · 支持随时调阅</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyAiInsight(
-                        `【享宇AI智评 · 全景综合尽调 AI 总结】\n${OVERALL_SUMMARY.summary}\n\n建议授信：¥500.00 万元 (702分 B+级)`
-                      )}
-                      className="shadcn-button-outline text-[11px] py-1 px-2.5"
-                    >
-                      <Copy className="w-3 h-3 text-zinc-400" />
-                      <span>{copied ? '已复制' : '复制全景总结'}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* 报告连续文档流 */}
             <div className="space-y-4 w-full">
@@ -911,276 +1485,53 @@ export default function ReportReaderPage() {
             </div>
           </div>
         </main>
-      </div>
 
-      {/* 4. AI 章节总结分析抽屉 (Sheet) */}
+        {/* 右栏：AI 智能风控对话助手 (分栏平铺模式下，在桌面端作为第 3 栏并排呈现，铺满右侧无留白) */}
+        {isAiDrawerOpen && !isMobile && aiViewMode === 'docked' && (
+          <aside className="flex flex-col shrink-0 w-[420px] xl:w-[480px] bg-white rounded-2xl border border-slate-200/80 shadow-glass h-full z-20 overflow-hidden animate-in fade-in slide-in-from-right-4 duration-200 mr-0">
+            {renderAiChatContent()}
+          </aside>
+        )}
+      </div>
+    </div>
+
+    {/* 4. 顶层浮层抽屉模式 (默认展开在顶层，或移动端全屏，mask={false} 无暗色阻断遮罩，可边看报告边问答) */}
+    {isAiDrawerOpen && (isMobile || aiViewMode === 'drawer') && (
       <Drawer
         open={isAiDrawerOpen}
         onClose={() => setIsAiDrawerOpen(false)}
-        width={540}
-        styles={{ body: { padding: 0, backgroundColor: '#fafafa' }, header: { borderBottom: '1px solid #e4e4e7' } }}
-        title={
-          <div className="flex items-center justify-between w-full pr-2">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-md bg-[#0096DB] flex items-center justify-center text-white shadow-2xs">
-                <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
-              </div>
-              <div>
-                <span className="font-bold text-sm text-slate-950 block leading-tight">
-                  享宇森云 AI 智能审贷风控助手
-                </span>
-                <span className="text-[11px] text-zinc-500 font-normal">
-                  享宇森云企业智评大模型 · 实时报告解析
-                </span>
-              </div>
-            </div>
-            {chatMessages.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setChatMessages([])}
-                className="text-[11px] text-zinc-400 hover:text-rose-600 transition-colors cursor-pointer"
-                title="清空对话历史"
-              >
-                清空记录
-              </button>
-            )}
-          </div>
-        }
+        width={isMobile ? '100%' : 500}
+        closable={false}
+        mask={false}
+        styles={{ 
+          body: { padding: 0, backgroundColor: '#fafafa' },
+          wrapper: { boxShadow: '-8px 0 24px -4px rgba(0, 0, 0, 0.14)' }
+        }}
       >
-        <div className="flex flex-col h-full bg-[#fafafa]">
-          
-          {/* 对话流容器 */}
-          <div className="flex-1 p-4 space-y-4 overflow-y-auto min-h-0">
-            {chatMessages.length === 0 ? (
-              <div className="py-16 text-center space-y-3 px-6">
-                <div className="w-10 h-10 rounded-full bg-cyan-50 border border-cyan-100 text-[#0096DB] mx-auto flex items-center justify-center shadow-2xs">
-                  <Sparkles className="w-5 h-5 text-[#0096DB] animate-pulse" />
-                </div>
-                <h4 className="font-bold text-sm text-slate-950">享宇森云 AI 智能审贷风控助手</h4>
-                <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mx-auto">
-                  基于对本份企业尽调报告原件的<strong className="text-slate-800">实时深度解析与多维核验</strong>，支持点击左侧大纲 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-cyan-50 text-[#0084c2] border border-cyan-200 font-medium text-[10px]"><Sparkles className="w-2.5 h-2.5 text-[#0096DB]" /> AI总结</span> 调阅章节研判，或直接在下方输入框自由提问。
-                </p>
-                {/* 推荐问题气泡 */}
-                <div className="pt-3 flex flex-wrap justify-center gap-1.5 max-w-sm mx-auto">
-                  {QUICK_PROMPTS.map((qp, qIdx) => (
-                    <button
-                      key={qIdx}
-                      type="button"
-                      onClick={() => handleSendMessage(qp.prompt)}
-                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-white hover:bg-cyan-50 hover:text-[#0084c2] hover:border-cyan-200 text-zinc-700 border border-zinc-200 transition-all shadow-2xs cursor-pointer text-left"
-                    >
-                      {qp.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              chatMessages.map((msg, index) => {
-                if (msg.role === 'user') {
-                  return (
-                    <div key={msg.id || index} className="flex items-start justify-end gap-2.5 pl-10">
-                      <div className="bg-[#0096DB] text-white p-3 rounded-lg rounded-tr-xs shadow-2xs text-xs leading-relaxed max-w-[88%]">
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
-                        <span className="text-[10px] text-white/80 block text-right mt-1 font-mono">
-                          {msg.timestamp || '刚刚'}
-                        </span>
-                      </div>
-                      <div className="w-7 h-7 rounded-md bg-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
-                        我
-                      </div>
-                    </div>
-                  );
-                }
-
-                // AI 文本对话气泡 (多轮问答)
-                if (msg.role === 'ai_text') {
-                  return (
-                    <div key={msg.id || index} className="flex items-start gap-2.5 pr-4">
-                      <div className="w-7 h-7 rounded-md bg-[#0096DB] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                        <Bot className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="flex-1 max-w-[92%]">
-                        <div className="bg-white p-4 rounded-lg rounded-tl-xs border border-zinc-200 shadow-2xs space-y-2 text-xs text-slate-900 leading-relaxed">
-                          <div className="whitespace-pre-wrap font-normal leading-relaxed text-zinc-800">
-                            {msg.text}
-                          </div>
-                          <div className="flex items-center justify-between pt-1 border-t border-zinc-100 text-[11px]">
-                            <span className="text-zinc-400 font-mono">{msg.timestamp || '刚刚'} · 享宇森云大模型</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyAiInsight(msg.text)}
-                              className="shadcn-button-outline text-[10px] py-0.5 px-2"
-                            >
-                              <Copy className="w-2.5 h-2.5 text-zinc-400" />
-                              <span>复制</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // AI 章节深度总结卡片 (点击 ✨ AI总结 时插入)
-                const data = msg.data;
-                if (!data) return null;
-                return (
-                  <div key={msg.id || index} className="flex items-start gap-2.5 pr-4">
-                    <div className="w-7 h-7 rounded-md bg-[#0096DB] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                      <Bot className="w-4 h-4 text-white" />
-                    </div>
-                    
-                    <div className="flex-1 space-y-2 max-w-[92%]">
-                      <div className="bg-white p-4 rounded-lg rounded-tl-xs border border-zinc-200 shadow-2xs space-y-3">
-                        
-                        {/* 标题栏 */}
-                        <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-                          <div>
-                            <h4 className="font-bold text-sm text-slate-950 flex items-center gap-1.5">
-                              <span>{data.chapterNo} {data.title}</span>
-                            </h4>
-                            <p className="text-[11px] text-zinc-500 mt-0.5">{data.subtitle}</p>
-                          </div>
-                          {data.scoreTag && (
-                            <span className="shadcn-badge-success font-mono text-[11px]">
-                              {data.scoreTag}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* 核心结论 */}
-                        <div className="p-3 bg-cyan-50/40 border border-cyan-100 rounded-md text-xs text-zinc-800 leading-relaxed">
-                          <strong className="text-slate-950 block mb-1">💡 核心研判结论：</strong>
-                          {data.summary}
-                        </div>
-
-                        {/* 核心指标穿透矩阵 */}
-                        {data.highlights && data.highlights.length > 0 && (
-                          <div>
-                            <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block mb-2">
-                              📊 核心指标穿透
-                            </span>
-                            <div className="grid grid-cols-2 gap-2">
-                              {data.highlights.map((hl, idx) => (
-                                <div key={idx} className="p-2.5 bg-zinc-50/70 border border-zinc-200 rounded-md space-y-1">
-                                  <span className="text-[10px] text-zinc-400 block font-medium">{hl.label}</span>
-                                  <span className="text-xs font-bold text-slate-950 block font-mono">{hl.value}</span>
-                                  <span className="text-[10px] text-zinc-500 block leading-tight">{hl.desc}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* 底部操作与时间 */}
-                        <div className="flex items-center justify-between pt-1 border-t border-zinc-100 text-[11px]">
-                          <span className="text-zinc-400 font-mono">{msg.timestamp || '刚刚'} · 享宇森云大模型</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyAiInsight(
-                              `【享宇森云 AI 总结 - ${data.chapterNo} ${data.title}】\n\n核心结论：${data.summary}`
-                            )}
-                            className="shadcn-button-outline text-[10px] py-0.5 px-2"
-                          >
-                            <Copy className="w-2.5 h-2.5 text-zinc-400" />
-                            <span>复制此条</span>
-                          </button>
-                        </div>
-
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
-            {/* AI 思考中动效 */}
-            {isAiThinking && (
-              <div className="flex items-start gap-2.5 pr-4">
-                <div className="w-7 h-7 rounded-md bg-[#0096DB] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                  <Bot className="w-4 h-4 text-white animate-spin" />
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-zinc-200 shadow-2xs flex items-center gap-2 text-xs text-zinc-500">
-                  <RefreshCw className="w-3.5 h-3.5 text-[#0096DB] animate-spin" />
-                  <span>正在深度解析尽调报告原件并核验事实...</span>
-                </div>
-              </div>
-            )}
-            <div ref={chatBottomRef} />
-          </div>
-
-          {/* 底部对话输入区域 */}
-          <div className="p-3.5 bg-white border-t border-zinc-200 shrink-0 space-y-2.5">
-            {/* 顶部快捷追问胶囊 */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-              {QUICK_PROMPTS.map((qp, qIdx) => (
-                <button
-                  key={qIdx}
-                  type="button"
-                  onClick={() => handleSendMessage(qp.prompt)}
-                  className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-100 hover:bg-cyan-50 hover:text-[#0084c2] hover:border-cyan-200 text-zinc-700 border border-zinc-200 transition-all shrink-0 cursor-pointer"
-                >
-                  {qp.label}
-                </button>
-              ))}
-            </div>
-
-            {/* 输入框与发送按钮 */}
-            <div className="flex items-end gap-2 bg-zinc-50 border border-zinc-200 focus-within:border-[#0096DB] focus-within:ring-2 focus-within:ring-[#0096DB]/20 rounded-md p-1.5 transition-all">
-              <textarea
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                placeholder="针对本份尽调报告提出任何风控、税务、工商或信贷问题..."
-                rows={2}
-                className="w-full bg-transparent border-0 resize-none text-xs text-slate-900 placeholder:text-zinc-400 focus:outline-none px-1 py-0.5 leading-relaxed"
-              />
-              <button
-                type="button"
-                disabled={!chatInput.trim() || isAiThinking}
-                onClick={() => handleSendMessage()}
-                className={`p-2 rounded-md transition-all shrink-0 flex items-center justify-center ${
-                  chatInput.trim() && !isAiThinking
-                    ? 'bg-[#0096DB] text-white shadow-2xs cursor-pointer hover:bg-[#0084c2]'
-                    : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
-                }`}
-                title="发送问题 (Enter)"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-zinc-400 px-1">
-              <span>基于尽调报告原件实时多维解析 · 零幻觉数字核验</span>
-              <span>按 Enter 发送 / Shift+Enter 换行</span>
-            </div>
-          </div>
-
-        </div>
+        {renderAiChatContent()}
       </Drawer>
+    )}
 
-      {/* 5. 最右侧常驻吸边把手 */}
+    {/* 5. 最右侧常驻吸边把手 (仅在 AI 面板收起时展现，一键并排呼出) */}
+    {!isAiDrawerOpen && (
       <aside 
-        aria-label="AI 智能总结常驻入口"
-        className="fixed right-0 top-1/2 -translate-y-1/2 z-40"
+        aria-label="AI 智能问答常驻入口"
+        className="fixed right-0 top-1/2 -translate-y-1/2 z-30"
       >
         <button
           type="button"
           onClick={() => setIsAiDrawerOpen(true)}
-          className="group flex flex-col items-center gap-1.5 py-3.5 px-2.5 bg-gradient-to-b from-sky-400 to-[#0ea5e9] text-white rounded-l-lg shadow-lg border-l border-t border-b border-white/60 backdrop-blur-md hover:from-sky-300 hover:to-[#38bdf8] hover:pl-3 transition-all cursor-pointer select-none"
-          title="点击展开 AI 智能总结与板块研判记录"
+          className="group flex flex-col items-center gap-1.5 py-3.5 px-2.5 bg-gradient-to-b from-sky-400 to-[#0ea5e9] text-white rounded-l-xl shadow-lg border-l border-t border-b border-white/60 backdrop-blur-md hover:from-sky-300 hover:to-[#38bdf8] hover:pl-3 transition-all cursor-pointer select-none"
+          title="展开 AI 智能问答 (与报告并排同屏查看)"
         >
           <Sparkles className="w-4 h-4 text-white animate-pulse group-hover:scale-110 transition-transform" />
           <span className="text-[11px] font-bold tracking-widest text-white [writing-mode:vertical-rl] leading-tight py-1">
-            AI 总结
+            AI 问答
           </span>
           <ChevronLeft className="w-3.5 h-3.5 text-white/80 group-hover:-translate-x-0.5 transition-transform" />
         </button>
       </aside>
+    )}
 
       {/* 📱 移动端专属：报告大纲目录抽屉 */}
       <Drawer
@@ -1194,12 +1545,12 @@ export default function ReportReaderPage() {
           </div>
         }
         placement="left"
-        width={300}
+        width={320}
         open={mobileTocOpen}
         onClose={() => setMobileTocOpen(false)}
         styles={{ body: { padding: '12px' } }}
       >
-        <div className="space-y-1 text-xs">
+        <div className="space-y-1 text-xs sm:text-sm">
           {PDF_TOC_CATALOG.map((item) => {
             const isParentActive = activeChapterId === item.id;
             return (
@@ -1209,19 +1560,38 @@ export default function ReportReaderPage() {
                     jumpToPage(item.page);
                     setMobileTocOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-2 rounded-xl font-medium transition-all flex items-center justify-between cursor-pointer ${
+                  className={`w-full text-left px-2.5 py-2 rounded-xl font-medium transition-all flex items-center justify-between cursor-pointer ${
                     isParentActive 
                       ? 'bg-cyan-50 text-[#0070a4] font-bold border-l-3 border-[#0096DB]' 
                       : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  <span className="truncate pr-2">{item.title}</span>
-                  <span className="text-[11px] font-mono text-slate-400 shrink-0 font-medium">
-                    P.{item.page}
-                  </span>
+                  <span className="truncate pr-1.5 flex-1 text-xs sm:text-sm" title={item.title}>{item.title}</span>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {item.has_ai_summary && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobileTocOpen(false);
+                          handleOpenAiChapter(item.id);
+                        }}
+                        className="px-2 py-0.5 rounded-md text-xs font-semibold bg-cyan-50 hover:bg-cyan-100 text-[#0084c2] flex items-center gap-0.5 transition-all border border-cyan-200/90 shadow-2xs cursor-pointer"
+                        title="点击查看此板块 AI 深度总结"
+                      >
+                        <Sparkles className="w-3 h-3 text-[#0096DB]" />
+                        <span>AI总结</span>
+                      </button>
+                    )}
+                    <span className="text-xs font-mono text-slate-400 font-medium">
+                      P.{item.page}
+                    </span>
+                  </div>
                 </div>
+
                 {item.children && item.children.length > 0 && (
-                  <div className="pl-3 space-y-0.5 border-l border-slate-100 ml-2">
+                  <div className="pl-3 space-y-0.5 border-l border-slate-200 ml-2">
                     {item.children.map((child) => (
                       <div
                         key={child.id}
@@ -1229,14 +1599,14 @@ export default function ReportReaderPage() {
                           jumpToPage(child.page);
                           setMobileTocOpen(false);
                         }}
-                        className={`px-2.5 py-1.5 rounded-lg text-[11px] flex items-center justify-between cursor-pointer ${
+                        className={`px-2.5 py-1.5 rounded-lg text-xs sm:text-[13px] flex items-center justify-between cursor-pointer ${
                           activeSubId === child.id
                             ? 'text-[#0084c2] font-bold bg-cyan-50/60'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                         }`}
                       >
                         <span className="truncate pr-1">{child.title}</span>
-                        <span className="text-[10px] font-mono text-slate-400 shrink-0">P.{child.page}</span>
+                        <span className="text-xs font-mono text-slate-400 shrink-0">P.{child.page}</span>
                       </div>
                     ))}
                   </div>

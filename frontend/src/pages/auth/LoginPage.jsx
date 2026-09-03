@@ -72,8 +72,8 @@ export default function LoginPage() {
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-16 text-slate-900">
       <div className="max-w-md w-full shadcn-card p-8 bg-white space-y-6 shadow-sm border border-zinc-200">
         <div className="text-center space-y-2">
-          <div className="w-11 h-11 rounded-lg bg-zinc-100 border border-zinc-200 mx-auto flex items-center justify-center text-slate-900 mb-2 shadow-2xs">
-            <img src="/brand_logo.png" alt="享宇AI智评" className="w-6 h-6 object-contain" />
+          <div className="w-12 h-12 mx-auto flex items-center justify-center mb-2">
+            <img src="/brand_logo.png" alt="享宇AI智评" className="w-10 h-10 object-contain" />
           </div>
           <h2 className="text-xl font-bold text-slate-950 tracking-tight">手机快捷 注册/登录</h2>
           <p className="text-xs text-zinc-500">

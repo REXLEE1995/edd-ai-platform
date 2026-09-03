@@ -205,68 +205,112 @@ export default function UserBillingPage() {
         </h2>
 
         <div className="shadcn-card bg-white overflow-hidden border border-zinc-200">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-50 text-zinc-500 font-semibold border-b border-zinc-200 uppercase tracking-wider text-[11px]">
-                <tr>
-                  <th className="px-4 py-3">流水编号</th>
-                  <th className="px-4 py-3">变动类型</th>
-                  <th className="px-4 py-3">变动点数</th>
-                  <th className="px-4 py-3">变动后结余</th>
-                  <th className="px-4 py-3">关联主体/说明</th>
-                  <th className="px-4 py-3">操作时间</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {transactions.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="px-4 py-8 text-center text-zinc-400">暂无额度变动明细</td>
-                  </tr>
-                ) : (
-                  transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-zinc-50/70 transition-colors">
-                      <td className="px-4 py-3 font-mono text-zinc-500">{tx.tx_no || `TX${tx.id}`}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium text-slate-900">
+          {transactions.length === 0 ? (
+            <div className="p-8 text-center text-zinc-400 text-xs">暂无额度变动明细</div>
+          ) : (
+            <>
+              {/* 移动端卡片式明细 (垂直流式排版，无需横向滚动) */}
+              <div className="block md:hidden p-3.5 space-y-3">
+                {transactions.map((tx) => {
+                  const isPositive = (tx.amount || tx.delta_quota) > 0;
+                  const deltaVal = tx.amount || tx.delta_quota;
+                  return (
+                    <div key={tx.id} className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/90 space-y-2.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900">
                           {tx.change_type === 'recharge' ? '🟢 购买充值' : (tx.change_type === 'consume' ? '🔴 尽调消耗' : '🎁 系统赠送')}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 font-mono font-bold">
-                        <span className={(tx.amount || tx.delta_quota) > 0 ? 'text-emerald-700' : 'text-rose-600'}>
-                          {(tx.amount || tx.delta_quota) > 0 ? `+${tx.amount || tx.delta_quota}` : (tx.amount || tx.delta_quota)} 次
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-slate-800 font-semibold">{tx.balance_after || tx.after_balance} 次</td>
-                      <td className="px-4 py-3 text-zinc-600">{tx.remark || '-'}</td>
-                      <td className="px-4 py-3 font-mono text-zinc-400">{tx.created_at}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                        <div className="font-mono font-extrabold text-sm">
+                          <span className={isPositive ? 'text-emerald-700' : 'text-rose-600'}>
+                            {isPositive ? `+${deltaVal}` : deltaVal} 次
+                          </span>
+                        </div>
+                      </div>
 
-          {/* 额度变动流水换页组件 */}
-          {txTotal > 0 && (
-            <div className="p-3.5 border-t border-zinc-200 flex items-center justify-between flex-wrap gap-4 bg-zinc-50/40">
-              <span className="text-xs text-slate-500 font-mono">
-                共计 <strong className="text-slate-800 font-semibold">{txTotal}</strong> 条额度流水记录
-              </span>
-              <Pagination
-                current={txPage}
-                pageSize={txPageSize}
-                total={txTotal}
-                showSizeChanger
-                pageSizeOptions={['10', '20', '50']}
-                onChange={(p, ps) => {
-                  setTxPage(p);
-                  setTxPageSize(ps);
-                }}
-                showQuickJumper
-                size="small"
-              />
-            </div>
+                      <div className="text-xs space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200/70">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">变动后结余</span>
+                          <span className="font-mono font-bold text-slate-800">{tx.balance_after ?? tx.after_balance ?? (tx.balance ?? 0)} 次</span>
+                        </div>
+                        {tx.remark && (
+                          <div className="flex items-start justify-between gap-2 pt-1.5 border-t border-slate-100">
+                            <span className="text-slate-500 shrink-0">关联说明</span>
+                            <span className="text-slate-800 text-right leading-relaxed font-medium break-all">{tx.remark}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-0.5">
+                        <span className="truncate pr-2 max-w-[180px]" title={tx.tx_no || `TX${tx.id}`}>
+                          单号: {tx.tx_no || `TX${tx.id}`}
+                        </span>
+                        <span className="shrink-0">{tx.created_at}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 桌面端表格 */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-zinc-50 text-zinc-500 font-semibold border-b border-zinc-200 uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="px-4 py-3">流水编号</th>
+                      <th className="px-4 py-3">变动类型</th>
+                      <th className="px-4 py-3">变动点数</th>
+                      <th className="px-4 py-3">变动后结余</th>
+                      <th className="px-4 py-3">关联主体/说明</th>
+                      <th className="px-4 py-3">操作时间</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {transactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-zinc-50/70 transition-colors">
+                        <td className="px-4 py-3 font-mono text-zinc-500">{tx.tx_no || `TX${tx.id}`}</td>
+                        <td className="px-4 py-3">
+                          <span className="font-medium text-slate-900">
+                            {tx.change_type === 'recharge' ? '🟢 购买充值' : (tx.change_type === 'consume' ? '🔴 尽调消耗' : '🎁 系统赠送')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold">
+                          <span className={(tx.amount || tx.delta_quota) > 0 ? 'text-emerald-700' : 'text-rose-600'}>
+                            {(tx.amount || tx.delta_quota) > 0 ? `+${tx.amount || tx.delta_quota}` : (tx.amount || tx.delta_quota)} 次
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-800 font-semibold">{tx.balance_after ?? tx.after_balance ?? (tx.balance ?? 0)} 次</td>
+                        <td className="px-4 py-3 text-zinc-600">{tx.remark || '-'}</td>
+                        <td className="px-4 py-3 font-mono text-zinc-400">{tx.created_at}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
+        </div>
+
+        {/* 额度变动流水换页组件 */}
+        {txTotal > 0 && (
+          <div className="p-3.5 border-t border-zinc-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-zinc-50/40">
+            <span className="text-xs text-slate-500 font-mono">
+              共计 <strong className="text-slate-800 font-semibold">{txTotal}</strong> 条额度流水记录
+            </span>
+            <Pagination
+              current={txPage}
+              pageSize={txPageSize}
+              total={txTotal}
+              showSizeChanger={true}
+              responsive={false}
+              pageSizeOptions={['10', '20', '50']}
+              onChange={(p, ps) => {
+                setTxPage(p);
+                setTxPageSize(ps);
+              }}
+              size="small"
+            />
+          </div>
+        )}
         </div>
       </div>
 

@@ -109,7 +109,7 @@ export default function RechargeModal({ open, onClose, onSuccess }) {
       {step === 1 ? (
         <div className="space-y-5">
           {/* 弹窗头部 */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 pr-10">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-[#0096DB] text-white flex items-center justify-center shadow-xs">
                 <CreditCard className="w-4 h-4" />
@@ -247,7 +247,7 @@ export default function RechargeModal({ open, onClose, onSuccess }) {
         /* Step 2: 扫码收银台 */
         payingOrder && (
           <div className="space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 pr-10">
               <button
                 type="button"
                 onClick={() => setStep(1)}

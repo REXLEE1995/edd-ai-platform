@@ -171,7 +171,7 @@ export default function ReportAssetsPage() {
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                   <a
-                    href={`/api/v1/reports/${rpt.id}/pdf`}
+                    href={`${(typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL) ? window.APP_CONFIG.API_BASE_URL.replace(/\/api\/?$/, '') : 'http://192.168.110.234:8000'}/api/v1/reports/${rpt.id}/pdf`}
                     download={`微风企尽调报告_${rpt.company_name}.pdf`}
                     target="_blank"
                     rel="noreferrer"

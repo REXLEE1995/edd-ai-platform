@@ -153,7 +153,7 @@ export default function AdminQuotaPage() {
                         {(tx.delta_quota || tx.points_changed) > 0 ? `+${tx.delta_quota || tx.points_changed}` : (tx.delta_quota || tx.points_changed)} 次
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-mono font-semibold text-slate-800">{tx.after_balance || tx.balance_after} 次</td>
+                    <td className="py-3 px-4 font-mono font-semibold text-slate-800">{tx.after_balance ?? tx.balance_after ?? 0} 次</td>
                     <td className="py-3 px-4 text-zinc-600 max-w-xs truncate">{tx.remark}</td>
                     <td className="py-3 px-4 font-mono text-zinc-400">{tx.created_at}</td>
                   </tr>
