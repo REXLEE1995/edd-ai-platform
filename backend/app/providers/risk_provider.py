@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List
-from app.providers.base import BaseProvider
+from typing import Dict, Any, List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.providers.base import BaseProvider, get_third_party_api_config
 from app.mock.mock_data import MOCK_BUSINESS_REGISTRATION, MOCK_COMPANIES
 
 class RiskRadarProvider(BaseProvider):
@@ -10,11 +11,20 @@ class RiskRadarProvider(BaseProvider):
     对接司法涉诉裁判、失信被执行人一票否决、限制高消费、行政处罚、经营异常、动产抵押及全网多头信贷借贷排查
     """
 
-    async def fetch_risk_profile(self, credit_code: str, company_name: str) -> Dict[str, Any]:
+    async def fetch_risk_profile(
+        self,
+        credit_code: str,
+        company_name: str,
+        db: Optional[AsyncSession] = None
+    ) -> Dict[str, Any]:
         """
         获取企业经营与合规司法全景风险档案
+        支持动态读取 sys_third_party_apis 中 RISK_RADAR 的调用模式 (mock/http)
         """
-        if self.is_mock_mode:
+        mode, endpoint = await get_third_party_api_config(
+            db, "RISK_RADAR", default_mode=self.mode, default_endpoint=self.base_url
+        )
+        if mode == "mock" or (mode != "http" and self.is_mock_mode):
             return self._mock_risk_profile(credit_code, company_name)
 
         # 生产环境真实接口调用逻辑

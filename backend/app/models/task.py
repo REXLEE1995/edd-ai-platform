@@ -4,11 +4,11 @@ from sqlalchemy import String, Integer, JSON, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
-class DDTask(Base, TimestampMixin):
+class XYZPTask(Base, TimestampMixin):
     """
     进行中与历史尽调任务表（生命周期过程态）
     """
-    __tablename__ = "dd_tasks"
+    __tablename__ = "xyzp_tasks"
     __table_args__ = {"comment": "AI尽调任务表（记录授权状态、清洗步骤与实时思考流日志）"}
 
     id: Mapped[str] = mapped_column(
@@ -89,12 +89,12 @@ class DDTask(Base, TimestampMixin):
         comment="法人首次完成实名授权的时间戳字符串 (如 2026-08-28 14:16:30)"
     )
     auth_qrcode_url: Mapped[Optional[str]] = mapped_column(
-        String(500), 
+        Text, 
         nullable=True,
         comment="微风企法人授权专属二维码图片 URL"
     )
     auth_link: Mapped[Optional[str]] = mapped_column(
-        String(500), 
+        Text, 
         nullable=True,
         comment="微风企法人授权专属移动端 H5 链接"
     )
@@ -122,7 +122,7 @@ class DDTask(Base, TimestampMixin):
     report_id: Mapped[Optional[str]] = mapped_column(
         String(36), 
         nullable=True,
-        comment="生成完毕后关联的终态报告资产 ID (DDReport.id)"
+        comment="生成完毕后关联的终态报告资产 ID (XYZPReport.id)"
     )
     risk_level: Mapped[Optional[str]] = mapped_column(
         String(20), 
@@ -147,18 +147,21 @@ class DDTask(Base, TimestampMixin):
         comment="微风企外部请求流水号 (requestNo)"
     )
     wfq_pdf_url: Mapped[Optional[str]] = mapped_column(
-        String(1000),
+        Text,
         nullable=True,
         comment="微风企返回的原始远程报告 PDF 下载地址"
     )
     storage_file_id: Mapped[Optional[str]] = mapped_column(
         String(36),
         nullable=True,
-        comment="文件服务中存储的 PDF 文件 ID (TaskFile.id)"
+        comment="文件服务中存储的 PDF 文件 ID (XYZPReport.id)"
     )
-
+    # 兼容历史别名
     completed_at: Mapped[Optional[str]] = mapped_column(
         String(50), 
         nullable=True,
         comment="任务完成归档时间戳字符串"
     )
+
+# 兼容平滑过渡别名
+DDTask = XYZPTask

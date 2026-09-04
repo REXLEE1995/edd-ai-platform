@@ -1,15 +1,19 @@
 import os
 import math
+import json
 from datetime import datetime, timedelta
-from fastapi.responses import FileResponse
+from app.core.timezone import shanghai_now, format_shanghai_iso
+from fastapi.responses import FileResponse, Response
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.core.database import get_db
 from app.models.user import User
-from app.models.report import DDReport
-from app.models.task import DDTask
+from app.models.report import XYZPReport
+from app.models.task import XYZPTask
+from app.models.file_record import TaskFile
+from app.core.minio_client import get_minio_client
 from app.services.quota_service import QuotaService
 from app.api.deps import get_current_user
 
@@ -31,29 +35,29 @@ async def get_my_reports(
     - 接口数据层面进行物理分页，返回 total, page, page_size, total_pages
     """
     query = (
-        select(DDReport, DDTask.task_no)
-        .outerjoin(DDTask, DDReport.task_id == DDTask.id)
-        .where(DDReport.user_id == user.id)
-        .order_by(desc(DDReport.created_at))
+        select(XYZPReport, XYZPTask.task_no)
+        .outerjoin(XYZPTask, XYZPReport.task_id == XYZPTask.id)
+        .where(XYZPReport.user_id == user.id)
+        .order_by(desc(XYZPReport.created_at))
     )
     if keyword:
         keyword = keyword.strip()
         query = query.where(
-            (DDReport.company_name.contains(keyword)) | 
-            (DDReport.credit_code.contains(keyword)) |
-            (DDReport.report_no.contains(keyword)) |
-            (DDTask.task_no.contains(keyword))
+            (XYZPReport.company_name.contains(keyword)) | 
+            (XYZPReport.credit_code.contains(keyword)) |
+            (XYZPReport.report_no.contains(keyword)) |
+            (XYZPTask.task_no.contains(keyword))
         )
     if risk_level:
-        query = query.where(DDReport.risk_level == risk_level)
+        query = query.where(XYZPReport.risk_level == risk_level)
     
     result = await db.execute(query)
     rows = result.all()
     
     data = []
     for r, t_no in rows:
-        # 输出 ISO 8601 UTC 格式字符串 (例如 2026-08-31T06:42:43Z)
-        utc_created_at = r.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if r.created_at else ""
+        # 输出标准 Asia/Shanghai (UTC+8) ISO 8601 格式字符串
+        report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
         formatted_task_no = t_no or (f"TSK{r.created_at.strftime('%Y%m%d%H%M%S')}{r.id[-4:].upper()}" if r.created_at else f"TSK2026083115816{r.id[-4:].upper()}")
         data.append({
             "id": r.id,
@@ -71,72 +75,9 @@ async def get_my_reports(
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
             "is_locked": bool(r.content_json.get("is_locked", False) if r.content_json else False),
             "is_public_only": bool(r.content_json.get("is_public_only", False) if r.content_json else False),
-            "created_at": utc_created_at,
+            "created_at": report_created_at,
             "is_expired": False
         })
-
-    # 预置多任务预设报告（如果尚未存在）
-    existing_companies = [d["company_name"] for d in data]
-    preset_reports = []
-    if "杭州高新智能科技股份有限公司" not in existing_companies:
-        hz_created = datetime.utcnow() - timedelta(days=2)
-        preset_reports.append({
-            "id": "rpt_hangzhou_preloan_001",
-            "report_no": "RPT-39P-16320551",
-            "task_no": "TSK2026083016320551A",
-            "task_id": "task_hangzhou",
-            "company_name": "杭州高新智能科技股份有限公司",
-            "credit_code": "91330100MA28T4998L",
-            "legal_person": "张立明",
-            "risk_level": "green",
-            "score": 92,
-            "suggested_quota_min": 600,
-            "suggested_quota_max": 1000,
-            "summary_ai_comment": "贷前综合分析尽调报告（享宇智评版）",
-            "pdf_url": "/reports/hangzhou_preloan.pdf",
-            "is_locked": False,
-            "is_public_only": False,
-            "created_at": hz_created.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "is_expired": False
-        })
-    if "东莞市顺捷实业有限公司" not in existing_companies:
-        sj_created = datetime.utcnow() - timedelta(days=1)
-        preset_reports.append({
-            "id": "rpt_shunjie_preloan_001",
-            "report_no": "RNO1881255253482991616",
-            "task_no": "TSK20260831094624B88X",
-            "task_id": "task_shunjie",
-            "company_name": "东莞市顺捷实业有限公司",
-            "credit_code": "91441900MA4W6BGB8T",
-            "legal_person": "吕顺光",
-            "risk_level": "blue",
-            "score": 88,
-            "suggested_quota_min": 300,
-            "suggested_quota_max": 500,
-            "summary_ai_comment": "企业全景尽调分析报告（享宇智评版）",
-            "pdf_url": "/reports/shunjie_preloan.pdf",
-            "is_locked": False,
-            "is_public_only": False,
-            "created_at": sj_created.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "is_expired": False
-        })
-
-    for pr in preset_reports:
-        # 对预置报告也做过滤匹配
-        match_keyword = True
-        if keyword:
-            kw_lower = keyword.lower()
-            match_keyword = (
-                kw_lower in pr["company_name"].lower() or 
-                kw_lower in pr["credit_code"].lower() or 
-                kw_lower in pr["report_no"].lower() or
-                kw_lower in pr["task_no"].lower()
-            )
-        match_risk = True
-        if risk_level and pr["risk_level"] != risk_level:
-            match_risk = False
-        if match_keyword and match_risk:
-            data.append(pr)
 
     # 全局严格按生成时间倒序排列 (最新生成的报告排在最前面)
     data.sort(key=lambda x: x.get("created_at") or "", reverse=True)
@@ -166,63 +107,12 @@ async def get_report_detail(
     """
     获取单份报告完整内容与 MinIO 真实 PDF 存证流地址（支持三栏阅读器）
     """
-    # 优先匹配杭州贷前综合分析报告 (39页)
-    if report_id == "rpt_hangzhou_preloan_001" or "hangzhou" in report_id.lower() or "04182501" in report_id.lower() or "16320551" in report_id.lower():
-        hz_created = datetime.utcnow() - timedelta(days=2)
-        return {
-            "code": 0,
-            "data": {
-                "id": "rpt_hangzhou_preloan_001",
-                "report_no": "RPT-39P-16320551",
-                "task_id": "task_hangzhou",
-                "company_name": "杭州高新智能科技股份有限公司",
-                "credit_code": "91330100MA28T4998L",
-                "legal_person": "张立明",
-                "risk_level": "green",
-                "score": 92,
-                "suggested_quota_min": 600,
-                "suggested_quota_max": 1000,
-                "summary_ai_comment": "贷前综合分析尽调报告（享宇智评版）",
-                "total_pages": 39,
-                "pdf_url": "/reports/hangzhou_preloan.pdf",
-                "content": {"is_locked": False, "is_public_only": False},
-                "raw_sources": {},
-                "created_at": hz_created.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "is_expired": False
-            }
-        }
-
-    # 优先匹配顺捷实业 / 享宇智评贷前报告 (61页)
-    if report_id == "rpt_shunjie_preloan_001" or "shunjie" in report_id.lower():
-        sj_created = datetime.utcnow() - timedelta(days=1)
-        return {
-            "code": 0,
-            "data": {
-                "id": "rpt_shunjie_preloan_001",
-                "report_no": "RNO1881255253482991616",
-                "task_id": "task_shunjie",
-                "company_name": "东莞市顺捷实业有限公司",
-                "credit_code": "91441900MA4W6BGB8T",
-                "legal_person": "吕顺光",
-                "risk_level": "blue",
-                "score": 88,
-                "suggested_quota_min": 300,
-                "suggested_quota_max": 500,
-                "summary_ai_comment": "企业全景尽调分析报告（享宇智评版）",
-                "total_pages": 61,
-                "pdf_url": "/reports/shunjie_preloan.pdf",
-                "content": {"is_locked": False, "is_public_only": False},
-                "raw_sources": {},
-                "created_at": sj_created.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "is_expired": False
-            }
-        }
 
     result = await db.execute(
-        select(DDReport).where(
-            (DDReport.id == report_id) | 
-            (DDReport.report_no == report_id) | 
-            (DDReport.task_id == report_id)
+        select(XYZPReport).where(
+            (XYZPReport.id == report_id) | 
+            (XYZPReport.report_no == report_id) | 
+            (XYZPReport.task_id == report_id)
         )
     )
     r = result.scalar_one_or_none()
@@ -230,7 +120,7 @@ async def get_report_detail(
     if not r:
         raise HTTPException(status_code=404, detail="未查询到该尽调报告资产")
     
-    utc_created_at = r.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if r.created_at else ""
+    report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
     return {
         "code": 0,
         "data": {
@@ -248,10 +138,11 @@ async def get_report_detail(
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
             "content": r.content_json or {},
             "raw_sources": r.raw_sources_json or {},
-            "created_at": utc_created_at,
+            "created_at": report_created_at,
             "is_expired": False
         }
     }
+
 
 @router.post("/{report_id}/unlock")
 async def unlock_report_with_quota(
@@ -262,7 +153,7 @@ async def unlock_report_with_quota(
     """
     消耗 1 次额度解锁被遮罩的 AI 深度研判报告
     """
-    result = await db.execute(select(DDReport).where(DDReport.id == report_id, DDReport.user_id == user.id))
+    result = await db.execute(select(XYZPReport).where(XYZPReport.id == report_id, XYZPReport.user_id == user.id))
     r = result.scalar_one_or_none()
     if not r:
         raise HTTPException(status_code=404, detail="报告不存在")
@@ -312,7 +203,7 @@ async def get_report_pdf_file(
 
     # 1. 查询报告记录
     result = await db.execute(
-        select(DDReport).where((DDReport.id == report_id) | (DDReport.report_no == report_id))
+        select(XYZPReport).where((XYZPReport.id == report_id) | (XYZPReport.report_no == report_id))
     )
     r = result.scalar_one_or_none()
 
@@ -471,4 +362,176 @@ async def ai_section_summary(
         chapter_text=section_text
     )
     return {"code": 0, "data": {"summary": summary}}
+
+@router.get("/{report_id}/catalog")
+async def get_report_catalog_from_minio(
+    report_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【从 MinIO 读取目录 JSON 数据 API】完整流程：前端 -> 后端 API -> 从 MinIO 读取 pdf_toc_json 文件 -> 返回给前端
+    """
+    result = await db.execute(
+        select(XYZPReport).where(
+            (XYZPReport.id == report_id) | 
+            (XYZPReport.report_no == report_id) | 
+            (XYZPReport.task_id == report_id)
+        )
+    )
+    r = result.scalar_one_or_none()
+    task_id = r.task_id if r else report_id
+
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_toc_json")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    toc_file = file_result.scalars().first()
+
+    catalog_data = None
+    if toc_file and minio_mgr.object_exists(toc_file.file_path):
+        try:
+            raw_bytes = minio_mgr.get_object_bytes(toc_file.file_path)
+            catalog_data = json.loads(raw_bytes.decode("utf-8"))
+        except Exception as e:
+            pass
+
+    if not catalog_data:
+        toc = (r.content_json.get("toc_catalog") if r and r.content_json else []) or []
+        catalog_data = {
+            "report_id": report_id,
+            "task_id": task_id,
+            "company_name": r.company_name if r else "",
+            "credit_code": r.credit_code if r else "",
+            "toc_catalog": toc,
+            "source": "fallback"
+        }
+
+    return {
+        "code": 0,
+        "message": "success",
+        "data": catalog_data
+    }
+
+@router.get("/{report_id}/content-text")
+async def get_report_content_text_from_minio(
+    report_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    从 MinIO 读取步骤 3 解析形成的纯文本数据 (full_text_content) 并返回
+    """
+    result = await db.execute(
+        select(XYZPReport).where(
+            (XYZPReport.id == report_id) | 
+            (XYZPReport.report_no == report_id) | 
+            (XYZPReport.task_id == report_id)
+        )
+    )
+    r = result.scalar_one_or_none()
+    task_id = r.task_id if r else report_id
+
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_content_txt")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    txt_file = file_result.scalars().first()
+
+    if txt_file and minio_mgr.object_exists(txt_file.file_path):
+        raw_bytes = minio_mgr.get_object_bytes(txt_file.file_path)
+        return Response(content=raw_bytes, media_type="text/plain; charset=utf-8")
+
+    raise HTTPException(status_code=404, detail="未找到该报告的解析文本存证文件")
+
+@router.get("/{report_id}/knowledge-base")
+async def get_report_knowledge_base_from_minio(
+    report_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【从 MinIO 读取步骤 4 AI 生成的标准 Markdown 知识库文件】(knowledge_base.md)
+    """
+    result = await db.execute(
+        select(XYZPReport).where(
+            (XYZPReport.id == report_id) | 
+            (XYZPReport.report_no == report_id) | 
+            (XYZPReport.task_id == report_id)
+        )
+    )
+    r = result.scalar_one_or_none()
+    task_id = r.task_id if r else report_id
+
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_knowledge_md")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    md_file = file_result.scalars().first()
+
+    if md_file and minio_mgr.object_exists(md_file.file_path):
+        raw_bytes = minio_mgr.get_object_bytes(md_file.file_path)
+        return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
+
+    raise HTTPException(status_code=404, detail="未找到该报告的 AI Markdown 知识库存证文件")
+
+@router.get("/{report_id}/summary")
+async def get_report_summary_from_minio(
+    report_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【从 MinIO 读取步骤 5 AI 深度总结 JSON 数据】(summary.json)
+    返回结构: { "code": 0, "message": "success", "data": { "enterprise_profile": "...", "risk_assessment": [...] } }
+    """
+    result = await db.execute(
+        select(XYZPReport).where(
+            (XYZPReport.id == report_id) | 
+            (XYZPReport.report_no == report_id) | 
+            (XYZPReport.task_id == report_id)
+        )
+    )
+    r = result.scalar_one_or_none()
+    task_id = r.task_id if r else report_id
+
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_summary_json")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    summary_file = file_result.scalars().first()
+
+    if summary_file and minio_mgr.object_exists(summary_file.file_path):
+        raw_bytes = minio_mgr.get_object_bytes(summary_file.file_path)
+        try:
+            summary_data = json.loads(raw_bytes.decode("utf-8"))
+            return {
+                "code": 0,
+                "message": "success",
+                "data": summary_data
+            }
+        except Exception:
+            return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
+
+    # 兜底降级查报告中的已存研判数据
+    ov = r.content_json.get("overall_ai_summary") if (r and r.content_json) else None
+    if ov:
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "enterprise_profile": ov.get("summary", ""),
+                "risk_assessment": [kp for kp in ov.get("key_points", [])]
+            }
+        }
+
+    raise HTTPException(status_code=404, detail="未找到该报告的 AI 总结存证文件")
 

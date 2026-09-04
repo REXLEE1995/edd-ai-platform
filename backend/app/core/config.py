@@ -2,13 +2,16 @@ import os
 from typing import List
 from pydantic_settings import BaseSettings
 
-db_path_str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'edd_v6.db')).replace('\\', '/')
+db_path_str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'xyzp_v6.db')).replace('\\', '/')
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "享宇AI智评"
     VERSION: str = "2.2.0"
     API_V1_STR: str = "/api/v1"
     API_ADMIN_STR: str = "/api/admin"
+
+    # 全局业务时区配置
+    TIMEZONE: str = "Asia/Shanghai"
 
     # 公网/局域网真实服务 IP 或域名 (用于短链生成、二维码、对外分享和微风企授权回调，如 http://192.168.110.234:8000)
     PUBLIC_BASE_URL: str = ""
@@ -61,9 +64,9 @@ class Settings(BaseSettings):
     # LLM 智能体与 New-API Token 池网关配置
     # ==========================================
     LLM_PROVIDER: str = "newapi"  # "mock" | "newapi" | "openai" | "deepseek"
-    NEW_API_BASE_URL: str = "http://127.0.0.1:3000/v1"
-    NEW_API_KEY: str = "sk-newapi-master-key"
-    NEW_API_MODEL: str = "deepseek-chat"
+    NEW_API_BASE_URL: str = "http://192.168.110.234:3000/v1"
+    NEW_API_KEY: str = "sk-dpcvzG8pLOR3PI0GcZ24S5cybDpNxPGTipPEXd0ETtw2WgBE"
+    NEW_API_MODEL: str = "xyzp-ai"
     NEW_API_TIMEOUT_SECONDS: int = 60
     
     # 兼容通用 OpenAI 变量
@@ -71,7 +74,7 @@ class Settings(BaseSettings):
     OPENAI_API_BASE: str = "http://127.0.0.1:3000/v1"
 
     # Security
-    SECRET_KEY: str = "edd-ai-platform-super-secure-local-dev-jwt-secret-key-2026"
+    SECRET_KEY: str = "xyzp-ai-platform-super-secure-local-dev-jwt-secret-key-2026"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 4320
 

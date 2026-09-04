@@ -1,8 +1,36 @@
 import logging
 from typing import Dict, Any, Optional
 import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.third_party_api import SysThirdPartyApi
 
-logger = logging.getLogger("edd.providers")
+logger = logging.getLogger("xyzp.providers")
+
+async def get_third_party_api_config(
+    db: Optional[AsyncSession],
+    api_code: str,
+    default_mode: str = "mock",
+    default_endpoint: str = ""
+) -> tuple[str, str]:
+    """
+    检索 sys_third_party_apis 三方接口字典表：
+    返回 (call_mode, endpoint_url)，控制是否走 mock / http 以及端点 URL
+    """
+    if db is not None:
+        try:
+            result = await db.execute(
+                select(SysThirdPartyApi).where(
+                    SysThirdPartyApi.api_code == api_code,
+                    SysThirdPartyApi.is_enabled == True
+                )
+            )
+            api_config = result.scalar_one_or_none()
+            if api_config:
+                return api_config.call_mode, api_config.endpoint_url
+        except Exception as err:
+            logger.warning(f"[Provider] Failed to query sys_third_party_apis for {api_code}: {err}")
+    return default_mode, default_endpoint
 
 class BaseProvider:
     """

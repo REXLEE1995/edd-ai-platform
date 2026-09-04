@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
 from app.models.user import User
-from app.models.task import DDTask
+from app.models.task import XYZPTask
 from app.models.quota import QuotaTransaction
 from app.models.order import Order
 from app.models.admin import AdminUser
@@ -24,10 +24,10 @@ async def get_dashboard_metrics(
     total_users = user_count_res.scalar() or 0
 
     # 尽调任务总数与已完成数
-    task_count_res = await db.execute(select(func.count(DDTask.id)))
+    task_count_res = await db.execute(select(func.count(XYZPTask.id)))
     total_tasks = task_count_res.scalar() or 0
 
-    completed_tasks_res = await db.execute(select(func.count(DDTask.id)).where(DDTask.status == "completed"))
+    completed_tasks_res = await db.execute(select(func.count(XYZPTask.id)).where(XYZPTask.status == "completed"))
     completed_tasks = completed_tasks_res.scalar() or 0
 
     # 平台总充值收入

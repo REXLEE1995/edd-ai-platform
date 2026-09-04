@@ -15,16 +15,17 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)]
 )
-for logger_name in ["edd", "edd.cleansing", "edd.storage", "edd.task", "edd.weifengqi", "app"]:
+for logger_name in ["xyzp", "xyzp.cleansing", "xyzp.storage", "xyzp.tasks", "xyzp.weifengqi", "xyzp.providers", "app"]:
     logging.getLogger(logger_name).setLevel(logging.INFO)
 
-logger = logging.getLogger("edd.server")
+logger = logging.getLogger("xyzp.server")
 
 # 前台 SaaS 路由
 from app.api.v1.auth import router as v1_auth_router
 from app.api.v1.search import router as v1_search_router
 from app.api.v1.tasks import router as v1_tasks_router
 from app.api.v1.reports import router as v1_reports_router
+from app.api.v1.report_chat import router as v1_report_chat_router
 from app.api.v1.billing import router as v1_billing_router
 from app.api.v1.shares import router as v1_shares_router
 
@@ -38,8 +39,8 @@ from app.api.admin.settings import router as admin_settings_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时自动初始化本地 SQLite 数据库与预置初始数据
-    logger.info("🚀 正在初始化本地 SQLite 数据库与预置系统数据...")
+    # 启动时自动初始化数据库表结构与预置系统数据
+    logger.info("🚀 正在初始化数据库表结构与预置系统配置...")
     await init_db()
     logger.info("✅ 尽调平台后端服务启动就绪，数据清洗中台与 MinIO 存证引擎已待命！")
     yield
@@ -52,10 +53,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# 允许跨域
+# 允许全量跨域 (支持前端开发者通过局域网 IP / localhost 连接)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # 本地开发全放行
+    allow_origin_regex=".*", # 支持任意局域网 IP/域名 跨域并携带凭证
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +80,7 @@ app.include_router(v1_auth_router, prefix="/api/v1")
 app.include_router(v1_search_router, prefix="/api/v1")
 app.include_router(v1_tasks_router, prefix="/api/v1")
 app.include_router(v1_reports_router, prefix="/api/v1")
+app.include_router(v1_report_chat_router, prefix="/api/v1")
 app.include_router(v1_billing_router, prefix="/api/v1")
 app.include_router(v1_shares_router, prefix="/api/v1")
 
@@ -122,10 +124,10 @@ async def redirect_short_link(short_code: str):
     from fastapi.responses import RedirectResponse, HTMLResponse
     from sqlalchemy import select
     from app.core.database import AsyncSessionLocal
-    from app.models.task import DDTask
+    from app.models.task import XYZPTask
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(DDTask).where(DDTask.short_code == short_code))
+        result = await session.execute(select(XYZPTask).where(XYZPTask.short_code == short_code))
         task = result.scalar_one_or_none()
         if task and task.auth_link:
             return RedirectResponse(url=task.auth_link, status_code=302)

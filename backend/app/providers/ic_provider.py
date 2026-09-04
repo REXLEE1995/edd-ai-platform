@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List
-from app.providers.base import BaseProvider
+from typing import Dict, Any, List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.providers.base import BaseProvider, get_third_party_api_config
 from app.mock.mock_data import MOCK_BUSINESS_REGISTRATION, MOCK_COMPANIES
 
 class ICDataProvider(BaseProvider):
@@ -10,11 +11,20 @@ class ICDataProvider(BaseProvider):
     对接企业登记照面信息、股东股权及出资穿透、主要管理人员（董监高）、历史变更轨迹与对外投资分支
     """
 
-    async def fetch_ic_full_profile(self, credit_code: str, company_name: str) -> Dict[str, Any]:
+    async def fetch_ic_full_profile(
+        self,
+        credit_code: str,
+        company_name: str,
+        db: Optional[AsyncSession] = None
+    ) -> Dict[str, Any]:
         """
         获取企业完整工商档案（包含股东穿透与董监高）
+        支持动态读取 sys_third_party_apis 中 IC_ENTERPRISE 的调用模式 (mock/http)
         """
-        if self.is_mock_mode:
+        mode, endpoint = await get_third_party_api_config(
+            db, "IC_ENTERPRISE", default_mode=self.mode, default_endpoint=self.base_url
+        )
+        if mode == "mock" or (mode != "http" and self.is_mock_mode):
             return self._mock_ic_profile(credit_code, company_name)
 
         # 生产环境真实接口调用逻辑

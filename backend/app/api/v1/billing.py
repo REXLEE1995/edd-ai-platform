@@ -1,6 +1,7 @@
 import math
 import uuid
 from datetime import datetime
+from app.core.timezone import shanghai_now
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,7 +110,7 @@ async def mock_pay_order(
         return {"code": 0, "message": "该订单已完成支付，无需重复入账", "data": {"balance_quota": user.balance_quota}}
 
     order.status = "paid"
-    order.paid_at = datetime.utcnow()
+    order.paid_at = shanghai_now()
 
     # 额度入账
     balance_before = user.balance_quota

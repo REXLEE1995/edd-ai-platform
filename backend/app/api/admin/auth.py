@@ -1,11 +1,13 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, verify_password, decode_access_token
 from app.models.admin import AdminUser
 from app.schemas.auth import AdminLoginRequest, TokenResponse, AdminInfoSchema
-from app.api.deps import get_current_admin
+from app.api.deps import get_current_admin, security
 
 router = APIRouter(prefix="/auth", tags=["后台管理员认证"])
 
@@ -47,3 +49,29 @@ async def get_admin_profile(admin: AdminUser = Depends(get_current_admin)):
         role=admin.role,
         status=admin.status
     )
+
+@router.post("/logout")
+async def admin_logout(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    管理员退出登录接口 (支持安全登出与清理前端凭证)
+    """
+    username = None
+    if credentials and credentials.credentials:
+        payload = decode_access_token(credentials.credentials)
+        if payload and payload.get("type") == "admin":
+            admin_id = payload.get("sub")
+            result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id))
+            admin = result.scalar_one_or_none()
+            if admin:
+                username = admin.username
+
+    return {
+        "code": 0,
+        "message": "已成功退出管理员登录",
+        "data": {
+            "username": username or "admin"
+        }
+    }

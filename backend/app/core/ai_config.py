@@ -1,26 +1,13 @@
-import os
-import json
 import time
 import logging
 from typing import Dict, Any, Optional
 from openai import AsyncOpenAI
 from app.core.config import settings
 
-logger = logging.getLogger("edd.ai.config")
+logger = logging.getLogger("xyzp.ai.config")
 
-CONFIG_FILE_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'ai_settings.json')
-)
-
-# 默认全局配置模版
-DEFAULT_AI_CONFIG: Dict[str, Any] = {
-    "llm_provider": getattr(settings, "LLM_PROVIDER", "newapi"),
-    "new_api_base_url": getattr(settings, "NEW_API_BASE_URL", "http://127.0.0.1:3000/v1"),
-    "new_api_key": getattr(settings, "NEW_API_KEY", ""),
-    "new_api_model": getattr(settings, "NEW_API_MODEL", "deepseek-chat"),
-    "temperature": 0.3,
-    "timeout_seconds": getattr(settings, "NEW_API_TIMEOUT_SECONDS", 60),
-    "is_enabled": True,
+# 内存保留的最新诊断探针状态
+_DIAGNOSTIC_STATE: Dict[str, Any] = {
     "last_test_at": None,
     "last_test_status": None,
     "last_test_latency_ms": None,
@@ -29,36 +16,27 @@ DEFAULT_AI_CONFIG: Dict[str, Any] = {
 
 def load_ai_config() -> Dict[str, Any]:
     """
-    动态加载持久化的 AI 模型与 Token 网关配置
+    加载当前系统的 AI 网关配置 (以 .env 配置文件为单一真理源)
     """
-    config = dict(DEFAULT_AI_CONFIG)
-    try:
-        if os.path.exists(CONFIG_FILE_PATH):
-            with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
-                saved = json.load(f)
-                config.update(saved)
-    except Exception as e:
-        logger.error(f"[AIConfig] Failed to load ai_settings.json: {e}")
-    
-    return config
+    return {
+        "llm_provider": getattr(settings, "LLM_PROVIDER", "newapi"),
+        "new_api_base_url": getattr(settings, "NEW_API_BASE_URL", "http://192.168.110.234:3000/v1"),
+        "new_api_key": getattr(settings, "NEW_API_KEY", ""),
+        "new_api_model": getattr(settings, "NEW_API_MODEL", "xyzp-ai"),
+        "temperature": 0.3,
+        "timeout_seconds": getattr(settings, "NEW_API_TIMEOUT_SECONDS", 60),
+        "is_enabled": True,
+        **_DIAGNOSTIC_STATE
+    }
 
-def save_ai_config(new_config: Dict[str, Any]) -> Dict[str, Any]:
+async def save_ai_config(new_config: Dict[str, Any]) -> Dict[str, Any]:
     """
-    保存并持久化 AI 配置，使全站 AI 服务即时生效
+    兼容保存接口：系统已采用 .env 配置文件纳管，仅记录探针诊断结果
     """
-    current = load_ai_config()
-    current.update(new_config)
-    
-    try:
-        os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
-        with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as f:
-            json.dump(current, f, ensure_ascii=False, indent=2)
-        logger.info(f"[AIConfig] AI configuration updated and persisted to {CONFIG_FILE_PATH}")
-    except Exception as e:
-        logger.error(f"[AIConfig] Failed to save ai_settings.json: {e}")
-        raise e
-        
-    return current
+    for k in ["last_test_at", "last_test_status", "last_test_latency_ms", "last_test_msg"]:
+        if k in new_config:
+            _DIAGNOSTIC_STATE[k] = new_config[k]
+    return load_ai_config()
 
 async def test_ai_connectivity(
     base_url: Optional[str] = None,
@@ -67,26 +45,24 @@ async def test_ai_connectivity(
     provider: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    对指定的 AI 网关或当前配置发起真实心跳连通性测试
+    核心健康诊断探针：即时测试与 New API 统一网关的网络连通性与响应耗时
     """
     current = load_ai_config()
-    target_base_url = (base_url or current.get("new_api_base_url") or "http://127.0.0.1:3000/v1").rstrip("/")
+    target_base_url = (base_url or current.get("new_api_base_url") or "http://192.168.110.234:3000/v1").rstrip("/")
     target_api_key = api_key if api_key is not None else current.get("new_api_key", "")
-    target_model = model or current.get("new_api_model") or "deepseek-chat"
-    target_provider = provider or current.get("llm_provider") or "newapi"
+    target_model = model or current.get("new_api_model") or "xyzp-ai"
 
     if not target_api_key or target_api_key.strip() == "":
         return {
             "success": False,
             "latency_ms": 0,
-            "error": "API Key 不能为空，请先在输入框中填入令牌密钥",
+            "error": "API Key 不能为空，请检查 .env 中的 NEW_API_KEY 配置",
             "model": target_model,
             "base_url": target_base_url
         }
 
     start_time = time.time()
     try:
-        # 创建轻量级临时测试客户端
         client = AsyncOpenAI(
             api_key=target_api_key.strip(),
             base_url=target_base_url,
@@ -99,15 +75,16 @@ async def test_ai_connectivity(
                 {"role": "system", "content": "You are an AI diagnostic probe."},
                 {"role": "user", "content": "Ping"}
             ],
-            max_tokens=15,
+            max_tokens=50,
             temperature=0.1
         )
         
         latency = int((time.time() - start_time) * 1000)
-        reply = response.choices[0].message.content if response.choices else "OK"
+        msg = response.choices[0].message if response.choices else None
+        reply = (msg.content if msg and msg.content else getattr(msg, "reasoning", None) or "OK") if msg else "OK"
         
-        # 记录测试成功状态
-        save_ai_config({
+        # 记录探针诊断结果
+        _DIAGNOSTIC_STATE.update({
             "last_test_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "last_test_status": "success",
             "last_test_latency_ms": latency,
@@ -126,8 +103,8 @@ async def test_ai_connectivity(
         latency = int((time.time() - start_time) * 1000)
         error_msg = str(e)
         
-        # 记录测试失败状态
-        save_ai_config({
+        # 记录异常状态
+        _DIAGNOSTIC_STATE.update({
             "last_test_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "last_test_status": "failed",
             "last_test_latency_ms": latency,

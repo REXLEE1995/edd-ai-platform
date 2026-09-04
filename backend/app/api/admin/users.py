@@ -5,7 +5,7 @@ from sqlalchemy import select, func, desc
 from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.models.user import User
-from app.models.task import DDTask
+from app.models.task import XYZPTask
 from app.models.quota import QuotaTransaction
 from app.models.admin import AdminUser
 from app.models.audit import AdminAuditLog
@@ -88,7 +88,7 @@ async def get_admin_user_detail(
     
     # 获取该用户的尽调任务历史
     tasks_res = await db.execute(
-        select(DDTask).where(DDTask.user_id == user.id).order_by(desc(DDTask.created_at)).limit(20)
+        select(XYZPTask).where(XYZPTask.user_id == user.id).order_by(desc(XYZPTask.created_at)).limit(20)
     )
     tasks = tasks_res.scalars().all()
     task_items = [{

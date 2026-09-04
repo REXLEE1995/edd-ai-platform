@@ -3,13 +3,14 @@ import uuid
 import random
 from typing import Optional
 from datetime import datetime, timedelta
+from app.core.timezone import shanghai_now
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.core.database import get_db
 from app.models.user import User
-from app.models.report import DDReport
+from app.models.report import XYZPReport
 from app.models.report_share import ReportShare
 from app.api.deps import get_current_user
 
@@ -39,7 +40,7 @@ def compute_share_expiry_info(expire_at: Optional[datetime]) -> tuple[bool, Opti
     if expire_at is None:
         return False, None, "永久有效 (不过期)", None
     
-    now = datetime.utcnow()
+    now = shanghai_now()
     diff = expire_at - now
     if diff.total_seconds() <= 0:
         return True, 0, f"分享链接已失效 (失效于 {expire_at.strftime('%Y-%m-%d %H:%M')})", expire_at.strftime("%Y-%m-%d %H:%M:%S")
@@ -65,7 +66,7 @@ async def create_or_get_report_share(
     company_name = "东莞市顺捷实业有限公司"
     credit_code = "91441900MA4W6BGB8T"
 
-    result = await db.execute(select(DDReport).where(DDReport.id == report_id))
+    result = await db.execute(select(XYZPReport).where(XYZPReport.id == report_id))
     r = result.scalar_one_or_none()
 
     if r:
@@ -81,7 +82,7 @@ async def create_or_get_report_share(
     # 2. 计算自定义失效时间 (0 或 None 代表永久有效)
     expire_days = req.expire_days if req and req.expire_days is not None else 15
     if expire_days is not None and expire_days > 0:
-        expire_at = datetime.utcnow() + timedelta(days=expire_days)
+        expire_at = shanghai_now() + timedelta(days=expire_days)
     else:
         expire_at = None
 
@@ -229,7 +230,7 @@ async def get_my_shares(
 
     # 若没有任何分享，默认塞入一条示例分享
     if len(data) == 0:
-        default_exp = datetime.utcnow() + timedelta(days=14)
+        default_exp = shanghai_now() + timedelta(days=14)
         is_expired, remaining_days, expires_in_text, exp_str = compute_share_expiry_info(default_exp)
         data.append({
             "id": "sh_demo_001",
@@ -244,8 +245,8 @@ async def get_my_shares(
             "is_expired": is_expired,
             "expires_in_text": expires_in_text,
             "view_count": 3,
-            "last_accessed_at": (datetime.utcnow() - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"),
-            "created_at": (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+            "last_accessed_at": (shanghai_now() - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S"),
+            "created_at": (shanghai_now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
         })
 
     return {"code": 0, "data": data}
@@ -288,9 +289,9 @@ async def activate_share(
             return {"code": 0, "message": "已重新开启分享链接"}
         raise HTTPException(status_code=404, detail="分享记录不存在")
 
-    if share.expire_at and datetime.utcnow() > share.expire_at:
+    if share.expire_at and shanghai_now() > share.expire_at:
         # 如果已过期，重新开启时默认顺延 15 天
-        share.expire_at = datetime.utcnow() + timedelta(days=15)
+        share.expire_at = shanghai_now() + timedelta(days=15)
 
     share.status = "active"
     await db.commit()
@@ -341,11 +342,11 @@ async def update_share_expiration(
         raise HTTPException(status_code=404, detail="分享记录不存在")
 
     if req.expire_days is not None and req.expire_days > 0:
-        share.expire_at = datetime.utcnow() + timedelta(days=req.expire_days)
+        share.expire_at = shanghai_now() + timedelta(days=req.expire_days)
     else:
         share.expire_at = None
 
-    if share.status == "expired" and (share.expire_at is None or datetime.utcnow() < share.expire_at):
+    if share.status == "expired" and (share.expire_at is None or shanghai_now() < share.expire_at):
         share.status = "active"
 
     await db.commit()
@@ -375,7 +376,7 @@ async def get_share_public_info(
     """
     # 兼容内置演示 share_code
     if share_code == "sh_shunjie88" or "shunjie" in share_code:
-        exp = datetime.utcnow() + timedelta(days=14)
+        exp = shanghai_now() + timedelta(days=14)
         is_expired, remaining_days, expires_in_text, exp_str = compute_share_expiry_info(exp)
         return {
             "code": 0,
@@ -388,7 +389,7 @@ async def get_share_public_info(
                 "remaining_days": remaining_days,
                 "is_expired": is_expired,
                 "expires_in_text": expires_in_text,
-                "created_at": (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+                "created_at": (shanghai_now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
             }
         }
 
@@ -454,7 +455,7 @@ async def verify_share_access_code(
                 },
                 "share_info": {
                     "share_code": code,
-                    "expire_at": (datetime.utcnow() + timedelta(days=14)).strftime("%Y-%m-%d %H:%M:%S"),
+                    "expire_at": (shanghai_now() + timedelta(days=14)).strftime("%Y-%m-%d %H:%M:%S"),
                     "remaining_days": 14,
                     "expires_in_text": "有效期至 14 天后 (剩余 14 天)"
                 }
@@ -470,7 +471,7 @@ async def verify_share_access_code(
     if share.status == "revoked":
         raise HTTPException(status_code=403, detail="该分享链接已被发起人撤销关闭，无法查看")
 
-    now = datetime.utcnow()
+    now = shanghai_now()
     if share.expire_at is not None and now > share.expire_at:
         share.status = "expired"
         await db.commit()
@@ -486,7 +487,7 @@ async def verify_share_access_code(
     await db.commit()
 
     # 5. 加载报告详情
-    res_rep = await db.execute(select(DDReport).where(DDReport.id == share.report_id))
+    res_rep = await db.execute(select(XYZPReport).where(XYZPReport.id == share.report_id))
     r = res_rep.scalar_one_or_none()
 
     if not r:

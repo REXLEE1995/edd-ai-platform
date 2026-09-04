@@ -8,7 +8,7 @@ class TaskFile(Base, TimestampMixin):
     """
     尽调任务文件存证与物理存储记录表
     """
-    __tablename__ = "dd_task_files"
+    __tablename__ = "xyzp_task_files"
     __table_args__ = {"comment": "任务文件与报告PDF物理存储存证记录表"}
 
     id: Mapped[str] = mapped_column(

@@ -29,7 +29,7 @@ class ReportShare(Base, TimestampMixin):
         String(36),
         index=True,
         nullable=False,
-        comment="被分享的尽调报告 ID (DDReport.id)"
+        comment="被分享的尽调报告 ID (XYZPReport.id)"
     )
     user_id: Mapped[str] = mapped_column(
         String(36),

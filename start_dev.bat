@@ -22,10 +22,10 @@ if %errorlevel% neq 0 (
 )
 
 echo [2/3] 启动 FastAPI 异步后端服务 (http://127.0.0.1:8000)...
-start "EDD AI Backend (FastAPI)" cmd /k "cd backend && python main.py"
+start "XYZP AI Backend (FastAPI)" cmd /k "cd backend && python main.py"
 
 echo [3/3] 启动 Vite 前端服务 (http://localhost:5173)...
-start "EDD AI Frontend (Vite)" cmd /k "cd frontend && npm run dev"
+start "XYZP AI Frontend (Vite)" cmd /k "cd frontend && npm run dev"
 
 echo.
 echo ========================================================

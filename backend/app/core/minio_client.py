@@ -9,7 +9,7 @@ from minio import Minio
 from minio.error import S3Error
 from app.core.config import settings
 
-logger = logging.getLogger("edd.minio")
+logger = logging.getLogger("xyzp.minio")
 
 class MinioClientManager:
     """

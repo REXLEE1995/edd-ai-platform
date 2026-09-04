@@ -1,15 +1,16 @@
 import uuid
 from typing import Optional
 from datetime import datetime, timedelta
+from app.core.timezone import shanghai_now
 from sqlalchemy import String, Integer, JSON, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
-class DDReport(Base, TimestampMixin):
+class XYZPReport(Base, TimestampMixin):
     """
     尽调报告终态资产模型，支持三栏阅读与双向底稿溯源
     """
-    __tablename__ = "dd_reports"
+    __tablename__ = "xyzp_reports"
     __table_args__ = {"comment": "尽调报告终态资产表（存储完整看板内容与微风企底稿溯源库）"}
 
     id: Mapped[str] = mapped_column(
@@ -122,18 +123,21 @@ class DDReport(Base, TimestampMixin):
     def effective_expired_at(self) -> datetime:
         if self.expired_at:
             return self.expired_at
-        base_time = self.created_at or datetime.utcnow()
+        base_time = self.created_at or shanghai_now()
         return base_time + timedelta(days=15)
 
     @property
     def is_expired(self) -> bool:
-        return datetime.utcnow() > self.effective_expired_at
+        return shanghai_now() > self.effective_expired_at
 
     @property
     def remaining_days(self) -> int:
-        now = datetime.utcnow()
+        now = shanghai_now()
         diff = self.effective_expired_at - now
         if diff.total_seconds() <= 0:
             return 0
         return max(1, int(diff.total_seconds() // 86400) + 1)
+
+# 兼容平滑过渡别名
+DDReport = XYZPReport
 

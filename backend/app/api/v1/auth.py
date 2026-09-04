@@ -3,13 +3,18 @@ from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
-from app.core.security import create_access_token, get_password_hash, verify_password
+import logging
+from app.core.security import create_access_token, get_password_hash, verify_password, decode_access_token
 from app.models.user import User
 from app.models.quota import QuotaTransaction
+from app.models.system_setting import SystemSetting
 from app.services.sms_service import SMSService
+
+logger = logging.getLogger("xyzp.auth")
 from app.schemas.auth import (
     LoginWithPhoneRequest, 
     TokenResponse, 
@@ -17,7 +22,7 @@ from app.schemas.auth import (
     ProfileUpdateRequest,
     ChangePasswordRequest
 )
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, security
 
 router = APIRouter(prefix="/auth", tags=["用户认证与个人中心"])
 
@@ -67,38 +72,48 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
     is_new_user = False
     if not user:
         is_new_user = True
-        # 自动注册新用户并赠送 1 次全景尽调体验额度
+        # 动态从系统业务配置表读取新用户首次登录赠送额度 (支持运营在管理后台随时调配)
+        gift_quota = 1
+        try:
+            biz_cfg_res = await db.execute(select(SystemSetting).where(SystemSetting.key == "business_config"))
+            biz_setting = biz_cfg_res.scalar_one_or_none()
+            if biz_setting and isinstance(biz_setting.value, dict):
+                gift_quota = int(biz_setting.value.get("default_gift_quota", 1))
+        except Exception as e:
+            logger.warning(f"[Auth] 读取 business_config 失败，采用默认赠送 1 次: {e}")
+
         user = User(
             id=f"user-{uuid.uuid4().hex[:12]}",
             phone=phone,
             hashed_password=get_password_hash(req.password or "123456"),
             company_name=f"企业用户_{phone[-4:]}",
-            balance_quota=1, # 注册即赠送 1 次免费额度
+            balance_quota=gift_quota,
             total_recharge_quota=0,
             total_consumed_quota=0,
-            total_gifted_quota=1,
+            total_gifted_quota=gift_quota,
             status="active",
-            tags=["新注册用户", "赠送体验"]
+            tags=["新注册用户", "赠送体验"] if gift_quota > 0 else ["新注册用户"]
         )
         db.add(user)
         
-        # 记录注册赠送流水
-        tx = QuotaTransaction(
-            tx_no=f"QTX{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:4].upper()}",
-            user_id=user.id,
-            user_phone=user.phone,
-            user_company=user.company_name,
-            change_type="gift",
-            amount=1,
-            balance_before=0,
-            balance_after=1,
-            ref_type="system",
-            ref_id="REG_GIFT",
-            operator_type="system",
-            operator_name="SYSTEM",
-            remark="新用户首次登录系统赠送 1 次免费体验额度"
-        )
-        db.add(tx)
+        # 若运营配置赠送额度大于 0，则记录赠送额度流水
+        if gift_quota > 0:
+            tx = QuotaTransaction(
+                tx_no=f"QTX{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:4].upper()}",
+                user_id=user.id,
+                user_phone=user.phone,
+                user_company=user.company_name,
+                change_type="gift",
+                amount=gift_quota,
+                balance_before=0,
+                balance_after=gift_quota,
+                ref_type="system",
+                ref_id="REG_GIFT",
+                operator_type="system",
+                operator_name="SYSTEM",
+                remark=f"新用户首次登录系统赠送 {gift_quota} 次免费体验额度"
+            )
+            db.add(tx)
         await db.commit()
         await db.refresh(user)
     else:
@@ -106,7 +121,7 @@ async def login_with_phone(req: LoginWithPhoneRequest, db: AsyncSession = Depend
             raise HTTPException(status_code=403, detail="该账户已被冻结，请联系平台客服解冻")
 
     token = create_access_token(subject=user.id, token_type="user")
-    success_msg = "注册并登录成功！已为您赠送 1 次免费尽调额度" if is_new_user else "登录成功，欢迎回到工作台！"
+    success_msg = f"注册并登录成功！已为您赠送 {gift_quota} 次免费尽调额度" if (is_new_user and gift_quota > 0) else ("注册并登录成功！" if is_new_user else "登录成功，欢迎回到工作台！")
 
     return {
         "access_token": token,
@@ -189,3 +204,31 @@ async def change_user_password(
     user.hashed_password = get_password_hash(req.new_password)
     await db.commit()
     return {"code": 0, "message": "密码修改成功，请牢记新密码"}
+
+@router.post("/logout")
+async def user_logout(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    前台用户退出登录接口 (支持安全登出与清理前端凭证)
+    """
+    phone = None
+    if credentials and credentials.credentials:
+        payload = decode_access_token(credentials.credentials)
+        if payload and payload.get("type") == "user":
+            user_id = payload.get("sub")
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if user:
+                phone = user.phone
+
+    return {
+        "code": 0,
+        "message": "已成功退出登录",
+        "data": {
+            "phone": phone
+        }
+    }
+

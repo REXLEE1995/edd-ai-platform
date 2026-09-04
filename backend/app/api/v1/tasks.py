@@ -1,27 +1,80 @@
+import re
 import asyncio
 import uuid
+import json
 import urllib.parse
 import logging
 import math
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from app.core.database import get_db
 from app.models.user import User
-from app.models.task import DDTask
+from app.models.task import XYZPTask, DDTask
+from app.models.report import XYZPReport, DDReport
+from app.models.file_record import TaskFile
+from app.core.minio_client import get_minio_client
 from app.schemas.task import TaskCreateRequest, TaskSummaryResponse
 from app.services.quota_service import QuotaService
 from app.services.task_service import TaskService
 from app.providers import get_weifengqi_provider
 from app.api.deps import get_current_user
 
-logger = logging.getLogger("edd.tasks")
+logger = logging.getLogger("xyzp.tasks")
 
 router = APIRouter(prefix="/tasks", tags=["尽调任务"])
+
+def sanitize_thinking_logs(logs: Optional[list]) -> list:
+    """
+    清洗并模糊化任务执行思维日志，去除第三方厂商名词（如微风企、New-API等）、内部敏感接口路由和原始错误码，
+    对外提供专业、中立、自研的金融级风控引擎进度描述。
+    """
+    if not logs:
+        return []
+    
+    clean_logs = []
+    replacements = [
+        (r"【微风企·金税中台】", "【金税涉税数据中台】"),
+        (r"【微风企·金税平台】", "【金税涉税数据中台】"),
+        (r"微风企·金税中台", "金税涉税数据中台"),
+        (r"微风企·金税平台", "金税涉税数据中台"),
+        (r"微风企专属授权链接", "专属实名数据授权通道"),
+        (r"微风企企业法人实名授权", "企业法定代表人实名数据授权"),
+        (r"微风企贷前报告", "企业尽调分析报告"),
+        (r"微风企网关", "政企金税通道"),
+        (r"微风企端", "权威金税端"),
+        (r"微风企", "金税系统"),
+        (r"【New-API 智能体网关】", "【AI 深度研判引擎】"),
+        (r"New-API 智能体网关", "AI 深度研判引擎"),
+        (r"New-API", "AI 深度研判引擎"),
+        (r"【三方接口[1-3]?[·:：]?([^】]+)】", r"【\1】"),
+        (r"三方接口[1-3]?[·:：]?", ""),
+        (r"Token 资源池\s*\(模型:\s*[^)]+\)", "风控大模型集群"),
+        (r"MinIO 对象存储", "数字存证保全库"),
+        (r"MinIO", "安全存证存储"),
+        (r"\(/api/v1/tasks/[^)]+\)", ""),
+        (r"http[s]?://[^\s，,。；;]+", "[已建立安全数据管道]"),
+        (r"\(errorCode:\s*\d+[^)]*\)", ""),
+    ]
+
+    for item in logs:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content", "")
+        for pattern, repl in replacements:
+            content = re.sub(pattern, repl, content)
+        content = re.sub(r"\s+", " ", content).strip()
+        content = re.sub(r"[,，\s]*->\s*", " -> ", content)
+        content = re.sub(r"[,，\s]*\(\s*\)", "", content)
+        clean_logs.append({
+            "time": item.get("time", ""),
+            "content": content
+        })
+    return clean_logs
 
 class WfqCallbackRequest(BaseModel):
     orderNo: Optional[str] = None
@@ -38,7 +91,7 @@ class WfqCallbackRequest(BaseModel):
 from app.core.network import get_public_base_url
 
 @router.post("/create")
-async def create_dd_task(
+async def create_xyzp_task(
     req: TaskCreateRequest,
     request: Request,
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -93,7 +146,7 @@ async def create_dd_task(
     short_code = secrets.token_urlsafe(5).replace("_", "").replace("-", "")[:6].lower()
     short_url = f"{base_url}/s/{short_code}"
 
-    task = DDTask(
+    task = XYZPTask(
         id=task_id,
         task_no=task_no,
         user_id=user.id,
@@ -114,7 +167,7 @@ async def create_dd_task(
         thinking_logs=[
             {
                 "time": datetime.now().strftime("%H:%M:%S"),
-                "content": f"尽调任务已创建 (任务ID: {task_id}, 企业: {req.company_name})，已生成微风企专属授权链接，等待企业法定代表人扫码/访问 H5 完成实名数据授权。"
+                "content": f"尽调任务已成功创建 (任务ID: {task_id}, 目标企业: {req.company_name})，已生成专属实名数据授权通道，等待企业法定代表人扫码确认授权。"
             }
         ]
     )
@@ -180,24 +233,24 @@ async def weifengqi_auth_callback_get(
     task = None
     if target_order:
         result = await db.execute(
-            select(DDTask).where((DDTask.id == target_order) | (DDTask.wfq_order_no == target_order) | (DDTask.task_no == target_order))
+            select(XYZPTask).where((XYZPTask.id == target_order) | (XYZPTask.wfq_order_no == target_order) | (XYZPTask.task_no == target_order))
         )
         task = result.scalar_one_or_none()
 
     if not task and taxpayer_id:
         result = await db.execute(
-            select(DDTask)
-            .where(DDTask.credit_code == taxpayer_id)
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .where(XYZPTask.credit_code == taxpayer_id)
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result.scalar_one_or_none()
 
     if not task and query_company:
         result = await db.execute(
-            select(DDTask)
-            .where(DDTask.company_name == query_company)
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .where(XYZPTask.company_name == query_company)
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result.scalar_one_or_none()
@@ -205,9 +258,9 @@ async def weifengqi_auth_callback_get(
     if not task:
         # 查询最近处于 waiting_auth 或 pulling_data 状态的任务
         result_pending = await db.execute(
-            select(DDTask)
-            .where(DDTask.status.in_(["waiting_auth", "pulling_data"]))
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .where(XYZPTask.status.in_(["waiting_auth", "pulling_data"]))
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result_pending.scalar_one_or_none()
@@ -215,8 +268,8 @@ async def weifengqi_auth_callback_get(
     if not task:
         # 兜底查询最近创建的真实任务，提取真实企业主体与统一信用代码
         result_recent = await db.execute(
-            select(DDTask)
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result_recent.scalar_one_or_none()
@@ -238,12 +291,12 @@ async def weifengqi_auth_callback_get(
         task.thinking_logs = task.thinking_logs or []
         task.thinking_logs.append({
             "time": datetime.now().strftime("%H:%M:%S"),
-            "content": f"已接收微风企授权完成回调通知 (/api/v1/tasks/callback)，企业【{company_name}】实名授权已确认！立即启动下一步数据拉取与 AI 全景尽调研判流水线..."
+            "content": f"企业【{company_name}】法定代表人实名数据授权已确认通过，系统已自动调度多源数据归集与全景尽调研判流水线..."
         })
         await db.commit()
 
         # 触发下一步后台全流程
-        background_tasks.add_task(TaskService.run_ai_dd_task_async, task.id, False)
+        background_tasks.add_task(TaskService.run_ai_xyzp_task_async, task.id, False)
         first_auth_time = now_str
     else:
         first_auth_time = (task.authorized_at if task and hasattr(task, 'authorized_at') and task.authorized_at else datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -396,41 +449,41 @@ async def weifengqi_auth_callback_post(
     task = None
     if target_order:
         result = await db.execute(
-            select(DDTask).where((DDTask.id == target_order) | (DDTask.wfq_order_no == target_order) | (DDTask.task_no == target_order))
+            select(XYZPTask).where((XYZPTask.id == target_order) | (XYZPTask.wfq_order_no == target_order) | (XYZPTask.task_no == target_order))
         )
         task = result.scalar_one_or_none()
 
     if not task and taxpayer_id:
         result = await db.execute(
-            select(DDTask)
-            .where(DDTask.credit_code == taxpayer_id)
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .where(XYZPTask.credit_code == taxpayer_id)
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result.scalar_one_or_none()
 
     if not task and query_company:
         result = await db.execute(
-            select(DDTask)
-            .where(DDTask.company_name == query_company)
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .where(XYZPTask.company_name == query_company)
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result.scalar_one_or_none()
 
     if not task:
         result_pending = await db.execute(
-            select(DDTask)
-            .where(DDTask.status.in_(["waiting_auth", "pulling_data"]))
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .where(XYZPTask.status.in_(["waiting_auth", "pulling_data"]))
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result_pending.scalar_one_or_none()
 
     if not task:
         result_recent = await db.execute(
-            select(DDTask)
-            .order_by(desc(DDTask.created_at))
+            select(XYZPTask)
+            .order_by(desc(XYZPTask.created_at))
             .limit(1)
         )
         task = result_recent.scalar_one_or_none()
@@ -446,12 +499,12 @@ async def weifengqi_auth_callback_post(
         task.thinking_logs = task.thinking_logs or []
         task.thinking_logs.append({
             "time": datetime.now().strftime("%H:%M:%S"),
-            "content": f"收到微风企 Webhook 授权回调通知，企业【{task.company_name}】已完成实名授权！启动下一步尽调研判流水线..."
+            "content": f"企业【{task.company_name}】实名授权凭证核验通过，启动数据汇聚与智能尽调研判流水线..."
         })
         await db.commit()
 
         # 触发下一步后台全流程
-        background_tasks.add_task(TaskService.run_ai_dd_task_async, task.id, False)
+        background_tasks.add_task(TaskService.run_ai_xyzp_task_async, task.id, False)
 
     return {"code": 0, "message": "微风企授权回调处理成功", "data": {"task_id": task.id, "company_name": task.company_name, "status": task.status}}
 
@@ -467,7 +520,7 @@ async def sync_single_task_status(
     实际校验三方的微风企 H5 是否已经进行了授权回调或在微风企端完成实名认证。
     未收到回调/未授权时，严格返回 authorized: False，不擅自修改任务状态！
     """
-    result = await db.execute(select(DDTask).where(DDTask.id == task_id, DDTask.user_id == user.id))
+    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -522,12 +575,12 @@ async def sync_single_task_status(
         task.thinking_logs = task.thinking_logs or []
         task.thinking_logs.append({
             "time": datetime.now().strftime("%H:%M:%S"),
-            "content": f"系统向微风企网关校验：企业【{task.company_name}】实名授权已通过微风企端核验 ({err_msg})，立即启动下一步数据拉取与 AI 尽调研判流水线..."
+            "content": f"授权凭证有效性校验通过，企业【{task.company_name}】实名认证就绪，已启动多源数据归集与 AI 全景尽调研判流水线..."
         })
         await db.commit()
         
         is_locked = (user.balance_quota <= 0)
-        background_tasks.add_task(TaskService.run_ai_dd_task_async, task.id, is_locked)
+        background_tasks.add_task(TaskService.run_ai_xyzp_task_async, task.id, is_locked)
         
         return {
             "code": 0,
@@ -568,7 +621,7 @@ async def simulate_authorize_task(
     """
     手动确认授权/模拟授权通道，触发后台全流程流水线
     """
-    result = await db.execute(select(DDTask).where(DDTask.id == task_id, DDTask.user_id == user.id))
+    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -580,12 +633,12 @@ async def simulate_authorize_task(
     task.thinking_logs = task.thinking_logs or []
     task.thinking_logs.append({
         "time": datetime.now().strftime("%H:%M:%S"),
-        "content": f"微风企企业法人实名授权已确认 (企业: {task.company_name})，启动下一步报告查询、PDF拉取与多源清洗流水线！"
+        "content": f"企业法人实名数据授权已确认 (企业: {task.company_name})，启动数据归集、底稿拉取与多源清洗流水线！"
     })
     await db.commit()
 
     is_locked = (user.balance_quota <= 0)
-    background_tasks.add_task(TaskService.run_ai_dd_task_async, task.id, is_locked)
+    background_tasks.add_task(TaskService.run_ai_xyzp_task_async, task.id, is_locked)
 
     return {
         "code": 0,
@@ -606,18 +659,18 @@ async def get_my_tasks(
     获取我的尽调任务列表（支持分页与状态过滤，按时间倒序）
     任务保持严格的状态流转，未收到回调或授权确认前始终保持 waiting_auth 状态
     """
-    query = select(DDTask).where(DDTask.user_id == user.id)
+    query = select(XYZPTask).where(XYZPTask.user_id == user.id)
     if status:
-        query = query.where(DDTask.status == status)
+        query = query.where(XYZPTask.status == status)
     elif exclude_completed:
-        query = query.where(DDTask.status != "completed")
+        query = query.where(XYZPTask.status != "completed")
 
     # 统计总数
     total_res = await db.execute(select(func.count()).select_from(query.subquery()))
     total = total_res.scalar() or 0
 
     # 分页查询
-    paged_query = query.order_by(desc(DDTask.created_at)).offset((page - 1) * page_size).limit(page_size)
+    paged_query = query.order_by(desc(XYZPTask.created_at)).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(paged_query)
     tasks = result.scalars().all()
 
@@ -639,7 +692,7 @@ async def get_my_tasks(
             "wfq_order_no": t.wfq_order_no,
             "wfq_pdf_url": t.wfq_pdf_url,
             "storage_file_id": t.storage_file_id,
-            "thinking_logs": t.thinking_logs or [],
+            "thinking_logs": sanitize_thinking_logs(t.thinking_logs),
             "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S") if t.created_at else ""
         })
 
@@ -665,7 +718,7 @@ async def get_task_detail(
     获取单笔尽调任务详情与实时思考流日志 (Thinking Process)
     """
     result = await db.execute(
-        select(DDTask).where(DDTask.id == task_id, DDTask.user_id == user.id)
+        select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id)
     )
     t = result.scalar_one_or_none()
     if not t:
@@ -689,7 +742,7 @@ async def get_task_detail(
             "wfq_order_no": t.wfq_order_no,
             "wfq_pdf_url": t.wfq_pdf_url,
             "storage_file_id": t.storage_file_id,
-            "thinking_logs": t.thinking_logs or [],
+            "thinking_logs": sanitize_thinking_logs(t.thinking_logs),
             "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S") if t.created_at else ""
         }
     }
@@ -704,7 +757,7 @@ async def delete_task(
     删除指定的尽调任务 (支持清理卡住或不需要的任务)
     """
     result = await db.execute(
-        select(DDTask).where(DDTask.id == task_id, DDTask.user_id == user.id)
+        select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id)
     )
     t = result.scalar_one_or_none()
     if not t:
@@ -713,3 +766,143 @@ async def delete_task(
     await db.delete(t)
     await db.commit()
     return {"code": 0, "message": "任务删除成功", "data": {"task_id": task_id}}
+
+@router.get("/{task_id}/catalog")
+async def get_task_catalog(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【前端获取目录数据 API】链路：前端 -> 后端 API -> 从 MinIO 读取 pdf_toc_json 文件 -> 返回给前端
+    """
+    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_toc_json")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    toc_file = file_result.scalars().first()
+
+    catalog_data = None
+    if toc_file and minio_mgr.object_exists(toc_file.file_path):
+        try:
+            raw_bytes = minio_mgr.get_object_bytes(toc_file.file_path)
+            catalog_data = json.loads(raw_bytes.decode("utf-8"))
+        except Exception as e:
+            logger.warning(f"[TasksAPI] 从 MinIO 读取目录 JSON 失败 (task={task_id}): {e}")
+
+    if not catalog_data:
+        report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
+        report = report_res.scalar_one_or_none()
+        toc = (report.content_json.get("toc_catalog") if report and report.content_json else []) or []
+        catalog_data = {
+            "task_id": task_id,
+            "company_name": task.company_name,
+            "credit_code": task.credit_code,
+            "toc_catalog": toc,
+            "source": "fallback"
+        }
+
+    return {
+        "code": 0,
+        "message": "success",
+        "data": catalog_data
+    }
+
+@router.get("/{task_id}/content-text")
+async def get_task_content_text(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【从 MinIO 读取步骤 3 解析形成的纯文本数据】(full_text_content)
+    """
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_content_txt")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    txt_file = file_result.scalars().first()
+
+    if txt_file and minio_mgr.object_exists(txt_file.file_path):
+        raw_bytes = minio_mgr.get_object_bytes(txt_file.file_path)
+        return Response(content=raw_bytes, media_type="text/plain; charset=utf-8")
+
+    raise HTTPException(status_code=404, detail="未找到该任务的解析文本存证文件")
+
+@router.get("/{task_id}/knowledge-base")
+async def get_task_knowledge_base(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【从 MinIO 读取步骤 4 AI 生成的标准 Markdown 知识库文件】(knowledge_base.md)
+    """
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_knowledge_md")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    md_file = file_result.scalars().first()
+
+    if md_file and minio_mgr.object_exists(md_file.file_path):
+        raw_bytes = minio_mgr.get_object_bytes(md_file.file_path)
+        return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
+
+    raise HTTPException(status_code=404, detail="未找到该任务的 AI Markdown 知识库存证文件")
+
+@router.get("/{task_id}/summary")
+async def get_task_summary(
+    task_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【从 MinIO 读取步骤 5 AI 深度总结 JSON 数据】(summary.json)
+    返回结构: { "code": 0, "message": "success", "data": { "enterprise_profile": "...", "risk_assessment": [...] } }
+    """
+    minio_mgr = get_minio_client()
+    file_result = await db.execute(
+        select(TaskFile).where(
+            (TaskFile.task_id == task_id) & (TaskFile.file_type == "pdf_summary_json")
+        ).order_by(desc(TaskFile.created_at))
+    )
+    summary_file = file_result.scalars().first()
+
+    if summary_file and minio_mgr.object_exists(summary_file.file_path):
+        raw_bytes = minio_mgr.get_object_bytes(summary_file.file_path)
+        try:
+            summary_data = json.loads(raw_bytes.decode("utf-8"))
+            return {
+                "code": 0,
+                "message": "success",
+                "data": summary_data
+            }
+        except Exception:
+            return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
+
+    # 兜底降级查报告
+    report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
+    report = report_res.scalar_one_or_none()
+    if report and report.overall_ai_summary:
+        ov = report.overall_ai_summary
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "enterprise_profile": ov.get("summary", ""),
+                "risk_assessment": [kp for kp in ov.get("key_points", [])]
+            }
+        }
+
+    raise HTTPException(status_code=404, detail="未找到该任务的 AI 总结存证文件")

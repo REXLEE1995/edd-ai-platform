@@ -1,56 +1,119 @@
-# Node / Frontend
+# ==============================================================================
+# 享宇AI智评 (XYZP AI Platform) - Git 忽略规则 (.gitignore)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. 密钥、环境配置与敏感凭据 (Secrets & Environments)
+# ------------------------------------------------------------------------------
+.env
+.env.*
+*.env
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+# 显式白名单：保留环境变量示例模版
+!.env.example
+!*.env.example
+
+# SSL 证书与密钥文件
+*.pem
+*.key
+*.crt
+*.cert
+
+# ------------------------------------------------------------------------------
+# 2. 前端产物与依赖 (Frontend: React 18 / Vite 5 / Node)
+# ------------------------------------------------------------------------------
 node_modules/
+frontend/node_modules/
 dist/
+frontend/dist/
 dist-ssr/
 *.local
+.vite/
 .vite_cache/
+.eslintcache
 
-# Python / Backend
+# Node 包管理器临时与调试日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------------------------------------------------
+# 3. 后端运行时与编译产物 (Backend: Python 3.11 / FastAPI)
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
+
+# 虚拟环境 (Virtual Environments)
 .venv/
 venv/
-scratch/
-backend/scratch/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# 构建与打包缓存
 build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Environment Variables & Secrets
-.env
-backend/.env
+# 临时开发调试脚本目录
+scratch/
+**/scratch/
 
-# Local Databases & Logs
+# ------------------------------------------------------------------------------
+# 4. 本地数据库、持久化数据与生成文件 (Local DB & Storage)
+# ------------------------------------------------------------------------------
+# 数据库与 SQLite 文件
 *.db
 *.sqlite
 *.sqlite3
-backend/data/*.db
 data/
-*.log
+backend/data/
+
+# 动态生成的报告文件、PDF 及用户上传
 *.pdf
-样例报告/
+storage/
+backend/storage/
 backend/data/storage/
+样例报告/
 
+# ------------------------------------------------------------------------------
+# 5. 系统日志与临时备份文件 (Logs & Backup Files)
+# ------------------------------------------------------------------------------
+*.log
+logs/
+backend/logs/
+*.bak
+*.tmp
+*.temp
+*~
 
-# IDE & OS
+# ------------------------------------------------------------------------------
+# 6. 编辑器与操作系统专属文件 (IDE & OS)
+# ------------------------------------------------------------------------------
+# VSCode & JetBrains
 .vscode/
+!.vscode/extensions.json
 .idea/
+*.sublime-project
+*.sublime-workspace
+
+# macOS / Windows 临时与缩略图文件
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini

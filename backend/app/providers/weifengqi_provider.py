@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.third_party_api import SysThirdPartyApi
 
-logger = logging.getLogger("edd.providers.wfq")
+logger = logging.getLogger("xyzp.providers.wfq")
 
 async def get_third_party_api_config(db: Optional[AsyncSession], api_code: str, default_mode: str = "http", default_endpoint: str = "") -> tuple[str, str]:
     """

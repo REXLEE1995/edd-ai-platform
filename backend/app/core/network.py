@@ -4,7 +4,7 @@ from typing import Optional, Any
 from fastapi import Request
 from app.core.config import settings
 
-logger = logging.getLogger("edd.network")
+logger = logging.getLogger("xyzp.network")
 
 def get_server_real_lan_ip() -> str:
     """

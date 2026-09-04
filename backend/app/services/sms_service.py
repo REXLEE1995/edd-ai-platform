@@ -4,13 +4,14 @@ import json
 import logging
 import httpx
 from datetime import datetime, timedelta
+from app.core.timezone import shanghai_now
 from typing import Dict, Any, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from app.core.config import settings
 from app.models.sms_log import SMSLog
 
-logger = logging.getLogger("edd.sms")
+logger = logging.getLogger("xyzp.sms")
 
 class SMSService:
     """
@@ -36,7 +37,7 @@ class SMSService:
         if not phone or len(phone) != 11 or not phone.isdigit():
             return False, "请输入有效的 11 位手机号码", {}
 
-        now = datetime.utcnow()
+        now = shanghai_now()
 
         # 1. 频控检查：60 秒内同一手机号防重复发送
         recent_log_res = await session.execute(
@@ -156,7 +157,7 @@ class SMSService:
         if not code:
             return False, "请输入短信验证码"
 
-        now = datetime.utcnow()
+        now = shanghai_now()
 
         # 查库检索最新一条未核验且未失效的验证码
         result = await session.execute(

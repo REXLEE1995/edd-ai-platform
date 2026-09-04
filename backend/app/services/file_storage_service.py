@@ -1,5 +1,6 @@
 import os
 import uuid
+import json
 import hashlib
 import logging
 from datetime import datetime
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from app.models.file_record import TaskFile
 from app.core.minio_client import get_minio_client
 
-logger = logging.getLogger("edd.storage")
+logger = logging.getLogger("xyzp.storage")
 
 class FileStorageService:
     """
@@ -35,9 +36,10 @@ class FileStorageService:
         """
         从远程 URL (如微风企网关/电信云/Mock服务) 异步流式拉取 PDF，
         【核心执行流程】：
-        1. 【步骤 1】先流经 DataCleansingService 执行字符替换与数据清洗；
-        2. 【步骤 2】对清洗后的文档做全景目录与章节结构化解析 (参考 test/parse_report_catalog.py)；
-        3. 【步骤 3】对清洗后的标准 PDF 计算 SHA-256 防篡改存证并上传至 MinIO 对象存储。
+        1. 【步骤 1】对三方 PDF 执行字符替换清洗与封面自动判断删除（若第一页有“报告检测时间”等）；
+        2. 【步骤 2】对清洗后的文档做全景目录结构化解析 (toc_catalog)；
+        3. 【步骤 3】解析 PDF 文件内容，抽取形成全篇纯文本内容 (full_text_content)；
+        4. 【MinIO 存证】将步骤 1~3 的所有产物 (PDF 文件、目录 JSON、纯文本 TXT) 上传至 MinIO 对象存储。
         返回: (file_record, parsed_pdf_data)
         """
         from app.services.cleansing_service import DataCleansingService
@@ -46,13 +48,19 @@ class FileStorageService:
         timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
         date_folder = datetime.now().strftime("%Y%m%d")
 
-        # 1. 确定清理后的文件名与 MinIO Object Key 路径
-        clean_filename = custom_filename or os.path.basename(remote_url.split("?")[0]) or f"report_{task_id}.pdf"
+        # 1. 确定 MinIO 对象存储的层级路径架构: reports/{日期}/{任务ID}/
+        date_folder = datetime.now().strftime("%Y%m%d")
+        task_dir = f"reports/{date_folder}/{task_id}"
+
+        clean_filename = custom_filename or os.path.basename(remote_url.split("?")[0]) or "report.pdf"
         if not clean_filename.endswith(".pdf") and file_type == "wfq_preloan_pdf":
             clean_filename += ".pdf"
         
-        object_name = f"reports/{date_folder}/{task_id}_{timestamp_str}_{clean_filename}"
-        logger.info(f"[FileStorageService] Fetching remote stream: {remote_url} -> Data Cleansing (Character Replacement & TOC Parse) -> MinIO: {minio_mgr.default_bucket}/{object_name}")
+        pdf_object_name = f"{task_dir}/{clean_filename}"
+        toc_object_name = f"{task_dir}/catalog.json"
+        text_object_name = f"{task_dir}/content.txt"
+
+        logger.info(f"[FileStorageService] Fetching remote stream: {remote_url} -> Data Cleansing (Step 1~3) -> MinIO Target Directory: {minio_mgr.default_bucket}/{task_dir}/")
 
         # 2. 流式下载原始二进制流
         file_bytes_list = []
@@ -71,34 +79,33 @@ class FileStorageService:
 
         raw_data = b"".join(file_bytes_list)
 
-        # 3. 核心步骤 1 & 2：调用数据清洗中台执行字符替换与目录大纲解析
-        cleaned_pdf_bytes, parsed_pdf_data = DataCleansingService.clean_and_process_pdf_bytes(
+        # 3. 核心步骤 1~4：调用数据清洗中台执行字符替换、封面剔除、目录解析、文本提取与 AI Markdown 知识库生成
+        cleaned_pdf_bytes, parsed_pdf_data = await DataCleansingService.clean_and_process_pdf_bytes(
             raw_pdf_bytes=raw_data,
             company_name=company_name,
             credit_code=credit_code,
             replacements=replacements
         )
 
-        # 4. 对清洗后的最终文件计算 SHA-256 存证与大小
+        # =============================================================
+        # 步骤 1 产物上传 MinIO (reports/{日期}/{任务ID}/{clean_filename})
+        # =============================================================
         file_size = len(cleaned_pdf_bytes)
         file_hash = hashlib.sha256(cleaned_pdf_bytes).hexdigest()
-
-        # 5. 直传 MinIO 对象存储
         minio_mgr.upload_bytes(
             data=cleaned_pdf_bytes,
-            object_name=object_name,
+            object_name=pdf_object_name,
             content_type="application/pdf"
         )
-        logger.info(f"[FileStorageService] Cleansed PDF successfully stored to MinIO ({minio_mgr.default_bucket}/{object_name}), size={file_size} bytes, sha256={file_hash}")
+        logger.info(f"[FileStorageService] 【步骤 1 产物】Cleaned PDF stored to MinIO ({pdf_object_name}), size={file_size} bytes")
 
-        # 6. 创建 TaskFile 元数据存证记录 (file_path 存储 MinIO Object Key)
         file_record = TaskFile(
             id=str(uuid.uuid4()),
             task_id=task_id,
             report_id=report_id,
             file_type=file_type,
             filename=clean_filename,
-            file_path=object_name,
+            file_path=pdf_object_name,
             file_size=file_size,
             file_hash=file_hash,
             mime_type="application/pdf",
@@ -106,6 +113,124 @@ class FileStorageService:
             status="stored"
         )
         session.add(file_record)
+
+        # =============================================================
+        # 步骤 2 产物上传 MinIO (reports/{日期}/{任务ID}/catalog.json)
+        # =============================================================
+        toc_catalog = parsed_pdf_data.get("toc_catalog", [])
+        toc_payload = {
+            "task_id": task_id,
+            "report_id": report_id,
+            "company_name": company_name,
+            "credit_code": credit_code,
+            "toc_catalog": toc_catalog,
+            "overall_ai_summary": parsed_pdf_data.get("overall_ai_summary", {}),
+            "report_meta": parsed_pdf_data.get("report_meta", {})
+        }
+        toc_bytes = json.dumps(toc_payload, ensure_ascii=False, indent=2).encode("utf-8")
+        minio_mgr.upload_bytes(
+            data=toc_bytes,
+            object_name=toc_object_name,
+            content_type="application/json"
+        )
+        logger.info(f"[FileStorageService] 【步骤 2 产物】TOC Catalog JSON stored to MinIO ({toc_object_name}), size={len(toc_bytes)} bytes")
+
+        toc_file_record = TaskFile(
+            id=str(uuid.uuid4()),
+            task_id=task_id,
+            report_id=report_id,
+            file_type="pdf_toc_json",
+            filename="catalog.json",
+            file_path=toc_object_name,
+            file_size=len(toc_bytes),
+            file_hash=hashlib.sha256(toc_bytes).hexdigest(),
+            mime_type="application/json",
+            source_url=remote_url,
+            status="stored"
+        )
+        session.add(toc_file_record)
+
+        # =============================================================
+        # 步骤 3 产物上传 MinIO (reports/{日期}/{任务ID}/content.txt)
+        # =============================================================
+        full_text = parsed_pdf_data.get("full_text_content", "")
+        text_bytes = full_text.encode("utf-8")
+        minio_mgr.upload_bytes(
+            data=text_bytes,
+            object_name=text_object_name,
+            content_type="text/plain; charset=utf-8"
+        )
+        logger.info(f"[FileStorageService] 【步骤 3 产物】PDF Content Text stored to MinIO ({text_object_name}), size={len(text_bytes)} bytes")
+
+        text_file_record = TaskFile(
+            id=str(uuid.uuid4()),
+            task_id=task_id,
+            report_id=report_id,
+            file_type="pdf_content_txt",
+            filename="content.txt",
+            file_path=text_object_name,
+            file_size=len(text_bytes),
+            file_hash=hashlib.sha256(text_bytes).hexdigest(),
+            mime_type="text/plain",
+            source_url=remote_url,
+            status="stored"
+        )
+        session.add(text_file_record)
+
+        # =============================================================
+        # 步骤 4 产物上传 MinIO (reports/{日期}/{任务ID}/knowledge_base.md)
+        # =============================================================
+        knowledge_md = parsed_pdf_data.get("knowledge_base_md", "")
+        md_bytes = knowledge_md.encode("utf-8")
+        md_object_name = f"{task_dir}/knowledge_base.md"
+        minio_mgr.upload_bytes(
+            data=md_bytes,
+            object_name=md_object_name,
+            content_type="text/markdown; charset=utf-8"
+        )
+        logger.info(f"[FileStorageService] 【步骤 4 产物】AI Markdown Knowledge Base stored to MinIO ({md_object_name}), size={len(md_bytes)} bytes")
+
+        md_file_record = TaskFile(
+            id=str(uuid.uuid4()),
+            task_id=task_id,
+            report_id=report_id,
+            file_type="pdf_knowledge_md",
+            filename="knowledge_base.md",
+            file_path=md_object_name,
+            file_size=len(md_bytes),
+            file_hash=hashlib.sha256(md_bytes).hexdigest(),
+            mime_type="text/markdown",
+            source_url=remote_url,
+            status="stored"
+        )
+        # =============================================================
+        # 步骤 5 产物上传 MinIO (reports/{日期}/{任务ID}/summary.json)
+        # =============================================================
+        ai_summary_json = parsed_pdf_data.get("ai_summary_json", {})
+        summary_bytes = json.dumps(ai_summary_json, ensure_ascii=False, indent=2).encode("utf-8")
+        summary_object_name = f"{task_dir}/summary.json"
+        minio_mgr.upload_bytes(
+            data=summary_bytes,
+            object_name=summary_object_name,
+            content_type="application/json; charset=utf-8"
+        )
+        logger.info(f"[FileStorageService] 【步骤 5 产物】AI Summary JSON stored to MinIO ({summary_object_name}), size={len(summary_bytes)} bytes")
+
+        summary_file_record = TaskFile(
+            id=str(uuid.uuid4()),
+            task_id=task_id,
+            report_id=report_id,
+            file_type="pdf_summary_json",
+            filename="summary.json",
+            file_path=summary_object_name,
+            file_size=len(summary_bytes),
+            file_hash=hashlib.sha256(summary_bytes).hexdigest(),
+            mime_type="application/json",
+            source_url=remote_url,
+            status="stored"
+        )
+        session.add(summary_file_record)
+
         await session.commit()
         await session.refresh(file_record)
 
