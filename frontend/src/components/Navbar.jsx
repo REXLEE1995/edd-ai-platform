@@ -66,8 +66,7 @@ export default function Navbar() {
                   { to: '/admin/dashboard', label: '运营大盘', icon: LayoutDashboard },
                   { to: '/admin/users', label: '用户管理', icon: Users },
                   { to: '/admin/quota', label: '额度调控', icon: Sliders },
-                  { to: '/admin/orders', label: '订单财务', icon: Receipt },
-                  { to: '/admin/settings', label: 'AI 模型与 Token 配置', icon: Bot }
+                  { to: '/admin/orders', label: '订单财务', icon: Receipt }
                 ].map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.to;
@@ -135,8 +134,7 @@ export default function Navbar() {
                 { to: '/admin/dashboard', label: '运营大盘', icon: LayoutDashboard },
                 { to: '/admin/users', label: '用户管理', icon: Users },
                 { to: '/admin/quota', label: '额度调控', icon: Sliders },
-                { to: '/admin/orders', label: '订单财务', icon: Receipt },
-                { to: '/admin/settings', label: 'AI 模型与 Token 配置', icon: Bot }
+                { to: '/admin/orders', label: '订单财务', icon: Receipt }
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.to;

@@ -106,7 +106,7 @@ export default function UserCenterPage() {
     }
     setChangingPwd(true);
     try {
-      const res = await apiClient.post('/v1/auth/password/change', {
+      const res = await apiClient.post('/v1/auth/change-password', {
         new_password: newPassword
       });
       message.success(res.message || '密码修改成功，请牢记新密码！');
