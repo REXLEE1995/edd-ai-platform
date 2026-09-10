@@ -25,7 +25,7 @@ const apiClient = axios.create({
 // 判断该 API 请求是否属于管理端专属接口
 const isExplicitAdminApi = (url) => {
   if (!url) return false;
-  return url.startsWith('/admin') || url.includes('/admin/');
+  return url.startsWith('/admin') || url.includes('/admin/') || url.includes('admin-') || url.includes('/admin-progress');
 };
 
 // 请求拦截器：严格按 API 路由注入对应凭据，并注入 X-Request-ID 分布式链路追踪头
@@ -33,19 +33,25 @@ apiClient.interceptors.request.use((config) => {
   const url = config.url || '';
   const adminToken = localStorage.getItem('edd_admin_token');
   const userToken = localStorage.getItem('edd_user_token');
+  const inAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+  const preferAdmin = isExplicitAdminApi(url) || inAdminArea;
 
   // 1. 认证鉴权凭据注入
-  if (isExplicitAdminApi(url)) {
-    // 只有请求管理端专属 /admin/* 接口时，才注入 adminToken
+  if (preferAdmin) {
+    // 处于管理后台区域或请求管理接口，优先使用 adminToken
     if (adminToken) {
       config.headers.Authorization = `Bearer ${adminToken}`;
+    } else if (userToken) {
+      config.headers.Authorization = `Bearer ${userToken}`;
     } else {
       delete config.headers.Authorization;
     }
   } else {
-    // 所有 /v1/* 业务接口只注入 userToken，严禁混入 adminToken（后端校验 type=user 会因 admin 报错 401）
+    // 普通用户 C 端前台页面
     if (userToken) {
       config.headers.Authorization = `Bearer ${userToken}`;
+    } else if (adminToken) {
+      config.headers.Authorization = `Bearer ${adminToken}`;
     } else {
       delete config.headers.Authorization;
     }

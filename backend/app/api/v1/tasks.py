@@ -22,7 +22,8 @@ from app.schemas.task import TaskCreateRequest, TaskSummaryResponse
 from app.services.quota_service import QuotaService
 from app.services.task_service import TaskService
 from app.providers import get_weifengqi_provider
-from app.api.deps import get_current_user
+from app.models.admin import AdminUser
+from app.api.deps import get_current_user, get_current_admin_or_user
 
 logger = logging.getLogger("xyzp.tasks")
 
@@ -500,7 +501,7 @@ async def weifengqi_auth_callback_post(
 async def sync_single_task_status(
     task_id: str,
     background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -508,7 +509,10 @@ async def sync_single_task_status(
     实际校验三方的微风企 H5 是否已经进行了授权回调或在微风企端完成实名认证。
     未收到回调/未授权时，严格返回 authorized: False，不擅自修改任务状态！
     """
-    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id))
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -603,13 +607,16 @@ async def sync_single_task_status(
 async def simulate_authorize_task(
     task_id: str,
     background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     手动确认授权/模拟授权通道，触发后台全流程流水线
     """
-    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id))
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -625,7 +632,9 @@ async def simulate_authorize_task(
     })
     await db.commit()
 
-    is_locked = (user.balance_quota <= 0)
+    task_user_res = await db.execute(select(User).where(User.id == task.user_id))
+    task_user = task_user_res.scalar_one_or_none()
+    is_locked = (task_user.balance_quota <= 0) if task_user else False
     background_tasks.add_task(TaskService.run_ai_xyzp_task_async, task.id, is_locked)
 
     return {
@@ -699,15 +708,17 @@ async def get_my_tasks(
 @router.get("/{task_id}")
 async def get_task_detail(
     task_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     获取单笔尽调任务详情与实时思考流日志 (Thinking Process)
+    管理员可查看全站任意任务；普通用户仅能查看自己创建的任务
     """
-    result = await db.execute(
-        select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id)
-    )
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
     t = result.scalar_one_or_none()
     if not t:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -735,18 +746,215 @@ async def get_task_detail(
         }
     }
 
+@router.get("/{task_id}/admin-progress")
+async def get_task_admin_progress(
+    task_id: str,
+    actor = Depends(get_current_admin_or_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【运营管理后台】获取指定尽调任务的全局监控进度、完整思考流日志及执行详情
+    """
+    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        result2 = await db.execute(select(XYZPTask).where(XYZPTask.task_no == task_id))
+        task = result2.scalar_one_or_none()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail=f"未找到 ID 为 '{task_id}' 的尽调任务")
+
+    user_phone = "13800138000"
+    user_result = await db.execute(select(User).where(User.id == task.user_id))
+    u = user_result.scalar_one_or_none()
+    if u:
+        user_phone = u.phone or u.username or user_phone
+
+    step = 1
+    percentage = 25
+    if task.status in ["waiting_auth", "auth_failed"]:
+        step = 1
+        percentage = 25
+    elif task.status == "pulling_data":
+        step = 2
+        percentage = 50
+    elif task.status == "ai_analyzing":
+        step = 3
+        percentage = 75
+    elif task.status == "completed" or task.report_id:
+        step = 4
+        percentage = 100
+    elif task.status == "failed":
+        logs = task.thinking_logs or []
+        if any("生成" in str(x) or "研判" in str(x) for x in logs):
+            step = 3
+            percentage = 75
+        elif any("底稿" in str(x) or "清洗" in str(x) or "下载" in str(x) for x in logs):
+            step = 2
+            percentage = 50
+        else:
+            step = 1
+            percentage = 25
+
+    step_history = [
+        {"step": 1, "name": "企业实名授权", "status": "done" if step > 1 or task.auth_status == "authorized" else ("error" if task.status == "failed" and step == 1 else "active")},
+        {"step": 2, "name": "涉税底稿拉取与清洗", "status": "done" if step > 2 else ("error" if task.status == "failed" and step == 2 else ("active" if step == 2 else "pending"))},
+        {"step": 3, "name": "知识图谱与AI深度研判", "status": "done" if step > 3 else ("error" if task.status == "failed" and step == 3 else ("active" if step == 3 else "pending"))},
+        {"step": 4, "name": "尽调全景报告生成", "status": "done" if step >= 4 and task.status == "completed" else ("error" if task.status == "failed" and step == 4 else ("active" if step == 4 else "pending"))},
+    ]
+
+    clean_logs = sanitize_thinking_logs(task.thinking_logs)
+    raw_logs = task.thinking_logs or []
+
+    data = {
+        "id": task.id,
+        "task_id": task.id,
+        "task_no": task.task_no,
+        "user_id": task.user_id,
+        "user_phone": user_phone,
+        "company_name": task.company_name,
+        "credit_code": task.credit_code,
+        "legal_person": task.legal_person,
+        "scene": task.scene,
+        "auth_mode": task.auth_mode,
+        "status": task.status,
+        "auth_status": task.auth_status,
+        "authorized_at": task.authorized_at,
+        "step": step,
+        "percentage": percentage,
+        "step_history": step_history,
+        "report_id": task.report_id,
+        "risk_level": task.risk_level,
+        "error_message": task.error_message or "",
+        "auth_link": task.auth_link,
+        "auth_qrcode_url": task.auth_qrcode_url,
+        "wfq_order_no": task.wfq_order_no,
+        "wfq_pdf_url": task.wfq_pdf_url,
+        "storage_file_id": task.storage_file_id,
+        "thinking_logs": clean_logs,
+        "sanitized_logs": clean_logs,
+        "raw_thinking_logs": raw_logs,
+        "raw_logs": raw_logs,
+        "logs": clean_logs,
+        "created_at": task.created_at.strftime("%Y-%m-%d %H:%M:%S") if task.created_at else "",
+        "updated_at": task.updated_at.strftime("%Y-%m-%d %H:%M:%S") if task.updated_at else ""
+    }
+
+    return {
+        "code": 0,
+        "message": "success",
+        "data": data
+    }
+
+@router.post("/{task_id}/reauth")
+async def reauth_task(
+    task_id: str,
+    request: Request,
+    actor = Depends(get_current_admin_or_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【运营管理/用户端】重新生成尽调法人授权链接与二维码
+    """
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    wfq_provider = get_weifengqi_provider()
+    public_base_url = get_public_base_url(request)
+    callback_url = f"{public_base_url}/api/v1/tasks/callback"
+
+    wfq_res = await wfq_provider.apply_preloan_auth(
+        company_name=task.company_name,
+        credit_code=task.credit_code,
+        legal_person=task.legal_person or "",
+        callback_url=callback_url
+    )
+
+    task.status = "waiting_auth"
+    task.auth_status = "pending"
+    task.auth_qrcode_url = wfq_res.get("qrCode") or wfq_res.get("auth_qrcode_url")
+    task.auth_link = wfq_res.get("authUrl") or wfq_res.get("auth_link")
+    task.wfq_order_no = wfq_res.get("orderNo") or wfq_res.get("wfq_order_no")
+    task.thinking_logs = task.thinking_logs or []
+    task.thinking_logs.append({
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "content": "管理员已重新发起微风企涉税数据授权通道，生成全新授权二维码及专属移动端链接。"
+    })
+    await db.commit()
+
+    return {
+        "code": 0,
+        "message": "已重新生成法人授权链接与二维码",
+        "data": {
+            "task_id": task.id,
+            "status": task.status,
+            "auth_status": task.auth_status,
+            "auth_qrcode_url": task.auth_qrcode_url,
+            "auth_link": task.auth_link
+        }
+    }
+
+@router.post("/{task_id}/cancel")
+async def cancel_task(
+    task_id: str,
+    actor = Depends(get_current_admin_or_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【运营管理后台】人工取消尽调任务并退还用户已扣减的尽调额度
+    """
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    if task.status == "completed":
+        raise HTTPException(status_code=400, detail="已完成的尽调报告任务无法取消")
+
+    task.status = "cancelled"
+    task.thinking_logs = task.thinking_logs or []
+    task.thinking_logs.append({
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "content": "管理员人工终止当前尽调分析任务，流程已闭环取消，相关额度资产自动回滚退还。"
+    })
+
+    await QuotaService.refund_quota_for_task(
+        session=db,
+        user_id=task.user_id,
+        task_id=task.id,
+        company_name=task.company_name,
+        points=1,
+        reason="管理员人工取消尽调任务"
+    )
+
+    await db.commit()
+    return {
+        "code": 0,
+        "message": "任务已成功取消，额度已退还用户账户",
+        "data": {"task_id": task.id, "status": task.status}
+    }
+
 @router.delete("/{task_id}")
 async def delete_task(
     task_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     删除指定的尽调任务 (支持清理卡住或不需要的任务)
     """
-    result = await db.execute(
-        select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == user.id)
-    )
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
     t = result.scalar_one_or_none()
     if not t:
         raise HTTPException(status_code=404, detail="任务不存在或无权限删除")
@@ -758,7 +966,7 @@ async def delete_task(
 @router.get("/{task_id}/catalog")
 async def get_task_catalog(
     task_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -768,6 +976,8 @@ async def get_task_catalog(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    if not isinstance(actor, AdminUser) and task.user_id != actor.id:
+        raise HTTPException(status_code=403, detail="无权访问该尽调任务数据")
 
     minio_mgr = get_minio_client()
     file_result = await db.execute(
@@ -806,12 +1016,19 @@ async def get_task_catalog(
 @router.get("/{task_id}/content-text")
 async def get_task_content_text(
     task_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     【从 MinIO 读取步骤 3 解析形成的纯文本数据】(full_text_content)
     """
+    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not isinstance(actor, AdminUser) and task.user_id != actor.id:
+        raise HTTPException(status_code=403, detail="无权访问该尽调任务数据")
+
     minio_mgr = get_minio_client()
     file_result = await db.execute(
         select(TaskFile).where(
@@ -829,12 +1046,19 @@ async def get_task_content_text(
 @router.get("/{task_id}/knowledge-base")
 async def get_task_knowledge_base(
     task_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     【从 MinIO 读取步骤 4 AI 生成的标准 Markdown 知识库文件】(knowledge_base.md)
     """
+    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not isinstance(actor, AdminUser) and task.user_id != actor.id:
+        raise HTTPException(status_code=403, detail="无权访问该尽调任务数据")
+
     minio_mgr = get_minio_client()
     file_result = await db.execute(
         select(TaskFile).where(
@@ -852,13 +1076,20 @@ async def get_task_knowledge_base(
 @router.get("/{task_id}/summary")
 async def get_task_summary(
     task_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     【从 MinIO 读取步骤 5 AI 深度总结 JSON 数据】(summary.json)
     返回结构: { "code": 0, "message": "success", "data": { "enterprise_profile": "...", "risk_assessment": [...] } }
     """
+    result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not isinstance(actor, AdminUser) and task.user_id != actor.id:
+        raise HTTPException(status_code=403, detail="无权访问该尽调任务数据")
+
     minio_mgr = get_minio_client()
     file_result = await db.execute(
         select(TaskFile).where(
