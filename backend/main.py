@@ -1,5 +1,10 @@
 import os
 import sys
+import asyncio
+
+if sys.platform == "win32":
+    # 修复 Windows 下 Python 3.8+ 默认 ProactorEventLoop 搭配 asyncmy/MySQL 在处理大包数据时的 BufferError 异常
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")

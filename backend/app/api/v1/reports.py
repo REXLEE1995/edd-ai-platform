@@ -35,7 +35,21 @@ async def get_my_reports(
     - 接口数据层面进行物理分页，返回 total, page, page_size, total_pages
     """
     query = (
-        select(XYZPReport, XYZPTask.task_no)
+        select(
+            XYZPReport.id,
+            XYZPReport.report_no,
+            XYZPReport.task_id,
+            XYZPReport.company_name,
+            XYZPReport.credit_code,
+            XYZPReport.legal_person,
+            XYZPReport.risk_level,
+            XYZPReport.score,
+            XYZPReport.suggested_quota_min,
+            XYZPReport.suggested_quota_max,
+            XYZPReport.summary_ai_comment,
+            XYZPReport.created_at,
+            XYZPTask.task_no
+        )
         .outerjoin(XYZPTask, XYZPReport.task_id == XYZPTask.id)
         .where(XYZPReport.user_id == user.id)
         .order_by(desc(XYZPReport.created_at))
@@ -55,10 +69,10 @@ async def get_my_reports(
     rows = result.all()
     
     data = []
-    for r, t_no in rows:
+    for r in rows:
         # 输出标准 Asia/Shanghai (UTC+8) ISO 8601 格式字符串
         report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
-        formatted_task_no = t_no or (f"TSK{r.created_at.strftime('%Y%m%d%H%M%S')}{r.id[-4:].upper()}" if r.created_at else f"TSK2026083115816{r.id[-4:].upper()}")
+        formatted_task_no = r.task_no or (f"TSK{r.created_at.strftime('%Y%m%d%H%M%S')}{r.id[-4:].upper()}" if r.created_at else f"TSK2026083115816{r.id[-4:].upper()}")
         data.append({
             "id": r.id,
             "report_no": r.report_no,
@@ -73,8 +87,8 @@ async def get_my_reports(
             "suggested_quota_max": r.suggested_quota_max,
             "summary_ai_comment": r.summary_ai_comment,
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
-            "is_locked": bool(r.content_json.get("is_locked", False) if r.content_json else False),
-            "is_public_only": bool(r.content_json.get("is_public_only", False) if r.content_json else False),
+            "is_locked": False,
+            "is_public_only": False,
             "created_at": report_created_at,
             "is_expired": False
         })
