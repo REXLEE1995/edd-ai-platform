@@ -52,12 +52,30 @@ async def _extract_report_kb_context(
         )
         files = file_result.scalars().all()
         for f in files:
-            if f.file_type == "pdf_knowledge_md" and minio_mgr.stat_object(f.file_path):
+            if f.file_type == "pdf_knowledge_md" and minio_mgr.object_exists(f.file_path):
                 raw = minio_mgr.get_object_bytes(f.file_path)
                 md_content = raw.decode("utf-8", errors="ignore")
-            elif f.file_type == "pdf_content_txt" and minio_mgr.stat_object(f.file_path):
+            elif f.file_type == "pdf_content_txt" and minio_mgr.object_exists(f.file_path):
                 raw = minio_mgr.get_object_bytes(f.file_path)
                 txt_content = raw.decode("utf-8", errors="ignore")
+
+        # 路径推导兜底
+        if not md_content or not txt_content:
+            for f in files:
+                if f.file_path:
+                    task_dir = "/".join(f.file_path.split("/")[:-1])
+                    if not md_content:
+                        for cand in ["knowledge_base.md", "pdf_knowledge.md", "knowledge.md"]:
+                            c_path = f"{task_dir}/{cand}"
+                            if minio_mgr.object_exists(c_path):
+                                md_content = minio_mgr.get_object_bytes(c_path).decode("utf-8", errors="ignore")
+                                break
+                    if not txt_content:
+                        for cand in ["content_text.txt", "pdf_content.txt", "full_text_content.txt"]:
+                            c_path = f"{task_dir}/{cand}"
+                            if minio_mgr.object_exists(c_path):
+                                txt_content = minio_mgr.get_object_bytes(c_path).decode("utf-8", errors="ignore")
+                                break
     except Exception as e:
         logger.warning(f"[ReportChat] 从 MinIO 读取 PDF 底稿文件异常 (task={task_id}): {e}")
 

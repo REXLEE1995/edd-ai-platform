@@ -1041,6 +1041,28 @@ async def get_task_content_text(
         raw_bytes = minio_mgr.get_object_bytes(txt_file.file_path)
         return Response(content=raw_bytes, media_type="text/plain; charset=utf-8")
 
+    # 路径推导兜底：若 DB 记录丢失但 MinIO 中实际存有文件
+    other_files = await db.execute(
+        select(TaskFile).where(TaskFile.task_id == task_id)
+    )
+    for of in other_files.scalars().all():
+        if of.file_path:
+            task_dir = "/".join(of.file_path.split("/")[:-1])
+            for candidate_name in ["content_text.txt", "pdf_content.txt", "full_text_content.txt"]:
+                candidate = f"{task_dir}/{candidate_name}"
+                if minio_mgr.object_exists(candidate):
+                    raw_bytes = minio_mgr.get_object_bytes(candidate)
+                    return Response(content=raw_bytes, media_type="text/plain; charset=utf-8")
+
+    # 兜底降级查报告中的已存信息
+    report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
+    report = report_res.scalar_one_or_none()
+    if report:
+        txt = f"【企业尽调核心信息】\n企业名称：{report.company_name}\n统一社会信用代码：{report.credit_code}\n法定代表人：{report.legal_person or '未记载'}\n风控评级：{report.risk_level}\n综合评分：{report.score}\n建议授信：{report.suggested_quota_min}~{report.suggested_quota_max}万元\n"
+        if report.summary_ai_comment:
+            txt += f"\n【AI风控研判综述】\n{report.summary_ai_comment}\n"
+        return Response(content=txt, media_type="text/plain; charset=utf-8")
+
     raise HTTPException(status_code=404, detail="未找到该任务的解析文本存证文件")
 
 @router.get("/{task_id}/knowledge-base")
@@ -1078,10 +1100,22 @@ async def get_task_knowledge_base(
     for of in other_files.scalars().all():
         if of.file_path:
             task_dir = "/".join(of.file_path.split("/")[:-1])
-            candidate = f"{task_dir}/knowledge_base.md"
-            if minio_mgr.object_exists(candidate):
-                raw_bytes = minio_mgr.get_object_bytes(candidate)
-                return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
+            for candidate_name in ["knowledge_base.md", "pdf_knowledge.md", "knowledge.md"]:
+                candidate = f"{task_dir}/{candidate_name}"
+                if minio_mgr.object_exists(candidate):
+                    raw_bytes = minio_mgr.get_object_bytes(candidate)
+                    return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
+
+    # 兜底降级查报告中的已存知识库/Markdown数据
+    report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
+    report = report_res.scalar_one_or_none()
+    if report:
+        kb_content = ""
+        if isinstance(report.content_json, dict):
+            kb_content = report.content_json.get("markdown_knowledge_base") or report.content_json.get("knowledge_base_md") or ""
+        if not kb_content:
+            kb_content = f"# {report.company_name} 尽调报告知识库\n\n- 统一社会信用代码: {report.credit_code}\n- 法定代表人: {report.legal_person or '未记载'}\n- 风险评级: {report.risk_level}\n- 综合评分: {report.score}\n- 建议授信: {report.suggested_quota_min}~{report.suggested_quota_max} 万元\n\n## AI研判综述\n{report.summary_ai_comment or '暂无'}\n"
+        return Response(content=kb_content, media_type="text/markdown; charset=utf-8")
 
     raise HTTPException(status_code=404, detail="未找到该任务的 AI Markdown 知识库存证文件")
 
@@ -1122,18 +1156,50 @@ async def get_task_summary(
         except Exception:
             return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
 
-    # 兜底降级查报告
+    # 路径推导兜底：若 DB 记录丢失但 MinIO 中实际存有文件
+    other_files = await db.execute(
+        select(TaskFile).where(TaskFile.task_id == task_id)
+    )
+    for of in other_files.scalars().all():
+        if of.file_path:
+            task_dir = "/".join(of.file_path.split("/")[:-1])
+            for candidate_name in ["summary.json", "pdf_summary.json"]:
+                candidate = f"{task_dir}/{candidate_name}"
+                if minio_mgr.object_exists(candidate):
+                    raw_bytes = minio_mgr.get_object_bytes(candidate)
+                    try:
+                        summary_data = json.loads(raw_bytes.decode("utf-8"))
+                        return {
+                            "code": 0,
+                            "message": "success",
+                            "data": summary_data
+                        }
+                    except Exception:
+                        return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
+
+    # 兜底降级查报告中的已存研判数据
     report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
     report = report_res.scalar_one_or_none()
-    if report and report.overall_ai_summary:
-        ov = report.overall_ai_summary
-        return {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "enterprise_profile": ov.get("summary", ""),
-                "risk_assessment": [kp for kp in ov.get("key_points", [])]
+    if report:
+        ov = report.content_json.get("overall_ai_summary") if (report.content_json and isinstance(report.content_json, dict)) else None
+        if ov and isinstance(ov, dict):
+            return {
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "enterprise_profile": ov.get("summary", "") or ov.get("enterprise_profile", ""),
+                    "risk_assessment": [kp for kp in (ov.get("key_points") or ov.get("risk_assessment") or [])]
+                }
             }
-        }
+        if report.summary_ai_comment:
+            return {
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "enterprise_profile": report.summary_ai_comment,
+                    "risk_assessment": []
+                }
+            }
 
     raise HTTPException(status_code=404, detail="未找到该任务的 AI 总结存证文件")
+
