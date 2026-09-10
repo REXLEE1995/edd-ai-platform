@@ -548,16 +548,24 @@ async def get_report_summary_from_minio(
             return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
 
     # 兜底降级查报告中的已存研判数据
-    ov = r.content_json.get("overall_ai_summary") if (r and r.content_json) else None
-    if ov:
-        return {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "enterprise_profile": ov.get("summary", ""),
-                "risk_assessment": [kp for kp in ov.get("key_points", [])]
+    if r and r.content_json:
+        sum_json = r.content_json.get("ai_summary_json")
+        if sum_json and isinstance(sum_json, dict):
+            return {
+                "code": 0,
+                "message": "success",
+                "data": sum_json
             }
-        }
+        ov = r.content_json.get("overall_ai_summary")
+        if ov and isinstance(ov, dict):
+            return {
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "enterprise_profile": ov.get("summary", ""),
+                    "risk_assessment": [kp for kp in ov.get("key_points", [])]
+                }
+            }
 
     raise HTTPException(status_code=404, detail="未找到该报告的 AI 总结存证文件")
 

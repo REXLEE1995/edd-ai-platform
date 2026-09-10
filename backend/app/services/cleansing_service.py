@@ -3,6 +3,7 @@ import re
 import io
 import json
 import logging
+import asyncio
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 import pymupdf
@@ -562,12 +563,15 @@ class DataCleansingService:
 ]"""
             user_prompt = f"报告总物理页数: {len(raw_pages)} 页。{native_hint}\n以下是报告前置页面真实物理底稿：\n{front_text}\n请提取完整目录大纲树："
 
-            ai_resp = await AIService.chat_completion(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.0
+            ai_resp = await asyncio.wait_for(
+                AIService.chat_completion(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.0
+                ),
+                timeout=15.0
             )
 
             if ai_resp and ("chapter_id" in ai_resp or "title" in ai_resp):
@@ -679,53 +683,52 @@ class DataCleansingService:
         lines.append("---")
         lines.append("")
 
-        # 3. 各章节正文知识库抽取与组装
+        # 3. 各章节正文知识库抽取与组装 (使用 asyncio.gather 并发加速提炼各章节)
         from app.services.ai_service import AIService
 
-        for item in toc_structure:
+        async def process_chapter(item):
             ch_id = item.get("chapter_no", item.get("id", "01"))
             title = item.get("title", "")
             s_p = item.get("start_page", item.get("page", 1))
             e_p = item.get("end_page", s_p)
             anchor = f"chapter-{ch_id}"
 
-            lines.append(f'<a id="{anchor}"></a>')
-            lines.append(f"## {ch_id} {title} (P.{s_p} ~ P.{e_p})")
-            lines.append(f"> [!NOTE] 来源索引：原 PDF 第 {s_p} ~ {e_p} 页")
-            lines.append("")
-
             # 截取该章节对应的页码底稿文本
             ch_pages = [p for p in raw_pages if s_p <= p["page"] <= e_p]
             ch_text = "\n\n".join([f"--- [P.{p['page']}] ---\n{p['text']}" for p in ch_pages])
 
-            try:
-                system_prompt = """作为一个 PDF 解析人员和企业信息整合人员。需要从这个 PDF 里面分析出所有数据，并且所有的数据是企业的工商信息、经营信息、税务信息等等相关信息。解析这个 PDF 成为一个 markdown 格式输出，同时需要校验是否和原本的 PDF 内容有差池。
+            system_prompt = """作为一个 PDF 解析人员和企业信息整合人员。需要从这个 PDF 里面分析出所有数据，并且所有的数据是企业的工商信息、经营信息、税务信息等等相关信息。解析这个 PDF 成为一个 markdown 格式输出，同时需要校验是否和原本的 PDF 内容有差池。
 
 【提取与格式准则】：
 1. 绝对保真：金额数字、百分比、税额、统一代码、人名必须与原文字字对应，严禁四舍五入或概括。
 2. 表格标准化：所有数据表格完整转换为标准 Markdown 表格。
 3. 页码溯源：每一节标注 [见报告 P.XX]。"""
 
-                user_prompt = f"正在处理板块：【{ch_id} {title}】（页码范围：P.{s_p} ~ P.{e_p}）\n对应原始 PDF 底稿如下：\n{ch_text[:3000]}\n\n请提取并输出该板块的专业 Markdown 知识库内容："
-                
-                ai_chapter_content = await AIService.chat_completion(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=0.0
+            user_prompt = f"正在处理板块：【{ch_id} {title}】（页码范围：P.{s_p} ~ P.{e_p}）\n对应原始 PDF 底稿如下：\n{ch_text[:3000]}\n\n请提取并输出该板块的专业 Markdown 知识库内容："
+
+            try:
+                ai_chapter_content = await asyncio.wait_for(
+                    AIService.chat_completion(
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.0
+                    ),
+                    timeout=20.0
                 )
                 if ai_chapter_content and len(ai_chapter_content) > 20:
-                    lines.append(ai_chapter_content.strip())
+                    content_to_use = ai_chapter_content.strip()
                 else:
-                    lines.append(ch_text)
+                    content_to_use = ch_text
             except Exception as e:
                 logger.warning(f"[DataCleansingService] 【步骤 4·AI 抽取】章节【{title}】处理提示 ({e})，使用底稿追加。")
-                lines.append(ch_text)
+                content_to_use = ch_text
 
-            lines.append("")
-            lines.append("---")
-            lines.append("")
+            return f'<a id="{anchor}"></a>\n## {ch_id} {title} (P.{s_p} ~ P.{e_p})\n> [!NOTE] 来源索引：原 PDF 第 {s_p} ~ {e_p} 页\n\n{content_to_use}\n\n---\n'
+
+        chapter_results = await asyncio.gather(*[process_chapter(item) for item in toc_structure])
+        lines.extend(chapter_results)
 
         final_md = "\n".join(lines)
         return final_md
@@ -782,12 +785,15 @@ class DataCleansingService:
 
         try:
             from app.services.ai_service import AIService
-            ai_resp = await AIService.chat_completion(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.0
+            ai_resp = await asyncio.wait_for(
+                AIService.chat_completion(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.0
+                ),
+                timeout=15.0
             )
 
             if ai_resp:

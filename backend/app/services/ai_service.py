@@ -30,7 +30,8 @@ class AIService:
             client = AsyncOpenAI(
                 api_key=api_key.strip(),
                 base_url=base_url,
-                timeout=cfg.get("timeout_seconds", 60)
+                timeout=float(cfg.get("timeout_seconds", 30)),
+                max_retries=1
             )
             return client, cfg
         except Exception as e:
