@@ -16,6 +16,8 @@ from app.models.user import User
 from app.models.admin import AdminUser
 from app.models.report import XYZPReport
 from app.models.report_chat_message import ReportChatMessage
+from app.models.file_record import TaskFile
+from app.core.minio_client import get_minio_client
 from app.schemas.chat import ChatStreamRequest, ChatMessageOut
 from app.core.prompts import QueryType, build_kb_messages
 from app.services.ai_service import AIService
@@ -25,10 +27,66 @@ logger = logging.getLogger("xyzp.report_chat")
 
 router = APIRouter(prefix="/reports", tags=["报告AI问答与会话"])
 
-def _extract_report_kb_context(report: XYZPReport) -> str:
+async def _extract_report_kb_context(
+    report: XYZPReport,
+    db: AsyncSession,
+    catalog_key: Optional[str] = None,
+    catalog_name: Optional[str] = None
+) -> str:
     """
-    当请求未携带自定义底稿时，从报告资产及微风企底稿库中自动聚合知识库上下文
+    通过接口/存储层自动聚合当前尽调报告的真实 PDF 识别底稿：
+    1. 优先从 MinIO 中读取步骤 4 生成的标准 Markdown 知识库 (pdf_knowledge_md)
+    2. 优先从 MinIO 中读取步骤 3 提取的原始 PDF 全文本与物理页码标记 (pdf_content_txt)
+    3. 融合报告结构化核心指标与风控综述，综合生成供 AI 解析的全景 PDF 识别底稿
     """
+    minio_mgr = get_minio_client()
+    task_id = report.task_id or report.id
+
+    md_content = ""
+    txt_content = ""
+
+    # 1. 尝试从 MinIO 读取该任务关联的 PDF 解析底稿文件 (knowledge-base 与 content-text)
+    try:
+        file_result = await db.execute(
+            select(TaskFile).where(TaskFile.task_id == task_id)
+        )
+        files = file_result.scalars().all()
+        for f in files:
+            if f.file_type == "pdf_knowledge_md" and minio_mgr.stat_object(f.file_path):
+                raw = minio_mgr.get_object_bytes(f.file_path)
+                md_content = raw.decode("utf-8", errors="ignore")
+            elif f.file_type == "pdf_content_txt" and minio_mgr.stat_object(f.file_path):
+                raw = minio_mgr.get_object_bytes(f.file_path)
+                txt_content = raw.decode("utf-8", errors="ignore")
+    except Exception as e:
+        logger.warning(f"[ReportChat] 从 MinIO 读取 PDF 底稿文件异常 (task={task_id}): {e}")
+
+    # 2. 如果成功获取到 PDF 识别的 Markdown 知识库或 Content Text
+    if md_content or txt_content:
+        parts = [
+            f"# 企业尽调原始 PDF 报告识别底稿",
+            f"目标尽调企业：{report.company_name} (统一社会信用代码: {report.credit_code})",
+            f"法定代表人：{report.legal_person or '未记载'}",
+            f"风控评级：{report.risk_level} (综合量化评分: {report.score} 分)",
+            f"建议授信区间：{report.suggested_quota_min} ~ {report.suggested_quota_max} 万元",
+        ]
+        if report.summary_ai_comment:
+            parts.append(f"【AI风控总括研判】：\n{report.summary_ai_comment}")
+
+        if md_content:
+            # 目录定向模式下针对性高亮该章节
+            if catalog_name and catalog_name in md_content:
+                parts.append(f"【PDF 报告重点章节底稿内容】：\n{md_content}")
+            else:
+                parts.append(f"【PDF 报告结构化章节底稿内容】：\n{md_content[:15000]}")
+
+        if txt_content:
+            # 附带带有物理页码标记（--- [P.X] ---）的原版 PDF 逐页纯文本
+            parts.append(f"【PDF 报告原始物理页码逐页提取底稿】：\n{txt_content[:15000]}")
+
+        return "\n\n".join(parts)
+
+    # 3. 兜底回退：若 MinIO 文件不存在，从数据库结构化字段聚合
     parts = [
         f"目标尽调企业：{report.company_name} (统一社会信用代码: {report.credit_code})",
         f"法定代表人：{report.legal_person or '未记载'}",
@@ -60,7 +118,7 @@ def _extract_report_kb_context(report: XYZPReport) -> str:
 
     if report.raw_sources_json and isinstance(report.raw_sources_json, dict):
         raw_snippet = json.dumps(report.raw_sources_json, ensure_ascii=False)
-        parts.append(f"【原始金税与征信申报底稿切片】：\n{raw_snippet[:2000]}")
+        parts.append(f"【原始金税与征信申报底稿切片】：\n{raw_snippet[:4000]}")
 
     return "\n\n".join(parts)
 
@@ -96,8 +154,8 @@ async def report_chat_stream(
     if not is_admin and report.user_id != actor.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该报告的对话资产")
 
-    # 2. 提取或注入知识库内容
-    kb_context = req.kb_content.strip() if req.kb_content and req.kb_content.strip() else _extract_report_kb_context(report)
+    # 2. 提取或注入知识库内容 (综合融合 MinIO 中的 markdown 知识库与 content-text 纯文本)
+    kb_context = req.kb_content.strip() if req.kb_content and req.kb_content.strip() else await _extract_report_kb_context(report, db, req.catalog_key, req.catalog_name)
 
     # 3. 提问立即持久化入库 (User 消息)
     user_msg = ReportChatMessage(
