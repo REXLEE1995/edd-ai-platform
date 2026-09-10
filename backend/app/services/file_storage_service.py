@@ -203,6 +203,7 @@ class FileStorageService:
             source_url=remote_url,
             status="stored"
         )
+        session.add(md_file_record)
         # =============================================================
         # 步骤 5 产物上传 MinIO (reports/{日期}/{任务ID}/summary.json)
         # =============================================================

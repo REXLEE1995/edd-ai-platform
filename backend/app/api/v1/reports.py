@@ -479,6 +479,18 @@ async def get_report_knowledge_base_from_minio(
         raw_bytes = minio_mgr.get_object_bytes(md_file.file_path)
         return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
 
+    # 路径推导兜底
+    other_files = await db.execute(
+        select(TaskFile).where(TaskFile.task_id == task_id)
+    )
+    for of in other_files.scalars().all():
+        if of.file_path:
+            task_dir = "/".join(of.file_path.split("/")[:-1])
+            candidate = f"{task_dir}/knowledge_base.md"
+            if minio_mgr.object_exists(candidate):
+                raw_bytes = minio_mgr.get_object_bytes(candidate)
+                return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
+
     raise HTTPException(status_code=404, detail="未找到该报告的 AI Markdown 知识库存证文件")
 
 @router.get("/{report_id}/summary")
