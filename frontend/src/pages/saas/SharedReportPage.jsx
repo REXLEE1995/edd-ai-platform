@@ -28,9 +28,6 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-import reportShunjieData from '../../mock/report_shunjie_preloan.json';
-import reportHangzhouData from '../../mock/report_hangzhou_preloan.json';
-
 // Canvas 逐页流式渲染单页
 function SharedPdfCanvasPage({ pdfDoc, pageNum }) {
   const canvasRef = useRef(null);
@@ -182,13 +179,17 @@ export default function SharedReportPage() {
       }
       setUnlocked(true);
 
-      // 加载 PDF
-      const pdfUrl = res.data.report.pdf_url || '/reports/shunjie_preloan.pdf';
+      // 加载 PDF (使用专属免密直连流 /api/v1/shares/{share_code}/pdf)
+      const remoteHost = (typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL)
+        ? window.APP_CONFIG.API_BASE_URL.replace(/\/api\/?$/, '')
+        : 'http://192.168.110.234:8000';
+      const pdfUrl = res.data?.pdf_url
+        ? `${remoteHost}${res.data.pdf_url}`
+        : `${remoteHost}/api/v1/shares/${shareCode}/pdf`;
       loadPdfDocument(pdfUrl);
 
       // 默认展开所有章节
-      const isHangzhou = (res.data.report?.id || '').includes('hangzhou');
-      const catalog = (isHangzhou ? reportHangzhouData.toc_catalog : reportShunjieData.toc_catalog) || [];
+      const catalog = res.data.report?.content?.toc_catalog || [];
       const initialExpanded = {};
       catalog.forEach((sec, idx) => {
         initialExpanded[idx] = true;
@@ -206,23 +207,19 @@ export default function SharedReportPage() {
 
   const loadPdfDocument = async (url) => {
     try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const loadingTask = pdfjsLib.getDocument({
         url: url,
-        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+        cMapUrl: `${origin}/cmaps/`,
         cMapPacked: true,
+        standardFontDataUrl: `${origin}/standard_fonts/`,
       });
       const doc = await loadingTask.promise;
       setPdfDoc(doc);
       setTotalPages(doc.numPages);
     } catch (err) {
-      console.warn("加载远程 PDF 失败，使用备用 PDF:", err);
-      try {
-        const fallbackDoc = await pdfjsLib.getDocument('/sample_report.pdf').promise;
-        setPdfDoc(fallbackDoc);
-        setTotalPages(fallbackDoc.numPages);
-      } catch (e) {
-        console.error("Fallback PDF also failed:", e);
-      }
+      console.error("加载远程 PDF 失败:", err);
+      message.error("加载 PDF 原件失败，请确认后端报告存证状态");
     }
   };
 
@@ -233,12 +230,12 @@ export default function SharedReportPage() {
     }
   };
 
-  const isHangzhou = (report?.id || '').includes('hangzhou');
-  const catalogTree = (isHangzhou ? reportHangzhouData.toc_catalog : reportShunjieData.toc_catalog) || [];
+  const catalogTree = report?.content?.toc_catalog || [];
 
   const filteredCatalog = catalogTree.filter(sec => {
     if (!catalogQuery) return true;
     const q = catalogQuery.toLowerCase();
+    const titleMatch = (sec.title || '').toLowerCase().includes(q);
     const itemsMatch = (sec.children || []).some(sub => (sub.title || '').toLowerCase().includes(q));
     return titleMatch || itemsMatch;
   });
@@ -433,7 +430,12 @@ export default function SharedReportPage() {
   // =========================================================================
   // 4. 已解锁状态：进入受控的全景报告阅读器
   // =========================================================================
-  const targetPdfUrl = report?.pdf_url || '/reports/shunjie_preloan.pdf';
+  const remoteHost = (typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL)
+    ? window.APP_CONFIG.API_BASE_URL.replace(/\/api\/?$/, '')
+    : 'http://192.168.110.234:8000';
+  const targetPdfUrl = report?.pdf_url
+    ? `${remoteHost}${report.pdf_url}`
+    : (shareCode ? `${remoteHost}/api/v1/shares/${shareCode}/pdf` : (report?.id ? `${remoteHost}/api/v1/reports/${report.id}/pdf` : ''));
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans pb-16 relative">

@@ -15,8 +15,13 @@ import {
   Bot,
   Menu,
   X,
-  LogIn
+  LogIn,
+  Activity,
+  Plus,
+  Settings,
+  Cpu
 } from 'lucide-react';
+import { message } from 'antd';
 import { useAuth } from '../context/AuthContext';
 import RechargeModal from './RechargeModal';
 
@@ -42,13 +47,13 @@ export default function Navbar() {
   if (isAdminPath) {
     return (
       <>
-        <header className="sticky top-0 z-50 w-full bg-white/85 backdrop-blur-2xl border-b border-slate-200/90 shadow-[0_4px_24px_-2px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.04)] transition-all">
+        <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-2xl border-b border-slate-200/80 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.05)] transition-all">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-[60px] sm:h-[66px] flex items-center justify-between">
             
             <div className="flex items-center space-x-3 sm:space-x-6">
               <Link to="/admin/dashboard" className="flex items-center space-x-2.5 sm:space-x-3 group">
                 <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0">
-                  <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
+                  <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain filter drop-shadow-xs" />
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="font-bold text-sm sm:text-[15px] tracking-tight text-slate-950">
@@ -61,12 +66,14 @@ export default function Navbar() {
               </Link>
 
               {/* PC 端 Apple 风格 Segmented 导航切换栏 */}
-              <nav className="hidden lg:flex items-center bg-slate-100/85 p-1 rounded-xl border border-slate-200/70 shadow-inner space-x-1">
+              <nav className="hidden lg:flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/70 shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)] space-x-1">
                 {[
                   { to: '/admin/dashboard', label: '运营大盘', icon: LayoutDashboard },
                   { to: '/admin/users', label: '用户管理', icon: Users },
+                  { to: '/admin/tasks', label: '任务中心', icon: Activity },
                   { to: '/admin/quota', label: '额度调控', icon: Sliders },
-                  { to: '/admin/orders', label: '订单财务', icon: Receipt }
+                  { to: '/admin/orders', label: '订单财务', icon: Receipt },
+                  { to: '/admin/settings', label: 'AI接口配置', icon: Cpu }
                 ].map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.to;
@@ -74,9 +81,9 @@ export default function Navbar() {
                     <Link 
                       key={item.to}
                       to={item.to} 
-                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                         isActive 
-                          ? 'bg-white text-[#0070a4] shadow-xs border border-slate-200/80 font-bold' 
+                          ? 'bg-white text-[#0084c2] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/80 font-bold' 
                           : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
                       }`}
                     >
@@ -91,7 +98,7 @@ export default function Navbar() {
             <div className="flex items-center space-x-2 sm:space-x-3">
               {admin ? (
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/70 border border-slate-200/60 text-xs">
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/80 border border-slate-200/70 text-xs shadow-2xs">
                     <span className="text-slate-500">管理员:</span>
                     <strong className="text-slate-900 font-mono font-bold">{admin.username || 'admin'}</strong>
                   </div>
@@ -101,7 +108,7 @@ export default function Navbar() {
                       adminLogout();
                       navigate('/admin/login');
                     }}
-                    className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200/80 transition-all cursor-pointer shadow-xs"
+                    className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200/80 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
                   >
                     <LogOut className="w-3.5 h-3.5 inline mr-1 text-slate-400 group-hover:text-rose-600" />
                     <span className="hidden sm:inline">退出</span>
@@ -133,8 +140,10 @@ export default function Navbar() {
               {[
                 { to: '/admin/dashboard', label: '运营大盘', icon: LayoutDashboard },
                 { to: '/admin/users', label: '用户管理', icon: Users },
+                { to: '/admin/tasks', label: '任务中心', icon: Activity },
                 { to: '/admin/quota', label: '额度调控', icon: Sliders },
-                { to: '/admin/orders', label: '订单财务', icon: Receipt }
+                { to: '/admin/orders', label: '订单财务', icon: Receipt },
+                { to: '/admin/settings', label: 'AI接口配置', icon: Cpu }
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.to;
@@ -165,42 +174,47 @@ export default function Navbar() {
   if (isSaaSPath) {
     return (
       <>
-        <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-xl border-b border-slate-200/90 shadow-[0_4px_24px_-2px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.04)] transition-all">
+        <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-2xl border-b border-slate-200/80 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.05)] transition-all">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-[60px] sm:h-[66px] flex items-center justify-between">
             
             {/* Logo 与 PC 端主导航 */}
             <div className="flex items-center space-x-3 sm:space-x-6">
               <Link to="/app" className="flex items-center space-x-2.5 sm:space-x-3 group shrink-0">
                 <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0">
-                  <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
+                  <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain filter drop-shadow-xs" />
                 </div>
-                <span className="font-bold text-base tracking-tight text-slate-950">
-                  享宇AI智评
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-[15px] sm:text-base tracking-tight text-slate-950">
+                    享宇AI智评
+                  </span>
+                  <span className="hidden sm:inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-gradient-to-r from-sky-50 to-cyan-50 text-[#0084c2] border border-cyan-200/70">
+                    SaaS
+                  </span>
+                </div>
               </Link>
 
               {/* PC 端 Apple 风格 Segmented 导航切换栏 */}
-              <nav className="hidden md:flex items-center bg-slate-100/85 p-1 rounded-xl border border-slate-200/70 shadow-inner space-x-1">
+              <nav className="hidden md:flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/70 shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)] space-x-1">
                 <Link 
                   to="/app" 
-                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
                     pathname === '/app' 
-                      ? 'bg-white text-[#0070a4] shadow-xs border border-slate-200/80 font-bold' 
+                      ? 'bg-white text-[#0084c2] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/80 font-bold' 
                       : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
                   }`}
                 >
-                  <Zap className={`w-4 h-4 ${pathname === '/app' ? 'text-[#0ea5e9]' : 'text-slate-400'}`} />
+                  <Zap className={`w-3.5 h-3.5 ${pathname === '/app' ? 'text-[#0096DB]' : 'text-slate-400'}`} />
                   <span>发起尽调</span>
                 </Link>
                 <Link 
                   to="/app/tasks" 
-                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
                     pathname.startsWith('/app/tasks') || pathname.startsWith('/app/reports') 
-                      ? 'bg-white text-[#0070a4] shadow-xs border border-slate-200/80 font-bold' 
+                      ? 'bg-white text-[#0084c2] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/80 font-bold' 
                       : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
                   }`}
                 >
-                  <Clock className={`w-4 h-4 ${(pathname.startsWith('/app/tasks') || pathname.startsWith('/app/reports')) ? 'text-[#0ea5e9]' : 'text-slate-400'}`} />
+                  <Clock className={`w-3.5 h-3.5 ${(pathname.startsWith('/app/tasks') || pathname.startsWith('/app/reports')) ? 'text-[#0096DB]' : 'text-slate-400'}`} />
                   <span>任务中心 (含历史报告)</span>
                 </Link>
               </nav>
@@ -212,13 +226,16 @@ export default function Navbar() {
                 <button 
                   type="button"
                   onClick={() => setRechargeModalOpen(true)}
-                  className="h-8 sm:h-9 flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3.5 rounded-xl bg-gradient-to-r from-cyan-50/90 to-sky-50/90 hover:from-cyan-100 hover:to-sky-100 border border-cyan-200/80 text-[#0070a4] text-xs sm:text-sm font-semibold transition-all shadow-xs group cursor-pointer shrink-0 box-border"
-                  title="点击弹出充值加油包"
+                  className="h-8 sm:h-9 flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3 rounded-lg bg-gradient-to-r from-sky-50/80 via-white to-cyan-50/80 hover:from-sky-100/90 hover:to-cyan-100/90 border border-sky-200/90 hover:border-[#0096DB]/50 text-slate-800 text-xs sm:text-sm font-semibold transition-all shadow-xs group cursor-pointer shrink-0 active:scale-[0.98]"
+                  title="点击快捷充值额度加油包"
                 >
-                  <span className={`w-2 h-2 rounded-full ${(user.balance_quota ?? 0) > 0 ? 'bg-[#0ea5e9] shadow-sm shadow-[#0ea5e9]/50 animate-pulse' : 'bg-amber-500'} shrink-0`}></span>
-                  <span className="text-slate-600 font-medium hidden xs:inline">剩余额度:</span>
-                  <span className="font-mono text-xs sm:text-sm text-[#0070a4] font-extrabold leading-none">
-                    {user.balance_quota ?? 0} <span className="font-normal text-xs">次</span>
+                  <span className={`w-2 h-2 rounded-full ${(user.balance_quota ?? 0) > 0 ? 'bg-[#0096DB] shadow-sm shadow-[#0096DB]/50 animate-pulse' : 'bg-amber-500'} shrink-0`} />
+                  <span className="text-slate-500 font-medium hidden xs:inline">可用额度:</span>
+                  <span className="font-mono text-xs sm:text-sm text-[#0084c2] font-black leading-none">
+                    {user.balance_quota ?? 0} <span className="font-normal text-[11px] text-slate-500">次</span>
+                  </span>
+                  <span className="hidden sm:inline-flex items-center text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-[#0096DB] text-white shadow-2xs group-hover:bg-[#0084c2] transition-colors">
+                    + 充值
                   </span>
                 </button>
               )}
@@ -229,8 +246,11 @@ export default function Navbar() {
                   <button
                     type="button"
                     onClick={() => setUserDropdown(!userDropdown)}
-                    className="h-8 sm:h-9 flex items-center space-x-1.5 sm:space-x-2 px-3 rounded-xl bg-white hover:bg-slate-50 transition-all border border-slate-200/80 hover:border-slate-300 shadow-xs cursor-pointer box-border"
+                    className="h-8 sm:h-9 flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3 rounded-lg bg-white hover:bg-slate-50 transition-all border border-slate-200/90 hover:border-slate-300 shadow-xs cursor-pointer active:scale-[0.98]"
                   >
+                    <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 border border-slate-200/80">
+                      <UserIcon className="w-3 h-3 text-[#0096DB]" />
+                    </div>
                     <span className="text-xs sm:text-sm font-semibold text-slate-800 font-mono leading-none">
                       {user.phone ? user.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2') : '用户'}
                     </span>
@@ -239,20 +259,26 @@ export default function Navbar() {
 
                   {userDropdown && (
                     <div 
-                      className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/90 py-2 z-50 text-xs animate-in fade-in slide-in-from-top-1"
+                      className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-2xl rounded-2xl shadow-xl border border-slate-200/90 py-1.5 z-50 text-xs animate-in fade-in slide-in-from-top-1"
                       onMouseLeave={() => setUserDropdown(false)}
                     >
-                      <div className="px-4 py-2.5 border-b border-slate-100">
-                        <p className="font-bold text-slate-950 text-sm font-mono">{user.phone || '未设置手机号'}</p>
+                      <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-sky-50 border border-sky-200/60 flex items-center justify-center text-[#0096DB]">
+                          <UserIcon className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-950 text-xs font-mono">{user.phone || '未绑定手机'}</p>
+                          <span className="text-[10px] text-slate-400">尊贵认证用户</span>
+                        </div>
                       </div>
-                      <div className="py-1.5 space-y-0.5 px-1.5">
+                      <div className="py-1 space-y-0.5 px-1.5">
                         <Link 
                           to="/app/profile?tab=profile" 
                           onClick={() => setUserDropdown(false)}
-                          className="flex items-center px-3 py-2 rounded-lg text-slate-700 hover:text-[#0070a4] hover:bg-cyan-50/60 transition-colors font-semibold"
+                          className="flex items-center px-3 py-2 rounded-lg text-slate-700 hover:text-[#0084c2] hover:bg-cyan-50/60 transition-colors font-medium"
                         >
-                          <UserIcon className="w-4 h-4 mr-2.5 text-[#0ea5e9]" />
-                          个人中心
+                          <UserIcon className="w-4 h-4 mr-2.5 text-[#0096DB]" />
+                          个人实名中心
                         </Link>
                         <button 
                           type="button"
@@ -260,21 +286,21 @@ export default function Navbar() {
                             setUserDropdown(false);
                             setRechargeModalOpen(true);
                           }}
-                          className="w-full text-left flex items-center px-3 py-2 rounded-lg text-slate-700 hover:text-[#0070a4] hover:bg-cyan-50/60 transition-colors font-semibold cursor-pointer"
+                          className="w-full text-left flex items-center px-3 py-2 rounded-lg text-slate-700 hover:text-[#0084c2] hover:bg-cyan-50/60 transition-colors font-medium cursor-pointer"
                         >
-                          <CreditCard className="w-4 h-4 mr-2.5 text-[#0ea5e9]" />
+                          <CreditCard className="w-4 h-4 mr-2.5 text-[#0096DB]" />
                           额度充值加油包
                         </button>
                         <Link 
                           to="/app/profile?tab=transactions" 
                           onClick={() => setUserDropdown(false)}
-                          className="flex items-center px-3 py-2 rounded-lg text-slate-700 hover:text-[#0070a4] hover:bg-cyan-50/60 transition-colors font-semibold"
+                          className="flex items-center px-3 py-2 rounded-lg text-slate-700 hover:text-[#0084c2] hover:bg-cyan-50/60 transition-colors font-medium"
                         >
-                          <Receipt className="w-4 h-4 mr-2.5 text-[#0ea5e9]" />
+                          <Receipt className="w-4 h-4 mr-2.5 text-[#0096DB]" />
                           额度变动流水明细
                         </Link>
                       </div>
-                      <div className="pt-1.5 mt-1 border-t border-slate-100 px-1.5">
+                      <div className="pt-1 mt-1 border-t border-slate-100 px-1.5">
                         <button 
                           type="button"
                           onClick={() => {
@@ -282,7 +308,7 @@ export default function Navbar() {
                             setUserDropdown(false);
                             message.success('您已安全退出当前账号');
                           }}
-                          className="w-full text-left flex items-center px-3 py-2 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors font-semibold cursor-pointer"
+                          className="w-full text-left flex items-center px-3 py-2 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors font-medium cursor-pointer"
                         >
                           <LogOut className="w-4 h-4 mr-2.5 text-rose-500" />
                           退出登录
@@ -307,16 +333,16 @@ export default function Navbar() {
         </header>
 
         {/* 📱 移动端 iOS 风格悬浮毛玻璃底部导航栏 (Bottom Navigation Bar) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 shadow-[0_-4px_24px_-2px_rgba(15,23,42,0.06),0_-1px_2px_rgba(15,23,42,0.04)] px-3 py-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-2xl border-t border-slate-200/90 shadow-[0_-4px_20px_-2px_rgba(15,23,42,0.06)] px-3 py-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around">
           <Link
             to="/app"
-            className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all active:scale-95 ${
               pathname === '/app'
-                ? 'text-[#0070a4] font-bold'
+                ? 'text-[#0084c2] font-bold'
                 : 'text-slate-500 hover:text-slate-900 font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg ${pathname === '/app' ? 'bg-cyan-50 text-[#0096DB]' : ''}`}>
+            <div className={`p-1 rounded-lg transition-colors ${pathname === '/app' ? 'bg-cyan-50 text-[#0096DB]' : ''}`}>
               <Zap className="w-4 h-4" />
             </div>
             <span className="text-[10px] mt-0.5">发起尽调</span>
@@ -324,13 +350,13 @@ export default function Navbar() {
 
           <Link
             to="/app/tasks"
-            className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all active:scale-95 ${
               pathname.startsWith('/app/tasks') || pathname.startsWith('/app/reports')
-                ? 'text-[#0070a4] font-bold'
+                ? 'text-[#0084c2] font-bold'
                 : 'text-slate-500 hover:text-slate-900 font-medium'
             }`}
           >
-            <div className={`p-1 rounded-lg ${pathname.startsWith('/app/tasks') || pathname.startsWith('/app/reports') ? 'bg-cyan-50 text-[#0096DB]' : ''}`}>
+            <div className={`p-1 rounded-lg transition-colors ${pathname.startsWith('/app/tasks') || pathname.startsWith('/app/reports') ? 'bg-cyan-50 text-[#0096DB]' : ''}`}>
               <Clock className="w-4 h-4" />
             </div>
             <span className="text-[10px] mt-0.5">任务与报告</span>
@@ -339,13 +365,13 @@ export default function Navbar() {
           {user ? (
             <Link
               to="/app/profile"
-              className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all ${
+              className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all active:scale-95 ${
                 pathname.startsWith('/app/profile')
-                  ? 'text-[#0070a4] font-bold'
+                  ? 'text-[#0084c2] font-bold'
                   : 'text-slate-500 hover:text-slate-900 font-medium'
               }`}
             >
-              <div className={`p-1 rounded-lg ${pathname.startsWith('/app/profile') ? 'bg-cyan-50 text-[#0096DB]' : ''}`}>
+              <div className={`p-1 rounded-lg transition-colors ${pathname.startsWith('/app/profile') ? 'bg-cyan-50 text-[#0096DB]' : ''}`}>
                 <UserIcon className="w-4 h-4" />
               </div>
               <span className="text-[10px] mt-0.5">我的/充值</span>
@@ -354,12 +380,12 @@ export default function Navbar() {
             <button
               type="button"
               onClick={openLoginModal}
-              className="flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all text-slate-500 hover:text-slate-900 font-medium cursor-pointer"
+              className="flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all text-slate-500 hover:text-slate-900 font-medium cursor-pointer active:scale-95"
             >
               <div className="p-1 rounded-lg">
                 <LogIn className="w-4 h-4 text-[#0096DB]" />
               </div>
-              <span className="text-[10px] mt-0.5 font-semibold text-[#0070a4]">注册/登录</span>
+              <span className="text-[10px] mt-0.5 font-semibold text-[#0084c2]">注册/登录</span>
             </button>
           )}
         </nav>

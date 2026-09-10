@@ -13,43 +13,37 @@ export const AuthProvider = ({ children }) => {
   const openLoginModal = () => setIsLoginModalOpen(true);
   const closeLoginModal = () => setIsLoginModalOpen(false);
 
-  // 初始化加载当前用户与管理员信息 (仅在存在对应凭证时静默刷新，避免控制台 401 告警)
+  // 初始化加载当前用户与管理员信息 (直连真实后端，401 失效时坚决清空，严禁复用旧缓存)
   const refreshUserProfile = async () => {
     const token = localStorage.getItem('edd_user_token');
     if (!token) {
+      localStorage.removeItem('edd_user_profile_cached');
       setUser(null);
       return;
     }
-    const savedUser = localStorage.getItem('edd_user_profile_cached');
-    if (token.startsWith('mock_user_token_') && savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-        return;
-      } catch (_) {}
-    }
+
     try {
       const res = await apiClient.get('/v1/auth/me');
       if (res && (res.id || res.phone)) {
         setUser(res);
         localStorage.setItem('edd_user_profile_cached', JSON.stringify(res));
-      } else if (savedUser) {
-        setUser(JSON.parse(savedUser));
+      } else {
+        throw new Error('未获取到有效用户信息');
       }
     } catch (e) {
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser));
-          return;
-        } catch (_) {}
-      }
+      // 只要后端返回 401 或请求异常，坚决清除前端登录凭证与缓存，彻底置为未登录状态
       localStorage.removeItem('edd_user_token');
       localStorage.removeItem('edd_user_profile_cached');
       setUser(null);
-      console.debug('前台登录凭证已失效');
+      console.warn('[Auth] 前台登录凭证已过期或失效，已彻底清空登录状态');
     }
   };
 
   const refreshAdminProfile = async () => {
+    // 运营端/SaaS业务端与移动端绝不请求后台管理端接口，仅在用户访问 /admin 路由时才校验管理员凭证
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/admin')) {
+      return;
+    }
     const adminToken = localStorage.getItem('edd_admin_token');
     if (!adminToken) {
       setAdmin(null);
@@ -73,16 +67,32 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       setLoading(true);
-      await Promise.allSettled([refreshUserProfile(), refreshAdminProfile()]);
+      const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+      if (isAdminRoute) {
+        await Promise.allSettled([refreshAdminProfile()]);
+      } else {
+        await Promise.allSettled([refreshUserProfile()]);
+      }
       setLoading(false);
     };
     initAuth();
 
     const handleUserUnauth = () => {
+      localStorage.removeItem('edd_user_token');
       localStorage.removeItem('edd_user_profile_cached');
       setUser(null);
+      window.dispatchEvent(new Event('auth:user_logout'));
+      if (!window.location.pathname.startsWith('/admin')) {
+        openLoginModal();
+      }
     };
-    const handleAdminUnauth = () => setAdmin(null);
+    const handleAdminUnauth = () => {
+      localStorage.removeItem('edd_admin_token');
+      setAdmin(null);
+      if (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin/login') {
+        window.location.href = '/admin/login';
+      }
+    };
     window.addEventListener('auth:user_unauthorized', handleUserUnauth);
     window.addEventListener('auth:admin_unauthorized', handleAdminUnauth);
     return () => {
@@ -91,48 +101,37 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // 用户登录
+  // 用户登录 (纯真实接口，无任何 mock 假数据)
   const userLogin = async (phone, code = '123456', password = null) => {
-    try {
-      const res = await apiClient.post('/v1/auth/login', { phone, code, password });
-      if (res && res.access_token) {
-        localStorage.setItem('edd_user_token', res.access_token);
-        setUser(res.user);
-        return res;
+    const res = await apiClient.post('/v1/auth/login', { phone, code, password });
+    if (res && res.access_token) {
+      localStorage.setItem('edd_user_token', res.access_token);
+      let loggedUser = res.user;
+      if (loggedUser) {
+        setUser(loggedUser);
+        localStorage.setItem('edd_user_profile_cached', JSON.stringify(loggedUser));
+      } else {
+        await refreshUserProfile();
+        loggedUser = res.user || null;
       }
-    } catch (err) {
-      if (code === '123456' || code === '888888') {
-        const mockUser = {
-          id: `usr_${phone.slice(-4)}`,
-          phone: phone,
-          real_name: '已实名用户',
-          balance_quota: 57,
-          created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
-        };
-        const mockToken = `mock_user_token_${phone}`;
-        localStorage.setItem('edd_user_token', mockToken);
-        localStorage.setItem('edd_user_profile_cached', JSON.stringify(mockUser));
-        setUser(mockUser);
-        return {
-          access_token: mockToken,
-          user: mockUser,
-          is_new_user: false,
-          message: '登录成功'
-        };
-      }
-      throw err;
+      window.dispatchEvent(new CustomEvent('auth:user_login', { detail: loggedUser }));
+      return res;
     }
+    throw new Error(res?.message || '登录异常，未获取到访问令牌');
   };
 
   const userLogout = async () => {
     try {
       await apiClient.post('/v1/auth/logout');
     } catch (e) {
-      console.debug('退出登录接口调用完成或跳过:', e);
+      console.warn('Logout notification failed, clearing local token anyway:', e);
     } finally {
       localStorage.removeItem('edd_user_token');
       localStorage.removeItem('edd_user_profile_cached');
+      localStorage.removeItem('token');
+      localStorage.removeItem('userInfo');
       setUser(null);
+      window.dispatchEvent(new Event('auth:user_logout'));
     }
   };
 

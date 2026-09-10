@@ -95,7 +95,7 @@ export default function RechargeModal({ open, onClose, onSuccess }) {
       footer={null}
       width={600}
       centered
-      destroyOnClose
+      destroyOnHidden
       styles={{
         content: {
           padding: '24px',
