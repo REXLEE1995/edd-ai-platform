@@ -41,6 +41,13 @@ const NAV_ITEMS = [
         desc: '注册用户画像与额度管控' 
       },
       { 
+        to: '/admin/tasks', 
+        label: '任务中心', 
+        icon: Activity, 
+        badge: '调度',
+        desc: '全站尽调任务与执行进度总控' 
+      },
+      { 
         to: '/admin/quota', 
         label: '额度调控', 
         icon: Sliders, 

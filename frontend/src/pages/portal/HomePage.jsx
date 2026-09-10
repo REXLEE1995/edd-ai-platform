@@ -438,8 +438,8 @@ export default function HomePage() {
                 <span className="text-slate-400 font-mono ml-2 hidden sm:inline">享宇AI智评 · 全景报告阅读器 Pro</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" /> 建议准入 (702分 · B+级)
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-cyan-50 text-[#0070a4] border border-cyan-200">
+                  <ShieldCheck className="w-3 h-3 mr-1 text-[#0096DB]" /> 存证底册核验完成
                 </span>
                 <span className="font-mono text-slate-400 hidden md:inline">共 61 页 · PDF 原件在线存证</span>
               </div>
@@ -492,12 +492,12 @@ export default function HomePage() {
                       </div>
                       <span className="font-bold text-sm text-slate-900">企业信用全景综合画像 (AI 深度研判)</span>
                     </div>
-                    <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-semibold">
-                      综合评级: B+ (建议准入)
+                    <span className="text-xs font-mono text-slate-500 bg-slate-100/90 px-2 py-0.5 rounded-md border border-slate-200/80 font-medium">
+                      官方全息数据存证
                     </span>
                   </div>
                   <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
-                    目标企业【深圳腾讯前海信息技术有限公司】工商实缴到位，纳税信用等级良好，近 24 个月进销项开票流水稳步上扬无断票，水电运费与开票强相关拟合，享宇智评分 702 分，参考测算额度 500.00 万元。
+                    目标企业【深圳市***信息技术有限公司】工商实缴到位，纳税信用记录良好，近 24 个月进销项开票流水稳步上扬无断票，水电运费与开票强相关拟合，企业实体经营稳定，各项底层存证完整真实。
                   </p>
                 </div>
 
@@ -505,15 +505,15 @@ export default function HomePage() {
                 <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-xs space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-slate-900">深圳腾讯前海信息技术有限公司</span>
+                      <span className="font-bold text-sm text-slate-900">深圳市***信息技术有限公司</span>
                       <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-                        91440300MA5DQ8888X
+                        91440300MA****888X
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button 
                         type="button" 
-                        onClick={() => handleTriggerExperience('深圳腾讯前海信息技术有限公司')}
+                        onClick={() => handleTriggerExperience('深圳市***信息技术有限公司')}
                         className="shadcn-button-primary text-xs py-1 px-3"
                       >
                         体验全景阅读 <ArrowRight className="w-3 h-3 ml-1" />
@@ -535,8 +535,8 @@ export default function HomePage() {
                       <span className="text-sm font-bold text-emerald-600 font-mono mt-0.5 block">0 条记录</span>
                     </div>
                     <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/60">
-                      <span className="text-[11px] text-slate-500 block">建议授信参考</span>
-                      <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">¥500.00 万</span>
+                      <span className="text-[11px] text-slate-500 block">数据核验维度</span>
+                      <span className="text-sm font-bold text-slate-900 font-mono mt-0.5 block">8 大核心模块</span>
                     </div>
                   </div>
 
@@ -1065,7 +1065,7 @@ export default function HomePage() {
         footer={null}
         width={420}
         centered
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="space-y-6 pt-1">
           <div className="text-center space-y-2">

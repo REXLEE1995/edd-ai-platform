@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Download, 
-  Share2, 
   ShieldCheck, 
   AlertTriangle, 
   FileText, 
@@ -44,15 +43,14 @@ import { message, Drawer, Modal, Tooltip, Popconfirm } from 'antd';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { formatLocalTime } from '../../utils/date';
+import { copyToClipboard } from '../../utils/clipboard';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-import reportShunjieData from '../../mock/report_shunjie_preloan.json';
-import reportHangzhouData from '../../mock/report_hangzhou_preloan.json';
+import Navbar from '../../components/Navbar';
 import { Send, CornerDownLeft, RefreshCw, X, ArrowDown, Columns, PanelRight } from 'lucide-react';
-import ShareReportModal from '../../components/ShareReportModal';
 import { marked } from 'marked';
 
 marked.setOptions({
@@ -178,29 +176,52 @@ function PdfCanvasPage({ pdfDoc, pageNum, isCurrentVisible }) {
   );
 }
 
-// PDF 文档全局单例 Promise 缓存池 (避免 React StrictMode 或重新挂载时重复发起网络 Fetch)
-const pdfDocPromiseCache = new Map();
-
-function getCachedPdfDocument(url) {
-  if (!pdfDocPromiseCache.has(url)) {
-    const loadingTask = pdfjsLib.getDocument({
-      url,
-      disableRange: false,
-      disableStream: false,
-      disableAutoFetch: false
-    });
-    pdfDocPromiseCache.set(url, loadingTask.promise);
-  }
-  return pdfDocPromiseCache.get(url);
+// 统一标准的 PDF 文件流加载方法 (使用原生 fetch/xhr + Authorization 头部，并挂载本地 CMap/标准字体库支持中文字符与宋体/黑体完整渲染)
+function loadPdfDocument(url, token = '') {
+  const httpHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const loadingTask = pdfjsLib.getDocument({
+    url,
+    httpHeaders,
+    cMapUrl: `${origin}/cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${origin}/standard_fonts/`,
+    disableRange: false,
+    disableStream: false,
+    disableAutoFetch: false
+  });
+  return loadingTask.promise;
 }
 
 export default function ReportReaderPage() {
   const params = useParams();
   const reportId = params.id || params.reportId;
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
+  const { user, authLoading, openLoginModal } = useAuth();
+
+  // 灵活后退逻辑：优先返回来源页面（例如从任务列表进入则精准退回该列表与Tab），其次基于浏览器栈，兜底任务中心
+  const handleGoBack = () => {
+    if (location.state?.from) {
+      navigate(location.state.from);
+      return;
+    }
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/app/tasks?tab=tasks');
+  };
   
   const [report, setReport] = useState(null);
+  const [catalogData, setCatalogData] = useState(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [reportError, setReportError] = useState(null);
+  const [pdfLoadError, setPdfLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
   const [pdfDoc, setPdfDoc] = useState(null);
@@ -210,75 +231,70 @@ export default function ReportReaderPage() {
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
   const [selectedAiChapterId, setSelectedAiChapterId] = useState('overall');
   const [copied, setCopied] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
   const [isOverallAiSummaryOpen, setIsOverallAiSummaryOpen] = useState(false);
-  const [openShareModal, setOpenShareModal] = useState(false);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const sidebarNavRef = useRef(null);
   const chatBottomRef = useRef(null);
 
-  // 核心判断：仅在两份真实报告间匹配或随机分发
-  // 1. 东莞市顺捷实业有限公司 (61页, sample_report.pdf)
-  // 2. 贷前综合分析尽调报告 (39页, 贷前报告04182501.pdf / hangzhou_preloan.pdf)
-  const isHangzhouReport = useMemo(() => {
-    const idStr = String(reportId || '').toLowerCase();
-    const compStr = String(report?.company_name || '').toLowerCase();
-    if (idStr.includes('hangzhou') || idStr.includes('04182501') || idStr.includes('16320551') || compStr.includes('杭州') || compStr.includes('高新')) {
-      return true;
+  // 统一提取报告大纲目录：仅从真实接口 GET /api/v1/reports/{report_id}/catalog 或 report 详情中获取，绝无本地 Mock 伪造
+  const PDF_TOC_CATALOG = useMemo(() => {
+    if (catalogData?.toc_catalog && Array.isArray(catalogData.toc_catalog) && catalogData.toc_catalog.length > 0) {
+      return catalogData.toc_catalog;
     }
-    if (idStr.includes('shunjie') || compStr.includes('顺捷') || idStr.includes('18812552')) {
-      return false;
+    if (report?.content?.toc_catalog && Array.isArray(report.content.toc_catalog) && report.content.toc_catalog.length > 0) {
+      return report.content.toc_catalog;
     }
-    // 随机或交替分发：根据 ID 的字符编码和选择
-    const charSum = (idStr + compStr).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    return charSum % 2 === 1;
-  }, [reportId, report?.company_name]);
+    return [];
+  }, [catalogData, report]);
 
-  // 根据任务类型动态选择对应的结构化 JSON 单一事实源
-  const activeArchiveData = useMemo(() => {
-    if (isHangzhouReport) return reportHangzhouData;
-    return reportShunjieData;
-  }, [isHangzhouReport]);
-
-  const DEFAULT_REPORT_META = report?.content?.report_meta || activeArchiveData.report_meta;
-
-  // 研判总结数据 (严格从 GET /api/v1/reports/{report_id}/summary 真实接口加载，若远程无数据或报错则为 null，严禁假数据展示)
+  // 研判总结数据 (严格从真实接口 GET /api/v1/reports/{report_id}/summary 或 catalog 中加载，若远程无数据则为 null，严禁假数据展示)
   const OVERALL_SUMMARY = useMemo(() => {
-    if (!summaryData) return null;
-    const profile = summaryData.enterprise_profile;
-    const riskList = Array.isArray(summaryData.risk_assessment) ? summaryData.risk_assessment : [];
-    if (!profile && riskList.length === 0) return null;
+    if (summaryData) {
+      const profile = summaryData.enterprise_profile;
+      const riskList = Array.isArray(summaryData.risk_assessment) ? summaryData.risk_assessment : [];
+      if (profile || riskList.length > 0) {
+        return {
+          chapterNo: "00",
+          title: "全景综合尽调总结",
+          subtitle: "企业综合画像与全景深度风控研判",
+          summary: profile || '',
+          key_points: riskList,
+          keyPoints: riskList
+        };
+      }
+    }
+    if (catalogData?.overall_ai_summary) {
+      return catalogData.overall_ai_summary;
+    }
+    if (report?.content?.overall_ai_summary) {
+      return report.content.overall_ai_summary;
+    }
+    return null;
+  }, [summaryData, catalogData, report]);
 
-    return {
-      chapterNo: "00",
-      title: "全景综合尽调总结",
-      subtitle: "企业综合画像与全景深度风控研判",
-      summary: profile || '',
-      key_points: riskList,
-      keyPoints: riskList
-    };
-  }, [summaryData]);
-
-  // 6. 统一提取报告目录大纲 (完全按照后端接口返回数据驱动，0 本地额外偏移篡改)
-  const PDF_TOC_CATALOG = report?.content?.toc_catalog || activeArchiveData.toc_catalog || [];
-
-  const STRUCTURED_FACTS = report?.content?.structured_facts || activeArchiveData.structured_facts || {};
-
-  // 严格从真实远程后端与 MinIO 服务端点加载该笔任务的真实 PDF 存证文件流 (绝不调用本地接口)
+  // 严格从真实远程后端与 MinIO 服务端点加载该笔任务的真实 PDF 存证文件流 (携带 Token 进行多通道安全鉴权)
   const remoteApiHost = (typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL)
     ? window.APP_CONFIG.API_BASE_URL.replace(/\/api\/?$/, '')
     : 'http://192.168.110.234:8000';
 
+  const userToken = useMemo(() => {
+    return localStorage.getItem('edd_user_token') || localStorage.getItem('token') || '';
+  }, [user]);
+
   const targetPdfUrl = useMemo(() => {
     if (!reportId) return null;
-    const rawPdfUrl = report?.pdf_url;
-    if (rawPdfUrl && (rawPdfUrl.startsWith('http://') || rawPdfUrl.startsWith('https://'))) {
-      return rawPdfUrl;
-    }
-    const path = rawPdfUrl ? (rawPdfUrl.startsWith('/') ? rawPdfUrl : `/${rawPdfUrl}`) : `/api/v1/reports/${reportId}/pdf`;
-    return `${remoteApiHost}${path}`;
-  }, [reportId, report?.pdf_url, remoteApiHost]);
+    const tokenParam = userToken ? `token=${encodeURIComponent(userToken)}` : '';
+    // 优先使用 report 详情返回的指定 pdf_url，否则统一使用标准 REST 接口 /api/v1/reports/{report_id}/pdf
+    const rawPdf = report?.pdf_url || `/api/v1/reports/${reportId}/pdf`;
+    const fullUrl = rawPdf.startsWith('http') 
+      ? rawPdf 
+      : `${remoteApiHost}${rawPdf.startsWith('/') ? '' : '/'}${rawPdf}`;
+    const sep = fullUrl.includes('?') ? '&' : '?';
+    return tokenParam ? `${fullUrl}${sep}${tokenParam}` : fullUrl;
+  }, [reportId, remoteApiHost, userToken, report?.pdf_url]);
 
   // 动态构建各章节 AI 深度研判字典 (仅在真实存在总结时注入)
   const AI_CHAPTER_INSIGHTS = useMemo(() => {
@@ -294,25 +310,33 @@ export default function ReportReaderPage() {
     return insights;
   }, [OVERALL_SUMMARY, PDF_TOC_CATALOG]);
 
-  // 异步流式加载 PDF 原生文件 (带单例缓存，直接连接 MinIO 流式存证输出)
+  // 异步流式加载 PDF 原生文件 (统一使用 loadPdfDocument，直接连接 MinIO 流式存证输出)
+  const lastLoadedPdfUrlRef = useRef(null);
   useEffect(() => {
     if (!targetPdfUrl) return;
+    if (lastLoadedPdfUrlRef.current === targetPdfUrl) return;
+    lastLoadedPdfUrlRef.current = targetPdfUrl;
+
     let isMounted = true;
     setPdfDoc(null);
-    getCachedPdfDocument(targetPdfUrl)
+    setPdfLoadError(false);
+    loadPdfDocument(targetPdfUrl, userToken)
       .then((doc) => {
         if (isMounted) {
           setPdfDoc(doc);
         }
       })
       .catch((err) => {
-        console.error(`Failed to load PDF stream from MinIO (${targetPdfUrl}):`, err);
+        console.warn(`[PDF MinIO] 未找到或加载 PDF 存证流失败 (${targetPdfUrl}):`, err?.message);
+        if (isMounted) {
+          setPdfLoadError(true);
+        }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [targetPdfUrl]);
+  }, [targetPdfUrl, userToken]);
 
   // 响应式屏幕检测 (1024px 以下切换为移动端抽屉，1024px 及以上分栏并排工作台)
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1024);
@@ -385,13 +409,24 @@ export default function ReportReaderPage() {
     }
   };
 
-  // 统一复制方法 (支持提问内容与 AI 回复)
-  const handleCopyText = (text, type = '内容') => {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    message.success(`已复制该条${type}！`);
-    setTimeout(() => setCopied(false), 2000);
+  // 统一复制方法 (支持提问内容与 AI 回复，全协议/全浏览器兼容器)
+  const handleCopyText = async (text, type = '内容', msgId = null) => {
+    if (!text) {
+      message.warning('暂无内容可复制');
+      return;
+    }
+    const success = await copyToClipboard(text);
+    if (success) {
+      if (msgId) {
+        setCopiedMsgId(msgId);
+        setTimeout(() => setCopiedMsgId(null), 2000);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      message.success(`已复制该条${type}！`);
+    } else {
+      message.error('复制失败，浏览器未开放剪贴板权限，请手动选择文本复制');
+    }
   };
 
   // 预设快捷追问 Prompts (去除 emoji icon，保持视觉纯粹简洁)
@@ -637,41 +672,145 @@ export default function ReportReaderPage() {
     }
   };
 
-  const handleCopyAiInsight = (text) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    message.success('已成功复制该条 AI 总结分析！');
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyAiInsight = async (text) => {
+    if (!text) return;
+    const success = await copyToClipboard(text);
+    if (success) {
+      setCopied(true);
+      message.success('已成功复制该条 AI 总结分析！');
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      message.error('复制失败，请手动选中文本复制');
+    }
   };
 
   // 大纲折叠状态（默认全部展开，仅记录被用户主动折叠的项）
   const [collapsedSections, setCollapsedSections] = useState({});
 
-  // 动态感知实际 MinIO PDF 物理文件的真实页数
-  const totalPages = pdfDoc?.numPages || report?.total_pages || DEFAULT_REPORT_META?.total_pages || (isHangzhouReport ? 39 : 61);
+  // 动态感知实际 MinIO PDF 物理文件的真实页数 (严格以真实 PDF 与后端元数据为准，0 伪造页数)
+  const totalPages = pdfDoc?.numPages || report?.total_pages || catalogData?.report_meta?.total_pages || 0;
   const pagesArray = useMemo(() => Array.from({ length: totalPages }, (_, i) => i + 1), [totalPages]);
 
+  const lastLoadedReportIdRef = useRef(null);
+  const isFetchingReportRef = useRef(false);
+
   useEffect(() => {
-    if (reportId) {
-      fetchReportDetail();
-      fetchReportSummary();
-      fetchChatHistory();
-    } else {
-      setLoading(false);
+    const token = localStorage.getItem('edd_user_token') || localStorage.getItem('token');
+    const isAuthed = !!(user || token);
+    if (!reportId || !isAuthed) {
+      if (!isAuthed && !authLoading) {
+        setLoading(false);
+      }
+      return;
     }
-  }, [reportId]);
+
+    // 严格杜绝同个 reportId 重复发起批量请求 (包括多次重渲染与依赖变动)
+    if (lastLoadedReportIdRef.current === reportId || isFetchingReportRef.current) {
+      return;
+    }
+
+    lastLoadedReportIdRef.current = reportId;
+    isFetchingReportRef.current = true;
+
+    // 优先调取主报告详情接口 (自动提取内嵌大纲与研判总结，缺省时才自动补全)，同时拉取问答历史
+    Promise.allSettled([
+      fetchReportDetail(),
+      fetchChatHistory()
+    ]).finally(() => {
+      isFetchingReportRef.current = false;
+    });
+  }, [reportId, user?.id, authLoading]);
+
+  useEffect(() => {
+    const handleLogout = () => {
+      lastLoadedReportIdRef.current = null;
+      lastLoadedPdfUrlRef.current = null;
+    };
+    window.addEventListener('auth:user_logout', handleLogout);
+    return () => window.removeEventListener('auth:user_logout', handleLogout);
+  }, []);
 
   const fetchReportDetail = async () => {
     setLoading(true);
+    setReportError(null);
     try {
       const res = await apiClient.get(`/v1/reports/${reportId}`);
+      let reportData = null;
       if (res && res.data) {
-        setReport(res.data);
+        reportData = res.data;
+      } else if (res && res.id) {
+        reportData = res;
+      }
+
+      if (reportData) {
+        setReport(reportData);
+
+        // 如果主详情接口中已包含大纲目录，直接解析复用，绝不重复调用独立 /catalog 接口
+        const detailCatalog = (reportData.content?.toc_catalog && Array.isArray(reportData.content.toc_catalog) && reportData.content.toc_catalog.length > 0)
+          ? reportData.content.toc_catalog
+          : (Array.isArray(reportData.toc_catalog) && reportData.toc_catalog.length > 0 ? reportData.toc_catalog : null);
+
+        if (detailCatalog) {
+          setCatalogData(reportData.content || reportData);
+        } else {
+          // 仅在主接口未包含目录时才按需调取独立 /catalog 接口
+          fetchReportCatalog();
+        }
+
+        // 如果主详情接口中已包含研判总结，直接解析复用，绝不重复调用独立 /summary 接口
+        const detailSummary = reportData.content?.overall_ai_summary
+          || reportData.enterprise_profile
+          || reportData.summary
+          || (Array.isArray(reportData.risk_assessment) && reportData.risk_assessment.length > 0);
+
+        if (detailSummary) {
+          setSummaryData(reportData.content || reportData);
+        } else {
+          // 仅在主接口未包含总结时才按需调取独立 /summary 接口
+          fetchReportSummary();
+        }
+      } else {
+        setReportError('未查询到该尽调报告资产');
       }
     } catch (err) {
-      console.warn(`Fetch report ${reportId} error:`, err);
+      const status = err.response?.status;
+      const detail = err.response?.data?.detail;
+      if (status === 404) {
+        setReportError(detail || '未查询到该尽调报告资产或已被删除');
+      } else if (status === 403) {
+        setReportError(detail || '无权访问该报告资产（多租户数据隔离保护，仅限出具方企业或授权机构调阅）');
+      } else if (status === 401) {
+        setReportError('登录凭证已失效，请重新登录');
+      } else {
+        setReportError(detail || '加载报告资产失败，请稍后重试');
+      }
+      setReport(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 大纲目录数据 (GET /api/v1/reports/{report_id}/catalog - 从 MinIO 读取真实 pdf_toc_json)
+  const fetchReportCatalog = async () => {
+    if (!reportId) {
+      setCatalogData(null);
+      return;
+    }
+    setLoadingCatalog(true);
+    try {
+      const res = await apiClient.get(`/v1/reports/${reportId}/catalog`);
+      if (res && res.code === 0 && res.data) {
+        setCatalogData(res.data);
+      } else if (res && res.toc_catalog) {
+        setCatalogData(res);
+      } else {
+        setCatalogData(null);
+      }
+    } catch (err) {
+      console.warn(`[Catalog API] 远程接口拉取大纲目录失败 (${reportId}):`, err?.message);
+      setCatalogData(null);
+    } finally {
+      setLoadingCatalog(false);
     }
   };
 
@@ -971,12 +1110,21 @@ export default function ReportReaderPage() {
                       <span className="font-mono">{msg.timestamp || '刚刚'}</span>
                       <button
                         type="button"
-                        onClick={() => handleCopyText(msg.text, '提问内容')}
+                        onClick={() => handleCopyText(msg.text || msg.content || '', '提问内容', msg.id || index)}
                         className="inline-flex items-center gap-1 hover:text-white transition-colors cursor-pointer px-2 py-0.5 rounded hover:bg-white/15"
                         title="复制此条提问"
                       >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>复制</span>
+                        {copiedMsgId === (msg.id || index) ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-300" />
+                            <span className="text-emerald-300 font-medium">已复制</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>复制</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -1030,12 +1178,21 @@ export default function ReportReaderPage() {
                       {aiContent && (
                         <button
                           type="button"
-                          onClick={() => handleCopyText(aiContent, 'AI 总结与分析')}
+                          onClick={() => handleCopyText(aiContent, 'AI 总结与分析', msg.id || index)}
                           className="shadcn-button-outline text-xs sm:text-sm py-1 px-3 flex items-center gap-1.5 cursor-pointer hover:border-[#0096DB] hover:text-[#0096DB]"
                           title="复制该条 AI 研判结果"
                         >
-                          <Copy className="w-3.5 h-3.5 text-zinc-400" />
-                          <span>复制此条</span>
+                          {copiedMsgId === (msg.id || index) ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="text-emerald-600 font-medium">已复制</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                              <span>复制此条</span>
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
@@ -1133,45 +1290,117 @@ export default function ReportReaderPage() {
     </div>
   );
 
-  if (loading) {
+  // 1. 登录凭证身份初始化中
+  if (authLoading) {
     return (
-      <div className="min-h-[75vh] flex flex-col items-center justify-center space-y-3 text-slate-500 text-sm">
-        <div className="w-8 h-8 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="font-medium">正在载入企业全景尽调报告...</p>
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center space-y-3 text-slate-500 text-sm">
+        <div className="w-8 h-8 border-2 border-[#0096DB] border-t-transparent rounded-full animate-spin"></div>
+        <p className="font-medium">正在校验账号身份凭证...</p>
       </div>
     );
   }
+
+  // 2. 未登录拦截：必须先登录才能调阅企业报告资产与目录，严禁未登录展示或调用假数据
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-24 text-center space-y-4">
+        <div className="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto text-[#0096DB] shadow-xs">
+          <ShieldCheck className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">请先登录账号</h2>
+        <p className="text-sm text-slate-500 max-w-sm mx-auto">
+          企业尽调报告与原件存证需登录后调阅您名下的正式报告与数据底稿。
+        </p>
+        <div className="pt-2 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={openLoginModal}
+            className="shadcn-button-primary text-sm py-2 px-6 cursor-pointer"
+          >
+            立即登录 / 注册
+          </button>
+          <Link
+            to="/app/tasks"
+            className="shadcn-button-outline text-sm py-2 px-5"
+          >
+            返回任务中心
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. 报告未找到或报错提示 (404/403/500 等真实错误)
+  if (reportError && !loading) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-24 text-center space-y-4">
+        <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto text-rose-500 shadow-xs">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">报告调阅失败</h2>
+        <p className="text-sm text-slate-500">
+          {reportError}
+        </p>
+        <div className="pt-2 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={handleGoBack}
+            className="shadcn-button-primary text-sm py-2 px-6 inline-flex items-center gap-2 cursor-pointer shadow-xs"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            返回上一页
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. 报告拉取加载中
+  if (loading) {
+    return (
+      <div className="min-h-[75vh] flex flex-col items-center justify-center space-y-3 text-slate-500 text-sm">
+        <div className="w-8 h-8 border-2 border-[#0096DB] border-t-transparent rounded-full animate-spin"></div>
+        <p className="font-medium">正在载入企业全景尽调报告与存证大纲...</p>
+      </div>
+    );
+  }
+
+  const currentCompanyName = report?.company_name || catalogData?.company_name || '企业尽调报告';
+  const currentCreditCode = report?.credit_code || catalogData?.credit_code || '';
 
   return (
     <div className="h-[calc(100vh-60px)] sm:h-[calc(100vh-66px)] flex flex-col overflow-hidden bg-[#f8fafc] text-slate-900 antialiased">
       
       {/* 顶部公文状态栏 (固定紧凑顶栏，不占页面滚动，宽度与工作台保持一致) */}
-      <header className="shrink-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-xs">
+      <header className="shrink-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-2xl shadow-[0_4px_20px_-4px_rgba(15,23,42,0.05)]">
         <div className={`mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-all duration-200 ${
           isAiDrawerOpen && aiViewMode === 'docked' && !isMobile ? 'w-full' : 'max-w-7xl'
         }`}>
           
           {/* 左侧：返回 + 企业名称与统一社会信用代码 (移动端隐藏企业名称，保障返回按钮绝对完整可见) */}
           <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
-            <Link 
-              to="/app/tasks" 
-              className="shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 shrink-0 hover:border-[#0096DB] hover:text-[#0096DB] shadow-xs flex items-center gap-1.5"
-              title="返回任务中心"
+            <button 
+              type="button"
+              onClick={handleGoBack} 
+              className="shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 shrink-0 hover:border-[#0096DB] hover:text-[#0084c2] shadow-xs flex items-center gap-1.5 active:scale-[0.98] cursor-pointer"
+              title="返回上一页"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="inline font-medium">返回</span>
-            </Link>
+            </button>
 
             {/* 企业主体信息：在桌面/平板端显示，移动端隐藏避免挤压按钮 */}
             <div className="max-sm:!hidden sm:flex items-center gap-3 min-w-0">
               <div className="h-4 sm:h-5 w-px bg-slate-200/80 shrink-0"></div>
               <div className="min-w-0 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3">
                 <h1 className="font-bold text-sm sm:text-base lg:text-lg text-slate-950 tracking-tight truncate max-w-xs md:max-w-md">
-                  {report?.company_name || '东莞市顺捷实业有限公司'}
+                  {currentCompanyName}
                 </h1>
-                <span className="text-xs sm:text-sm text-slate-500 font-mono truncate">
-                  <span>统一代码: </span><strong className="font-medium text-slate-800">{report?.credit_code || '91441900MA4W6BGB8T'}</strong>
-                </span>
+                {currentCreditCode && (
+                  <span className="text-xs sm:text-sm text-slate-500 font-mono truncate">
+                    <span>统一代码: </span><strong className="font-medium text-slate-800">{currentCreditCode}</strong>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1182,10 +1411,10 @@ export default function ReportReaderPage() {
             <button
               type="button"
               onClick={() => setIsAiDrawerOpen(prev => !prev)}
-              className={`max-sm:!hidden sm:flex shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 items-center gap-1.5 shadow-xs transition-all cursor-pointer ${
+              className={`max-sm:!hidden sm:flex shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-[0.98] ${
                 isAiDrawerOpen 
                   ? 'bg-cyan-50/90 border-cyan-300 text-[#0070a4] font-semibold' 
-                  : 'text-slate-700 hover:border-[#0096DB] hover:text-[#0096DB]'
+                  : 'text-slate-700 hover:border-[#0096DB] hover:text-[#0084c2]'
               }`}
               title={isAiDrawerOpen ? "收起 AI 问答分栏" : "展开 AI 问答分栏 (与报告同屏并排查看)"}
             >
@@ -1198,27 +1427,18 @@ export default function ReportReaderPage() {
             <button
               type="button"
               onClick={() => setMobileTocOpen(true)}
-              className="lg:hidden shadcn-button-outline text-xs sm:text-sm py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB] cursor-pointer"
+              className="lg:hidden shadcn-button-outline text-xs sm:text-sm py-1.5 px-3 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0084c2] cursor-pointer active:scale-[0.98]"
               title="查看报告大纲目录"
             >
               <Bookmark className="w-3.5 h-3.5 text-[#0096DB]" />
               <span>目录</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setOpenShareModal(true)}
-              className="shadcn-button-outline text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 flex items-center gap-1.5 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
-              title="设置 6 位密码加密分享此报告"
-            >
-              <Share2 className="w-3.5 h-3.5 text-[#0096DB]" />
-              <span className="hidden sm:inline font-medium">分享报告</span>
-            </button>
 
             <a 
               href={targetPdfUrl}
               download={`${report?.company_name || '企业尽调报告'}.pdf`}
-              className="shadcn-button-primary text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 whitespace-nowrap flex items-center gap-1.5 font-medium"
+              className="shadcn-button-primary text-xs sm:text-sm py-1.5 px-2.5 sm:px-3.5 whitespace-nowrap flex items-center gap-1.5 font-medium shadow-xs active:scale-[0.98]"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">下载 PDF</span>
@@ -1238,7 +1458,7 @@ export default function ReportReaderPage() {
         
           {/* 左栏：PDF 目录大纲树状导航 (独立内部纵向滚动，不干扰中栏文档与右栏AI) */}
           <aside 
-            className={`hidden lg:flex lg:flex-col shrink-0 bg-white/80 backdrop-blur-xl rounded-xl border border-slate-200/80 shadow-xs p-3 h-full z-20 transition-all duration-200 ${
+            className={`hidden lg:flex lg:flex-col shrink-0 bg-white/90 backdrop-blur-xl rounded-xl border border-slate-200/80 shadow-xs p-3 h-full z-20 transition-all duration-200 ${
               isAiDrawerOpen && aiViewMode === 'docked' ? 'w-56 xl:w-60' : 'w-64 xl:w-72'
             }`}
           >
@@ -1266,7 +1486,18 @@ export default function ReportReaderPage() {
 
           {/* 2. 目录项列表 (独立纵向平滑滚动，默认全部展开) */}
           <nav ref={sidebarNavRef} className="flex-1 overflow-y-auto py-2 space-y-1 text-xs sm:text-sm scroll-smooth pr-1">
-            {PDF_TOC_CATALOG.map((item) => {
+            {loadingCatalog ? (
+              <div className="py-12 text-center text-xs text-slate-400 space-y-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-[#0096DB] mx-auto" />
+                <span>正在从存证底稿拉取真实大纲...</span>
+              </div>
+            ) : PDF_TOC_CATALOG.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-400 space-y-1">
+                <Layers className="w-6 h-6 text-slate-300 mx-auto" />
+                <p>暂无结构化章节大纲</p>
+              </div>
+            ) : (
+              PDF_TOC_CATALOG.map((item) => {
               const isExpanded = !collapsedSections[item.id];
               const isParentActive = activeChapterId === item.id;
               const hasChildren = item.children && item.children.length > 0;
@@ -1351,7 +1582,7 @@ export default function ReportReaderPage() {
                   )}
                 </div>
               );
-            })}
+            }))}
           </nav>
 
           {/* 3. 固定在底部的 展开/折叠全部 */}
@@ -1470,18 +1701,33 @@ export default function ReportReaderPage() {
 
             {/* 报告连续文档流 */}
             <div className="space-y-4 w-full">
-              {pagesArray.map((pageNum) => {
-                const isCurrentVisible = activePage === pageNum;
+              {pdfLoadError ? (
+                <div className="bg-white rounded-xl border border-slate-200/80 p-8 sm:p-12 text-center space-y-3 shadow-xs">
+                  <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+                  <h3 className="text-base font-bold text-slate-900">PDF 原件正在由中台合成存证中</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    该尽调任务已完成多维数据清洗与合规审计，PDF 矢量底稿正写入对象存储。您仍可点击左侧章节大纲调阅结构化数据，或在右侧 AI 助手发起全维度信贷研判问答。
+                  </p>
+                </div>
+              ) : pagesArray.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200/80 p-12 text-center space-y-2 shadow-xs">
+                  <FileText className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-400 font-medium">暂无页码数据</p>
+                </div>
+              ) : (
+                pagesArray.map((pageNum) => {
+                  const isCurrentVisible = activePage === pageNum;
 
-                return (
-                  <PdfCanvasPage
-                    key={pageNum}
-                    pdfDoc={pdfDoc}
-                    pageNum={pageNum}
-                    isCurrentVisible={isCurrentVisible}
-                  />
-                );
-              })}
+                  return (
+                    <PdfCanvasPage
+                      key={pageNum}
+                      pdfDoc={pdfDoc}
+                      pageNum={pageNum}
+                      isCurrentVisible={isCurrentVisible}
+                    />
+                  );
+                })
+              )}
             </div>
           </div>
         </main>
@@ -1551,7 +1797,12 @@ export default function ReportReaderPage() {
         styles={{ body: { padding: '12px' } }}
       >
         <div className="space-y-1 text-xs sm:text-sm">
-          {PDF_TOC_CATALOG.map((item) => {
+          {PDF_TOC_CATALOG.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-400">
+              暂无结构化章节大纲
+            </div>
+          ) : (
+            PDF_TOC_CATALOG.map((item) => {
             const isParentActive = activeChapterId === item.id;
             return (
               <div key={item.id} className="space-y-0.5">
@@ -1613,16 +1864,10 @@ export default function ReportReaderPage() {
                 )}
               </div>
             );
-          })}
+          }))}
         </div>
       </Drawer>
 
-      {/* 报告加密分享弹窗 (6 位访问密码设置) */}
-      <ShareReportModal
-        report={report}
-        open={openShareModal}
-        onClose={() => setOpenShareModal(false)}
-      />
 
     </div>
   );

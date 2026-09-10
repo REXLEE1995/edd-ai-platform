@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   FileText, 
   Search, 
@@ -17,6 +17,7 @@ import apiClient from '../../api/client';
 import { formatLocalTime } from '../../utils/date';
 
 export default function ReportAssetsPage() {
+  const location = useLocation();
   const [reports, setReports] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -32,8 +33,12 @@ export default function ReportAssetsPage() {
       if (keyword) url += `keyword=${encodeURIComponent(keyword.trim())}&`;
       if (riskFilter) url += `risk_level=${encodeURIComponent(riskFilter)}&`;
       const res = await apiClient.get(url);
-      setReports(res.items || res.data || []);
-      setTotal(res.total || 0);
+      const rawList = res?.items || (Array.isArray(res?.data) ? res.data : res?.data?.items) || [];
+      setReports(Array.isArray(rawList) ? rawList : []);
+      const newTotal = typeof res?.total === 'number' 
+        ? res.total 
+        : (typeof res?.data?.total === 'number' ? res.data.total : rawList.length);
+      setTotal(newTotal);
     } catch (err) {
       console.error(err);
     } finally {
@@ -41,13 +46,18 @@ export default function ReportAssetsPage() {
     }
   };
 
+  const lastReqKeyRef = useRef('');
   useEffect(() => {
+    const key = `${page}_${pageSize}_${riskFilter}`;
+    if (lastReqKeyRef.current === key) return;
+    lastReqKeyRef.current = key;
     fetchReports(page, pageSize);
   }, [page, pageSize, riskFilter]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(1);
+    lastReqKeyRef.current = '';
     fetchReports(1, pageSize);
   };
 
@@ -165,18 +175,19 @@ export default function ReportAssetsPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <Link
                     to={`/app/reports/${rpt.id}`}
-                    className="px-4 py-2 rounded-sm bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                    state={{ from: `${location.pathname}${location.search}` }}
+                    className="px-4 py-2 rounded-sm bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
                   >
                     <span>查看全景报告</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                   <a
-                    href={`${(typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL) ? window.APP_CONFIG.API_BASE_URL.replace(/\/api\/?$/, '') : 'http://192.168.110.234:8000'}/api/v1/reports/${rpt.id}/pdf`}
-                    download={`微风企尽调报告_${rpt.company_name}.pdf`}
+                    href={`${(typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL) ? window.APP_CONFIG.API_BASE_URL.replace(/\/api\/?$/, '') : 'http://192.168.110.234:8000'}/api/v1/reports/${rpt.id}/pdf${(localStorage.getItem('edd_user_token') || localStorage.getItem('token')) ? `?token=${encodeURIComponent(localStorage.getItem('edd_user_token') || localStorage.getItem('token'))}` : ''}`}
+                    download={`企业尽调报告_${rpt.company_name}.pdf`}
                     target="_blank"
                     rel="noreferrer"
                     className="p-2 rounded-sm bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs transition-colors inline-flex items-center justify-center"
-                    title="下载 MinIO 真实 PDF 存证原件"
+                    title="下载真实 PDF 存证原件"
                   >
                     <Download className="w-4 h-4" />
                   </a>

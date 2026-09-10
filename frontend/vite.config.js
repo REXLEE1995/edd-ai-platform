@@ -30,6 +30,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: true,
+      allowedHosts: true,
       fs: {
         strict: false,
         allow: [realDir, __dirname]

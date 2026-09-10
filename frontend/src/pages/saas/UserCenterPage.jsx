@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { 
   User, 
@@ -197,13 +197,18 @@ export default function UserCenterPage() {
     }
   };
 
+  const lastFetchedTabRef = useRef('');
   useEffect(() => {
+    const tabKey = `${activeTab}_${user?.id || 'guest'}`;
+    if (lastFetchedTabRef.current === tabKey) return;
+    lastFetchedTabRef.current = tabKey;
+
     if (activeTab === 'billing') {
       fetchPackagesAndSummary();
     } else if (activeTab === 'transactions') {
       fetchTransactions();
     }
-  }, [activeTab]);
+  }, [activeTab, user?.id]);
 
   const handleCreateOrder = async (pkg) => {
     try {
@@ -282,7 +287,7 @@ export default function UserCenterPage() {
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 text-slate-900">
       
       {/* 头部个人基本信息卡片 (shadcn Card) */}
-      <div className="shadcn-card bg-white/75 backdrop-blur-xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 border border-white/85 shadow-glass rounded-xl sm:rounded-2xl">
+      <div className="shadcn-card bg-white/90 backdrop-blur-xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 border border-slate-200/80 shadow-xs rounded-xl sm:rounded-2xl">
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <h1 className="text-lg sm:text-xl font-bold text-slate-950 tracking-tight font-mono">
@@ -304,7 +309,7 @@ export default function UserCenterPage() {
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium text-rose-600 bg-rose-50/80 border border-rose-200/80 hover:bg-rose-100/80 transition-all cursor-pointer shadow-2xs ml-auto sm:ml-2"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium text-rose-600 bg-rose-50/80 border border-rose-200/80 hover:bg-rose-100/80 transition-all cursor-pointer shadow-2xs ml-auto sm:ml-2 active:scale-[0.98]"
               title="退出当前登录账号"
             >
               <LogOut className="w-3 h-3 text-rose-500" />
@@ -318,17 +323,17 @@ export default function UserCenterPage() {
         </div>
 
         {/* 快捷额度卡 */}
-        <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 bg-white/60 backdrop-blur-md p-2.5 sm:p-3 rounded-xl border border-white/80 w-full md:w-auto shadow-2xs">
+        <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 bg-white/80 backdrop-blur-md p-2.5 sm:p-3 rounded-xl border border-slate-200/80 w-full md:w-auto shadow-2xs">
           <div className="text-left md:text-right">
             <span className="text-[10px] sm:text-xs text-zinc-500 block">可用尽调额度</span>
-            <span className="text-xl sm:text-2xl font-bold text-slate-950 font-mono leading-none">
+            <span className="text-xl sm:text-2xl font-bold text-[#0084c2] font-mono leading-none">
               {isRealNameVerified ? (user?.balance_quota ?? 57) : Math.max(0, (user?.balance_quota ?? 57) - 1)} <span className="text-xs font-normal text-zinc-500">次</span>
             </span>
           </div>
           <button
             type="button"
             onClick={() => setRechargeModalOpen(true)}
-            className="shadcn-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs cursor-pointer"
+            className="shadcn-button-primary text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98]"
           >
             <CreditCard className="w-3.5 h-3.5" />
             <span>购买加油包</span>
@@ -336,44 +341,44 @@ export default function UserCenterPage() {
         </div>
       </div>
 
-      {/* Tab 导航栏 (shadcn 胶囊风格) */}
-      <div className="mt-4 sm:mt-6 flex items-center bg-slate-200/60 backdrop-blur-xl p-1 rounded-xl w-full sm:w-fit border border-white/60 shadow-xs">
+      {/* Tab 导航栏 (Apple 风格 Segmented 控制器) */}
+      <div className="mt-4 sm:mt-6 flex items-center bg-slate-100/90 p-1 rounded-xl w-full sm:w-fit border border-slate-200/70 shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
         <button
           type="button"
           onClick={() => switchTab('profile')}
-          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3.5 sm:px-4 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'profile'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-white/80 backdrop-blur-md'
-              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
+              ? 'bg-white text-[#0084c2] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/80 font-bold'
+              : 'text-slate-600 hover:text-slate-950 hover:bg-white/60 border border-transparent'
           }`}
         >
-          <User className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+          <User className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'profile' ? 'text-[#0096DB]' : 'text-slate-400'}`} />
           <span className="whitespace-nowrap">实名资料</span>
         </button>
 
         <button
           type="button"
           onClick={() => switchTab('billing')}
-          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3.5 sm:px-4 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'billing'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-white/80 backdrop-blur-md'
-              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
+              ? 'bg-white text-[#0084c2] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/80 font-bold'
+              : 'text-slate-600 hover:text-slate-950 hover:bg-white/60 border border-transparent'
           }`}
         >
-          <Zap className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+          <Zap className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'billing' ? 'text-[#0096DB]' : 'text-slate-400'}`} />
           <span className="whitespace-nowrap">充值加油包</span>
         </button>
 
         <button
           type="button"
           onClick={() => switchTab('transactions')}
-          className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
+          className={`flex-1 sm:flex-initial px-3.5 sm:px-4 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
             activeTab === 'transactions'
-              ? 'bg-white text-slate-950 font-semibold shadow-xs border border-white/80 backdrop-blur-md'
-              : 'text-zinc-600 hover:text-slate-900 border border-transparent'
+              ? 'bg-white text-[#0084c2] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/80 font-bold'
+              : 'text-slate-600 hover:text-slate-950 hover:bg-white/60 border border-transparent'
           }`}
         >
-          <Receipt className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+          <Receipt className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'transactions' ? 'text-[#0096DB]' : 'text-slate-400'}`} />
           <span className="whitespace-nowrap">变动流水</span>
         </button>
       </div>
@@ -882,7 +887,7 @@ export default function UserCenterPage() {
         footer={null}
         width={420}
         centered
-        destroyOnClose
+        destroyOnHidden
       >
         {payingOrder && (
           <div className="space-y-5 pt-1">

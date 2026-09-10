@@ -322,7 +322,7 @@ export default function UserBillingPage() {
           footer={null}
           width={420}
           centered
-          destroyOnClose
+          destroyOnHidden
         >
           <div className="space-y-5 pt-1">
             <div className="text-center space-y-1">

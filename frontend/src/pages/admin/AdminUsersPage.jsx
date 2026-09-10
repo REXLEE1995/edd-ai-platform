@@ -328,7 +328,7 @@ export default function AdminUsersPage() {
         footer={null}
         width={480}
         centered
-        destroyOnClose
+        destroyOnHidden
       >
         {adjustingUser && (
           <div className="space-y-4 pt-1">

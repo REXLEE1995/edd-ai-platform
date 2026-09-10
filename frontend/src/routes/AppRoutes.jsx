@@ -19,6 +19,7 @@ import AdminLoginPage from '../pages/admin/AdminLoginPage';
 import AdminLayout from '../layouts/AdminLayout';
 import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminUsersPage from '../pages/admin/AdminUsersPage';
+import AdminTasksPage from '../pages/admin/AdminTasksPage';
 import AdminQuotaPage from '../pages/admin/AdminQuotaPage';
 import AdminOrdersPage from '../pages/admin/AdminOrdersPage';
 import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
@@ -49,6 +50,7 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboardPage />} />
         <Route path="users" element={<AdminUsersPage />} />
+        <Route path="tasks" element={<AdminTasksPage />} />
         <Route path="quota" element={<AdminQuotaPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />

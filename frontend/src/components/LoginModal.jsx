@@ -65,6 +65,7 @@ export default function LoginModal() {
       }
       await refreshUserProfile();
       closeLoginModal();
+      window.dispatchEvent(new CustomEvent('auth:user_login', { detail: res?.user }));
     } catch (err) {
       message.error(err.response?.data?.detail || '认证失败，请重试');
     } finally {

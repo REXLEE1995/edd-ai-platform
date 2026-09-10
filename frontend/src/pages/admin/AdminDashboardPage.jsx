@@ -9,7 +9,8 @@ import {
   ShieldCheck, 
   FileCheck,
   Receipt,
-  Settings
+  Settings,
+  Cpu
 } from 'lucide-react';
 import apiClient from '../../api/client';
 
@@ -51,10 +52,10 @@ export default function AdminDashboardPage() {
         <div className="flex items-center space-x-2">
           <Link
             to="/admin/settings"
-            className="shadcn-button-outline text-xs py-2 px-3.5"
+            className="shadcn-button-outline text-xs py-2 px-3.5 hover:border-[#0096DB] hover:text-[#0096DB]"
           >
             <Settings className="w-3.5 h-3.5 text-slate-700" />
-            系统与短信配置
+            系统与接口配置
           </Link>
           <Link
             to="/admin/users"
@@ -158,10 +159,24 @@ export default function AdminDashboardPage() {
       {/* 快捷业务工作台卡片 */}
       <div className="mt-12">
         <h3 className="text-sm font-bold text-slate-900 mb-4 tracking-tight">核心管理服务快速通道</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <Link
+            to="/admin/settings"
+            className="shadcn-card bg-white hover:bg-zinc-50/50 p-5 sm:p-6 border border-zinc-200 hover:border-[#0096DB] transition-all block group rounded-2xl shadow-xs"
+          >
+            <Cpu className="w-5 h-5 text-[#0096DB] mb-3" />
+            <h4 className="font-bold text-sm text-slate-950 group-hover:text-[#0084c2] transition-colors">AI 接口配置</h4>
+            <p className="mt-2 text-xs text-zinc-600 leading-relaxed">
+              配置大模型服务商协议、Base URL、API Key 凭据、模型名称与连通性探针诊断。
+            </p>
+            <div className="mt-4 flex items-center gap-1 text-xs text-[#0096DB] font-semibold group-hover:translate-x-0.5 transition-transform">
+              进入 AI 接口配置 <ArrowRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+
           <Link
             to="/admin/users"
-            className="shadcn-card bg-white hover:bg-zinc-50/50 p-6 border border-zinc-200 hover:border-slate-400 transition-all block group"
+            className="shadcn-card bg-white hover:bg-zinc-50/50 p-5 sm:p-6 border border-zinc-200 hover:border-slate-400 transition-all block group rounded-2xl shadow-xs"
           >
             <Users className="w-5 h-5 text-slate-900 mb-3" />
             <h4 className="font-bold text-sm text-slate-950 group-hover:text-slate-800 transition-colors">注册用户全景画像管理</h4>
@@ -175,7 +190,7 @@ export default function AdminDashboardPage() {
 
           <Link
             to="/admin/quota"
-            className="shadcn-card bg-white hover:bg-zinc-50/50 p-6 border border-zinc-200 hover:border-slate-400 transition-all block group"
+            className="shadcn-card bg-white hover:bg-zinc-50/50 p-5 sm:p-6 border border-zinc-200 hover:border-slate-400 transition-all block group rounded-2xl shadow-xs"
           >
             <Zap className="w-5 h-5 text-slate-900 mb-3" />
             <h4 className="font-bold text-sm text-slate-950 group-hover:text-slate-800 transition-colors">额度精准调控与全量流水</h4>
@@ -189,7 +204,7 @@ export default function AdminDashboardPage() {
 
           <Link
             to="/admin/orders"
-            className="shadcn-card bg-white hover:bg-zinc-50/50 p-6 border border-zinc-200 hover:border-slate-400 transition-all block group"
+            className="shadcn-card bg-white hover:bg-zinc-50/50 p-5 sm:p-6 border border-zinc-200 hover:border-slate-400 transition-all block group rounded-2xl shadow-xs"
           >
             <Receipt className="w-5 h-5 text-slate-900 mb-3" />
             <h4 className="font-bold text-sm text-slate-950 group-hover:text-slate-800 transition-colors">线上订单与财务对账</h4>
