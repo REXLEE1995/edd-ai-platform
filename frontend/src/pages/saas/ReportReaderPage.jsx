@@ -250,10 +250,12 @@ export default function ReportReaderPage() {
     return [];
   }, [catalogData, report]);
 
-  // 研判总结数据 (严格从真实接口 GET /api/v1/reports/{report_id}/summary 或 catalog 中加载，若远程无数据则为 null，严禁假数据展示)
+  // 研判总结数据 (严格从真实接口 GET /api/v1/reports/{report_id} 中的 summary_ai_comment 或 GET /api/v1/reports/{report_id}/summary 中加载)
   const OVERALL_SUMMARY = useMemo(() => {
+    const aiComment = report?.summary_ai_comment || report?.content?.summary_ai_comment;
+
     if (summaryData) {
-      const profile = summaryData.enterprise_profile;
+      const profile = summaryData.enterprise_profile || summaryData.summary || summaryData.summary_ai_comment || aiComment;
       const riskList = Array.isArray(summaryData.risk_assessment) ? summaryData.risk_assessment : [];
       if (profile || riskList.length > 0) {
         return {
@@ -271,6 +273,16 @@ export default function ReportReaderPage() {
     }
     if (report?.content?.overall_ai_summary) {
       return report.content.overall_ai_summary;
+    }
+    if (aiComment) {
+      return {
+        chapterNo: "00",
+        title: "全景综合尽调总结",
+        subtitle: "企业综合画像与全景深度风控研判",
+        summary: aiComment,
+        key_points: [],
+        keyPoints: []
+      };
     }
     return null;
   }, [summaryData, catalogData, report]);
@@ -758,7 +770,9 @@ export default function ReportReaderPage() {
         }
 
         // 如果主详情接口中已包含研判总结，直接解析复用，绝不重复调用独立 /summary 接口
-        const detailSummary = reportData.content?.overall_ai_summary
+        const detailSummary = reportData.summary_ai_comment
+          || reportData.content?.summary_ai_comment
+          || reportData.content?.overall_ai_summary
           || reportData.enterprise_profile
           || reportData.summary
           || (Array.isArray(reportData.risk_assessment) && reportData.risk_assessment.length > 0);
@@ -1649,13 +1663,14 @@ export default function ReportReaderPage() {
                     {/* 核心总括 */}
                     {OVERALL_SUMMARY.summary && (
                       <div className="p-2.5 sm:p-3 bg-cyan-50/45 backdrop-blur-md rounded-lg border border-cyan-100/80 space-y-1">
-                        <strong className="text-slate-950 block text-xs sm:text-sm flex items-center gap-1.5 font-bold">
+                        <strong className="text-slate-950 block text-xs sm:text-sm flex items-center gap-1.5 font-bold mb-1">
                           <Sparkles className="w-3.5 h-3.5 text-[#0ea5e9]" />
                           企业信用全景综合画像：
                         </strong>
-                        <p className="text-zinc-700 leading-relaxed text-xs sm:text-sm">
-                          {OVERALL_SUMMARY.summary}
-                        </p>
+                        <div 
+                          className="ai-markdown-content text-zinc-700 leading-relaxed text-xs sm:text-sm"
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(OVERALL_SUMMARY.summary) }}
+                        />
                       </div>
                     )}
 
