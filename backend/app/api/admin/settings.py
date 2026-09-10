@@ -11,7 +11,8 @@ from app.models.admin import AdminUser
 from app.models.third_party_api import SysThirdPartyApi
 from app.models.system_setting import SystemSetting
 from app.api.deps import get_current_admin
-from app.core.ai_config import load_ai_config, save_ai_config, test_ai_connectivity
+from app.core.ai_config import load_ai_config, save_ai_config, test_ai_connectivity, get_active_ai_config
+from app.core.sms_config import get_active_sms_config, save_sms_config
 
 logger = logging.getLogger("xyzp.admin.settings")
 
@@ -57,11 +58,14 @@ class AITestPayload(BaseModel):
     provider: Optional[str] = None
 
 @router.get("/ai")
-async def get_ai_settings(admin: AdminUser = Depends(get_current_admin)):
+async def get_ai_settings(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
     """
-    获取当前系统 AI 网关与 Token 路由配置 (直读 .env 单一真理源)
+    获取当前系统 AI 网关与 Token 路由配置 (支持数据库热更新与 .env 回退)
     """
-    cfg = load_ai_config()
+    cfg = await get_active_ai_config(db)
     raw_key = cfg.get("new_api_key", "")
     
     return {
@@ -85,33 +89,46 @@ async def get_ai_settings(admin: AdminUser = Depends(get_current_admin)):
 @router.post("/ai")
 async def update_ai_settings(
     payload: AISettingsUpdatePayload,
-    admin: AdminUser = Depends(get_current_admin)
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    保存配置接口 (系统采用 .env 基础设施统一管控，平滑响应前端保存动作)
+    保存/热更新大模型配置至数据库 system_settings
     """
-    cfg = load_ai_config()
-    raw_key = cfg.get("new_api_key", "")
+    update_data = {
+        "llm_provider": payload.llm_provider,
+        "new_api_base_url": payload.new_api_base_url,
+        "new_api_model": payload.new_api_model,
+        "temperature": payload.temperature,
+        "timeout_seconds": payload.timeout_seconds,
+        "is_enabled": payload.is_enabled,
+    }
+    if payload.new_api_key is not None and "••••" not in payload.new_api_key and payload.new_api_key.strip() != "":
+        update_data["new_api_key"] = payload.new_api_key.strip()
+
+    updated_cfg = await save_ai_config(db, update_data)
+    raw_key = updated_cfg.get("new_api_key", "")
 
     return {
         "code": 0,
-        "message": "当前系统采用 .env 配置文件纳管模式，配置以 .env 为唯一基准",
+        "message": "AI 大模型配置已成功保存并实时生效！",
         "data": {
-            "llm_provider": cfg.get("llm_provider"),
-            "new_api_base_url": cfg.get("new_api_base_url"),
+            "llm_provider": updated_cfg.get("llm_provider"),
+            "new_api_base_url": updated_cfg.get("new_api_base_url"),
             "new_api_key_masked": mask_api_key(raw_key),
             "has_key": bool(raw_key and raw_key.strip()),
-            "new_api_model": cfg.get("new_api_model"),
-            "temperature": cfg.get("temperature"),
-            "timeout_seconds": cfg.get("timeout_seconds"),
-            "is_enabled": cfg.get("is_enabled")
+            "new_api_model": updated_cfg.get("new_api_model"),
+            "temperature": updated_cfg.get("temperature"),
+            "timeout_seconds": updated_cfg.get("timeout_seconds"),
+            "is_enabled": updated_cfg.get("is_enabled")
         }
     }
 
 @router.post("/ai/test")
 async def test_ai_settings(
     payload: Optional[AITestPayload] = None,
-    admin: AdminUser = Depends(get_current_admin)
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     测试 AI 网关连通性与模型可用性探针
@@ -129,12 +146,13 @@ async def test_ai_settings(
         base_url=p_base_url,
         api_key=p_api_key,
         model=p_model,
-        provider=p_provider
+        provider=p_provider,
+        db=db
     )
 
     return {
         "code": 0 if result.get("success") else 1,
-        "message": "连通性测试通过" if result.get("success") else "连通性测试未通过",
+        "message": "连通性测试通过" if result.get("success") else result.get("error", "连通性测试未通过"),
         "data": result
     }
 
@@ -447,7 +465,121 @@ async def get_system_overview(
                 ]
             },
             "business_rules": biz_val,
+            "sms_gateway": {
+                "provider": (await get_active_sms_config(db)).get("sms_provider", settings.SMS_PROVIDER),
+                "sign": (await get_active_sms_config(db)).get("sign", settings.XCT_SMS_SIGN),
+                "is_open": (await get_active_sms_config(db)).get("is_open", settings.XCT_SMS_IS_OPEN),
+                "configured": bool((await get_active_sms_config(db)).get("name") and (await get_active_sms_config(db)).get("key"))
+            },
             "version": settings.VERSION,
             "project_name": settings.PROJECT_NAME
         }
+    }
+
+
+# ==============================================================================
+# 5. 享畅通短信网关配置与连通性测试 (SMS XCT Gateway Settings & Test)
+# ==============================================================================
+
+class SMSConfigUpdatePayload(BaseModel):
+    sms_provider: Optional[str] = Field("xct", description="短信服务商: xct / mock")
+    url: Optional[str] = Field(None, description="短信网关 URL")
+    name: Optional[str] = Field(None, description="享畅通商户账号 (name)")
+    key: Optional[str] = Field(None, description="享畅通商户密码/密钥 (key, 留空或掩码则保持不变)")
+    sign: Optional[str] = Field(None, description="短信签名 (与商户账号密码统一配置，如: 成都享宇森云科技)")
+    is_open: Optional[bool] = Field(None, description="是否开启真实短信发送")
+    max_error_count: Optional[int] = Field(None, ge=1, le=20, description="最大输错容忍次数")
+    expire_seconds: Optional[int] = Field(None, ge=60, le=1800, description="验证码有效时长 (秒)")
+
+class SMSTestPayload(BaseModel):
+    phone: str = Field(..., description="接收测试短信的 11 位手机号码")
+    scene: Optional[str] = Field("login", description="业务场景: login, register, change_pwd, reset_pwd")
+
+@router.get("/sms")
+async def get_sms_settings(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取短信网关当前生效配置 (商户账号、密码、短信签名与发送状态)
+    """
+    from app.core.sms_config import get_active_sms_config
+    from app.providers.xct_sms_provider import XCT_SMS_TEMPLATES
+
+    cfg = await get_active_sms_config(db)
+    raw_key = cfg.get("key") or ""
+    return {
+        "code": 0,
+        "data": {
+            "sms_provider": cfg.get("sms_provider", "xct"),
+            "url": cfg.get("url", "http://api.xct.com/sms/send"),
+            "name": cfg.get("name", ""),
+            "key_masked": mask_api_key(raw_key),
+            "has_key": bool(raw_key and raw_key.strip()),
+            "sign": cfg.get("sign", "成都享宇森云科技"),
+            "is_open": cfg.get("is_open", False),
+            "max_error_count": cfg.get("max_error_count", 5),
+            "expire_seconds": cfg.get("expire_seconds", 300),
+            "available_templates": list(XCT_SMS_TEMPLATES.keys())
+        }
+    }
+
+@router.post("/sms")
+@router.put("/sms")
+async def update_sms_settings(
+    payload: SMSConfigUpdatePayload,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    统一保存/热更新短信网关配置 (商户账号、商户密码/密钥、短信签名、网关URL及开关)
+    """
+    from app.core.sms_config import save_sms_config
+    from app.providers.xct_sms_provider import XCT_SMS_TEMPLATES
+
+    update_dict = payload.model_dump(exclude_unset=True)
+    updated_cfg = await save_sms_config(db, update_dict)
+    raw_key = updated_cfg.get("key") or ""
+
+    logger.info(
+        f"[Admin Settings] 短信网关配置已更新 -> 账号: {updated_cfg.get('name')}, 签名: 【{updated_cfg.get('sign')}】, 开关: {updated_cfg.get('is_open')}"
+    )
+
+    return {
+        "code": 0,
+        "message": "短信配置 (商户账号、密码、短信签名) 已成功保存并即刻热生效",
+        "data": {
+            "sms_provider": updated_cfg.get("sms_provider"),
+            "url": updated_cfg.get("url"),
+            "name": updated_cfg.get("name"),
+            "key_masked": mask_api_key(raw_key),
+            "has_key": bool(raw_key and raw_key.strip()),
+            "sign": updated_cfg.get("sign"),
+            "is_open": updated_cfg.get("is_open"),
+            "max_error_count": updated_cfg.get("max_error_count"),
+            "expire_seconds": updated_cfg.get("expire_seconds"),
+            "available_templates": list(XCT_SMS_TEMPLATES.keys())
+        }
+    }
+
+@router.post("/sms/test")
+async def test_sms_gateway(
+    payload: SMSTestPayload,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    测试短信网关连通性与模版组装 (管理后台探针)
+    """
+    from app.services.sms_service import SMSService
+    ok, msg, data = await SMSService.send_verification_code(
+        session=db,
+        phone=payload.phone,
+        scene=payload.scene or "login",
+        client_ip="ADMIN_CONSOLE"
+    )
+    return {
+        "code": 0 if ok else 1,
+        "message": msg,
+        "data": data
     }

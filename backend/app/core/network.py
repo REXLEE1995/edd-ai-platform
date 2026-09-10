@@ -14,7 +14,11 @@ def get_server_real_lan_ip() -> str:
     """
     # 1. 若在配置或环境变量中显式指定了 PUBLIC_BASE_URL (如 http://192.168.110.234:8000 或域名)
     if settings.PUBLIC_BASE_URL:
-        return settings.PUBLIC_BASE_URL.rstrip("/")
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.PUBLIC_BASE_URL)
+        if parsed.hostname:
+            return parsed.hostname
+        return settings.PUBLIC_BASE_URL.replace("http://", "").replace("https://", "").split(":")[0].rstrip("/")
 
     hostname = socket.gethostname()
     candidate_ips = []

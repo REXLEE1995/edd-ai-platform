@@ -8,7 +8,8 @@ import {
   ArrowRight, 
   ShieldCheck, 
   FileCheck,
-  Receipt
+  Receipt,
+  Settings
 } from 'lucide-react';
 import apiClient from '../../api/client';
 
@@ -48,6 +49,13 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <Link
+            to="/admin/settings"
+            className="shadcn-button-outline text-xs py-2 px-3.5"
+          >
+            <Settings className="w-3.5 h-3.5 text-slate-700" />
+            系统与短信配置
+          </Link>
           <Link
             to="/admin/users"
             className="shadcn-button-outline text-xs py-2 px-3.5"

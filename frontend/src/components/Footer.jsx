@@ -6,7 +6,7 @@ export default function Footer() {
   const location = useLocation();
   const pathname = location.pathname;
 
-  if (pathname.startsWith('/share') || pathname.startsWith('/app/reports')) {
+  if (pathname.startsWith('/share') || pathname.startsWith('/app/reports') || pathname.startsWith('/admin')) {
     return null;
   }
 

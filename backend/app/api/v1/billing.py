@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
 from app.models.order import Order
@@ -97,8 +98,14 @@ async def mock_pay_order(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    本地开发 / 演示沙箱模拟支付成功回调与即时入账
+    本地开发 / 演示沙箱模拟支付成功回调与即时入账 (生产环境默认禁用)
     """
+    if not settings.ALLOW_MOCK_PAY and settings.ENVIRONMENT == "production":
+        raise HTTPException(
+            status_code=403,
+            detail="生产安全拦截：线上生产环境已停用模拟支付通道。请通过微信/支付宝正式网关完成支付。"
+        )
+
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == user.id)
     )

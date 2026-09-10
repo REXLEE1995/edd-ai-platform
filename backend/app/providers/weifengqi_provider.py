@@ -1,11 +1,13 @@
 import os
 import uuid
+import json
+import hashlib
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 import httpx
 
-from app.providers.base import BaseProvider
+from app.providers.base import BaseProvider, get_third_party_api_bundle
 from app.mock.mock_data import MOCK_COMPANIES
 
 from sqlalchemy import select
@@ -14,21 +16,20 @@ from app.models.third_party_api import SysThirdPartyApi
 
 logger = logging.getLogger("xyzp.providers.wfq")
 
-async def get_third_party_api_config(db: Optional[AsyncSession], api_code: str, default_mode: str = "http", default_endpoint: str = "") -> tuple[str, str]:
+def generate_wfq_signature(payload: dict, secret: str = "") -> str:
     """
-    检索 sys_third_party_apis 三方接口字典表：
-    返回 (call_mode, endpoint_url)，仅控制是否走 mock / http 以及端点 URL
+    计算微风企 API 请求签名:
+    按照微风企规范将有效请求参数按 key ASCII 排序拼接并结合 secret 进行哈希摘要
     """
-    if db is not None:
-        try:
-            result = await db.execute(select(SysThirdPartyApi).where(SysThirdPartyApi.api_code == api_code, SysThirdPartyApi.is_enabled == True))
-            api_config = result.scalar_one_or_none()
-            if api_config:
-                return api_config.call_mode, api_config.endpoint_url
-        except Exception as err:
-            logger.warning(f"[WFQ Provider] Failed to query sys_third_party_apis for {api_code}: {err}")
-    
-    return default_mode, default_endpoint
+    if not secret:
+        # 当未配置 secret 时，生成基于请求报文的确定性摘要保障非阻断运行
+        sorted_payload = {k: str(v) for k, v in sorted(payload.items()) if k != "sign" and v is not None and v != ""}
+        return hashlib.sha256(json.dumps(sorted_payload, sort_keys=True).encode()).hexdigest()
+
+    filtered = {k: str(v) for k, v in payload.items() if k != "sign" and v is not None and v != ""}
+    sign_str = "&".join(f"{k}={filtered[k]}" for k in sorted(filtered.keys()))
+    sign_str = f"{sign_str}&secret={secret}"
+    return hashlib.sha256(sign_str.encode()).hexdigest()
 
 class WeifengqiProvider(BaseProvider):
     """
@@ -58,7 +59,7 @@ class WeifengqiProvider(BaseProvider):
         根据 sys_third_party_apis 字典中的 call_mode (mock/http) 控制调用目标
         """
         # 1. 查询 sys_third_party_apis 接口字典表配置
-        call_mode, endpoint_url = await get_third_party_api_config(
+        call_mode, endpoint_url, auth_params = await get_third_party_api_bundle(
             db, 
             api_code="WFQ_AUTH", 
             default_mode=self.mode, 
@@ -69,6 +70,9 @@ class WeifengqiProvider(BaseProvider):
         generated_req_no = request_no or f"kzgbls29zq3lkw8rsw"
         now_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        token = auth_params.get("token") or self.app_key or os.getenv("WEIFENGQI_APP_KEY") or "J0xmJ1ux1eHrkINt"
+        secret = auth_params.get("secret") or self.app_secret or os.getenv("WEIFENGQI_APP_SECRET") or ""
+
         final_cb_url = cb_url or f"{self.base_url}/api/v1/tasks/callback"
         payload = {
             "cburl": final_cb_url,
@@ -77,16 +81,16 @@ class WeifengqiProvider(BaseProvider):
             "taxpayerId": taxpayer_id,
             "companyName": company_name,
             "authenticationMsg": {
-                "cognizantMobile": legal_mobile, # 默认 "1"
-                "cognizantName": legal_name,     # 默认 "1"
+                "cognizantMobile": legal_mobile,
+                "cognizantName": legal_name,
                 "authenticationResult": ""
             },
             "prodId": "WFQ_AUTH",
-            "token": "J0xmJ1ux1eHrkINt",
+            "token": token,
             "requestTime": now_time_str,
             "requestNo": generated_req_no,
-            "sign": "c11EsTe8JQUkXViyfglgr83Wlo+pfEB1tbIWNPi6tjq5O/SCApksorIj2X74j3Ah71UQibLuzE+pP6ilClQ3TShH+2YNbZJ8tDDgu/qLvB0hJDUmHMFYxXsslBA73e7wWu5q3kCYVLpBbVQdrCvyISsVb9ti74s5GPOk0wTHI6U="
         }
+        payload["sign"] = generate_wfq_signature(payload, secret)
 
         # 判定最终 URL：优先使用字典配置中的 http 地址，否则默认请求真实微风企网关
         if endpoint_url and "honeycomb" in endpoint_url:
@@ -145,12 +149,15 @@ class WeifengqiProvider(BaseProvider):
         1. 成功响应 (errorCode == 0): 返回 body.field.url 供下载
         2. 准备中响应 (errorCode == 555): 识别 errMsg "资料准备中，请稍后重试"
         """
-        call_mode, endpoint_url = await get_third_party_api_config(
+        call_mode, endpoint_url, auth_params = await get_third_party_api_bundle(
             db, 
             api_code="WFQ_REPORT_PDF_URL", 
             default_mode=self.mode, 
             default_endpoint=f"{self.base_url}/model/wfq/loanBeforeReportPdf"
         )
+
+        token = auth_params.get("token") or self.app_key or os.getenv("WEIFENGQI_APP_KEY") or "J0xmJ1ux1eHrkINt"
+        secret = auth_params.get("secret") or self.app_secret or os.getenv("WEIFENGQI_APP_SECRET") or ""
 
         generated_req_no = request_no or "123456789"
         payload = {
@@ -158,10 +165,10 @@ class WeifengqiProvider(BaseProvider):
             "orderNo": order_no,
             "requestNo": generated_req_no,
             "requestTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "token": "J0xmJ1ux1eHrkINt",
+            "token": token,
             "prodId": "WFQ_LBRP",
-            "sign": "sign"
         }
+        payload["sign"] = generate_wfq_signature(payload, secret)
 
         if endpoint_url and "honeycomb" in endpoint_url:
             url = endpoint_url

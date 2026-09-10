@@ -7,15 +7,15 @@ from app.models.third_party_api import SysThirdPartyApi
 
 logger = logging.getLogger("xyzp.providers")
 
-async def get_third_party_api_config(
+async def get_third_party_api_bundle(
     db: Optional[AsyncSession],
     api_code: str,
     default_mode: str = "mock",
     default_endpoint: str = ""
-) -> tuple[str, str]:
+) -> tuple[str, str, dict]:
     """
     检索 sys_third_party_apis 三方接口字典表：
-    返回 (call_mode, endpoint_url)，控制是否走 mock / http 以及端点 URL
+    返回 (call_mode, endpoint_url, auth_params)，支持动态鉴权参数
     """
     if db is not None:
         try:
@@ -27,10 +27,20 @@ async def get_third_party_api_config(
             )
             api_config = result.scalar_one_or_none()
             if api_config:
-                return api_config.call_mode, api_config.endpoint_url
+                return api_config.call_mode, api_config.endpoint_url, (api_config.auth_params or {})
         except Exception as err:
             logger.warning(f"[Provider] Failed to query sys_third_party_apis for {api_code}: {err}")
-    return default_mode, default_endpoint
+    return default_mode, default_endpoint, {}
+
+async def get_third_party_api_config(
+    db: Optional[AsyncSession],
+    api_code: str,
+    default_mode: str = "mock",
+    default_endpoint: str = ""
+) -> tuple[str, str]:
+    mode, endpoint, _ = await get_third_party_api_bundle(db, api_code, default_mode, default_endpoint)
+    return mode, endpoint
+
 
 class BaseProvider:
     """

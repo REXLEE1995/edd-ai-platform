@@ -15,7 +15,8 @@ import {
   Bot,
   Menu,
   X,
-  LogIn
+  LogIn,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import RechargeModal from './RechargeModal';
@@ -38,127 +39,9 @@ export default function Navbar() {
     return null;
   }
 
-  // 1. 后台管理系统独立导航
+  // 1. 后台管理系统独立导航已迁移为左侧菜单导航架构 (AdminLayout)，Navbar 不在 /admin 路径下渲染顶栏
   if (isAdminPath) {
-    return (
-      <>
-        <header className="sticky top-0 z-50 w-full bg-white/85 backdrop-blur-2xl border-b border-slate-200/90 shadow-[0_4px_24px_-2px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.04)] transition-all">
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-[60px] sm:h-[66px] flex items-center justify-between">
-            
-            <div className="flex items-center space-x-3 sm:space-x-6">
-              <Link to="/admin/dashboard" className="flex items-center space-x-2.5 sm:space-x-3 group">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0">
-                  <img src="/brand_logo.png" alt="Logo" className="w-full h-full object-contain" />
-                </div>
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="font-bold text-sm sm:text-[15px] tracking-tight text-slate-950">
-                    享宇智评 Admin
-                  </span>
-                  <span className="text-[10px] sm:text-[11px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-md bg-cyan-50 text-[#0084c2] border border-cyan-200/80">
-                    运营
-                  </span>
-                </div>
-              </Link>
-
-              {/* PC 端 Apple 风格 Segmented 导航切换栏 */}
-              <nav className="hidden lg:flex items-center bg-slate-100/85 p-1 rounded-xl border border-slate-200/70 shadow-inner space-x-1">
-                {[
-                  { to: '/admin/dashboard', label: '运营大盘', icon: LayoutDashboard },
-                  { to: '/admin/users', label: '用户管理', icon: Users },
-                  { to: '/admin/quota', label: '额度调控', icon: Sliders },
-                  { to: '/admin/orders', label: '订单财务', icon: Receipt }
-                ].map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.to;
-                  return (
-                    <Link 
-                      key={item.to}
-                      to={item.to} 
-                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        isActive 
-                          ? 'bg-white text-[#0070a4] shadow-xs border border-slate-200/80 font-bold' 
-                          : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
-                      }`}
-                    >
-                      <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#0096DB]' : 'text-slate-400'}`} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
-
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              {admin ? (
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/70 border border-slate-200/60 text-xs">
-                    <span className="text-slate-500">管理员:</span>
-                    <strong className="text-slate-900 font-mono font-bold">{admin.username || 'admin'}</strong>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      adminLogout();
-                      navigate('/admin/login');
-                    }}
-                    className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200/80 transition-all cursor-pointer shadow-xs"
-                  >
-                    <LogOut className="w-3.5 h-3.5 inline mr-1 text-slate-400 group-hover:text-rose-600" />
-                    <span className="hidden sm:inline">退出</span>
-                  </button>
-                  {/* 移动端菜单切换 */}
-                  <button
-                    type="button"
-                    onClick={() => setMobileAdminMenu(!mobileAdminMenu)}
-                    className="lg:hidden p-2 rounded-xl bg-slate-100/80 border border-slate-200/80 text-slate-700"
-                  >
-                    {mobileAdminMenu ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-                  </button>
-                </div>
-              ) : (
-                <Link
-                  to="/admin/login"
-                  className="shadcn-button-primary px-3 sm:px-4 py-1.5 sm:py-2 text-xs font-semibold shadow-xs"
-                >
-                  管理员登录
-                </Link>
-              )}
-            </div>
-
-          </div>
-
-          {/* 移动端 Admin 折叠菜单 */}
-          {mobileAdminMenu && admin && (
-            <div className="lg:hidden border-t border-slate-200/80 bg-white/95 backdrop-blur-2xl px-4 py-3 space-y-1 animate-in fade-in slide-in-from-top-2">
-              {[
-                { to: '/admin/dashboard', label: '运营大盘', icon: LayoutDashboard },
-                { to: '/admin/users', label: '用户管理', icon: Users },
-                { to: '/admin/quota', label: '额度调控', icon: Sliders },
-                { to: '/admin/orders', label: '订单财务', icon: Receipt }
-              ].map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.to;
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setMobileAdminMenu(false)}
-                    className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                      isActive 
-                        ? 'bg-cyan-50 text-[#0070a4] font-bold border border-cyan-200/60' 
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-[#0096DB]' : 'text-slate-400'}`} />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </header>
-      </>
-    );
+    return null;
   }
 
   // 2. 发起尽调平台专属导航

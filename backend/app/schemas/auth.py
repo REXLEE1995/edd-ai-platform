@@ -3,8 +3,22 @@ from pydantic import BaseModel
 
 class LoginWithPhoneRequest(BaseModel):
     phone: str
-    code: Optional[str] = "123456" # 默认免密测试验证码
+    code: Optional[str] = "123456" # 验证码
+    sms_token: Optional[str] = None # 享畅通业务防刷防重放凭据
     password: Optional[str] = None
+
+class RegisterWithPhoneRequest(BaseModel):
+    phone: str
+    code: str
+    sms_token: Optional[str] = None
+    password: Optional[str] = None
+    company_name: Optional[str] = None
+
+class ResetPasswordRequest(BaseModel):
+    phone: str
+    new_password: str
+    code: str
+    sms_token: Optional[str] = None
 
 class AdminLoginRequest(BaseModel):
     username: str
@@ -37,6 +51,8 @@ class ProfileUpdateRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: Optional[str] = None
     new_password: str
+    code: Optional[str] = None       # 短信验证码 (选填，若填写则进行短信验证)
+    sms_token: Optional[str] = None  # 短信凭据
 
 class AdminInfoSchema(BaseModel):
     id: str

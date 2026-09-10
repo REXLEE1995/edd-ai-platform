@@ -39,11 +39,16 @@ def get_risk_provider() -> RiskRadarProvider:
         timeout=settings.RISK_DATA_TIMEOUT_SECONDS
     )
 
+from app.providers.xct_sms_provider import XctSmsProvider, get_xct_sms_provider
+
 __all__ = [
     "WeifengqiProvider",
     "ICDataProvider",
     "RiskRadarProvider",
+    "XctSmsProvider",
     "get_weifengqi_provider",
     "get_ic_provider",
-    "get_risk_provider"
+    "get_risk_provider",
+    "get_xct_sms_provider"
 ]
+

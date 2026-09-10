@@ -256,26 +256,30 @@ async def weifengqi_auth_callback_get(
         task = result.scalar_one_or_none()
 
     if not task:
-        # 查询最近处于 waiting_auth 或 pulling_data 状态的任务
-        result_pending = await db.execute(
-            select(XYZPTask)
-            .where(XYZPTask.status.in_(["waiting_auth", "pulling_data"]))
-            .order_by(desc(XYZPTask.created_at))
-            .limit(1)
-        )
-        task = result_pending.scalar_one_or_none()
+        logger.warning(f"[WFQ Callback GET] 未能匹配到有效的尽调任务单号，拒绝非法回调。参数: {params}")
+        html_not_found = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>授权任务未找到 - 享宇AI智评</title>
+  <style>
+    body { background: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; }
+    .card { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); text-align: center; max-width: 440px; }
+    h2 { color: #ef4444; margin-bottom: 12px; }
+    p { color: #64748b; font-size: 14px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>⚠️ 授权任务不存在或单号无效</h2>
+    <p>系统未能匹配到对应的尽调任务单号。为保护多租户企业数据安全，已终止本次授权流程。请返回系统核实二维码或重新发起尽调任务。</p>
+  </div>
+</body>
+</html>"""
+        return HTMLResponse(content=html_not_found, status_code=400)
 
-    if not task:
-        # 兜底查询最近创建的真实任务，提取真实企业主体与统一信用代码
-        result_recent = await db.execute(
-            select(XYZPTask)
-            .order_by(desc(XYZPTask.created_at))
-            .limit(1)
-        )
-        task = result_recent.scalar_one_or_none()
-
-    company_name = task.company_name if task else (query_company or "浙江享宇信息技术发展有限公司")
-    credit_code = task.credit_code if task else (taxpayer_id or "91330108MA27XXXXXX")
+    company_name = task.company_name
+    credit_code = task.credit_code
 
     # 判断是否为第二次/重复回调
     is_already_authorized = False
@@ -472,24 +476,8 @@ async def weifengqi_auth_callback_post(
         task = result.scalar_one_or_none()
 
     if not task:
-        result_pending = await db.execute(
-            select(XYZPTask)
-            .where(XYZPTask.status.in_(["waiting_auth", "pulling_data"]))
-            .order_by(desc(XYZPTask.created_at))
-            .limit(1)
-        )
-        task = result_pending.scalar_one_or_none()
-
-    if not task:
-        result_recent = await db.execute(
-            select(XYZPTask)
-            .order_by(desc(XYZPTask.created_at))
-            .limit(1)
-        )
-        task = result_recent.scalar_one_or_none()
-
-    if not task:
-        raise HTTPException(status_code=404, detail="未匹配到对应尽调任务")
+        logger.warning(f"[WFQ Callback POST] 未匹配到对应尽调任务，拒绝非法 Webhook 触发。Payload: {cb_json}")
+        raise HTTPException(status_code=404, detail="未匹配到对应尽调任务单号，拒绝处理")
 
     if task.auth_status != "authorized":
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

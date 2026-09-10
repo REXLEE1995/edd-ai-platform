@@ -1,5 +1,13 @@
+import os
 import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,13 +15,32 @@ from app.core.config import settings
 from app.core.database import init_db
 
 # -------------------------------------------------------------
-# 全局日志格式与输出级别配置 (终端高可读性彩色化实时输出)
+# 全局日志格式与输出级别配置 (控制台实时输出 + 生产文件每日轮转切割)
 # -------------------------------------------------------------
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file_path = os.path.join(log_dir, "xyzp.log")
+
+log_formatter = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(log_formatter)
+
+file_handler = TimedRotatingFileHandler(
+    filename=log_file_path,
+    when="midnight",
+    interval=1,
+    backupCount=30,
+    encoding="utf-8"
+)
+file_handler.setFormatter(log_formatter)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[console_handler, file_handler]
 )
 for logger_name in ["xyzp", "xyzp.cleansing", "xyzp.storage", "xyzp.tasks", "xyzp.weifengqi", "xyzp.providers", "app"]:
     logging.getLogger(logger_name).setLevel(logging.INFO)
@@ -40,7 +67,7 @@ from app.api.admin.settings import router as admin_settings_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时自动初始化数据库表结构与预置系统数据
-    logger.info("🚀 正在初始化数据库表结构与预置系统配置...")
+    logger.info(f"🚀 正在以 [{settings.ENVIRONMENT.upper()}] 模式启动尽调平台后端服务...")
     await init_db()
     logger.info("✅ 尽调平台后端服务启动就绪，数据清洗中台与 MinIO 存证引擎已待命！")
     yield
@@ -53,14 +80,28 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# 允许全量跨域 (支持前端开发者通过局域网 IP / localhost 连接)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=".*", # 支持任意局域网 IP/域名 跨域并携带凭证
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# -------------------------------------------------------------
+# 跨域安全策略 (CORS Policy)
+# 生产模式严格遵循白名单域名，开发模式兼顾局域网/本地调试
+# -------------------------------------------------------------
+if settings.ENVIRONMENT == "development":
+    logger.info("[CORS] 当前为开发环境，开启全量局域网跨域匹配。")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    logger.info(f"[CORS] 当前为生产环境，严格启用跨域白名单: {settings.cors_origins_list}")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 import time
 from fastapi import Request
