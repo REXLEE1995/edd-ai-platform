@@ -1,3 +1,4 @@
+import time
 import uuid
 import random
 import json
@@ -102,12 +103,17 @@ class SMSService:
         # 5. 组装符合已报备模版与配置签名的完整短信文案 (签名与账号密码一同配置)
         sms_content = format_xct_sms_content(scene=scene, code=code, sign=target_sign)
 
-        # 6. 分发短信网关请求
+        # 6. 分发短信网关请求并精确记录时间戳与耗时
         provider_driver = (active_cfg.get("sms_provider") or settings.SMS_PROVIDER).lower()
         is_success = False
         response_payload_str = None
         error_msg = None
+        remark = None
         masked_tel = mask_mobile(phone)
+        request_time = shanghai_now()
+        start_perf = time.perf_counter()
+        response_time = None
+        use_time_ms = 0
 
         if provider_driver == "xct":
             provider = get_xct_sms_provider(
@@ -121,20 +127,33 @@ class SMSService:
                 f"[SMSService] [享畅通] 准备向 {masked_tel} 下发验证码 (场景: {scene}, 签名: 【{target_sign}】, 开关: {provider.is_open})"
             )
             is_success, dispatch_msg, meta = await provider.send_sms(mobiles=phone, content=sms_content)
+            response_time = shanghai_now()
+            use_time_ms = int(meta.get("use_time_ms") or ((time.perf_counter() - start_perf) * 1000))
+            
             request_payload_str = json.dumps({
                 "provider": "xct",
                 "url": provider.url,
                 "name": provider.name,
                 "dest": masked_tel,
                 "content": sms_content,
-                "scene": scene
+                "scene": scene,
+                "is_open": provider.is_open
             }, ensure_ascii=False)
             response_payload_str = json.dumps(meta, ensure_ascii=False)
-            if not is_success:
+
+            if not provider.is_open:
+                remark = "【挡板拦截】当前短信开关已关闭，系统模拟拦截成功，未产生真实资费消耗"
+            elif is_success:
+                remark = f"【享畅通真实外发】三方网关返回: success (HTTP {meta.get('status_code', 200)})"
+            else:
                 error_msg = dispatch_msg
+                remark = f"【享畅通网关失败】三方返回: {dispatch_msg}"
         else:
             # 本地开发/离线拟真 Mock 模式
             is_success = True
+            response_time = shanghai_now()
+            use_time_ms = int((time.perf_counter() - start_perf) * 1000)
+            remark = "【本地Mock模式】拟真验证码生成成功"
             request_payload_str = json.dumps({"provider": "mock", "dest": masked_tel, "content": sms_content}, ensure_ascii=False)
             response_payload_str = json.dumps({"code": 0, "msg": "LOCAL_MOCK_SUCCESS", "phone": masked_tel, "code": code}, ensure_ascii=False)
             logger.info(f"[SMSService] [Mock] 拟真验证码已生成 -> 手机: {masked_tel}, 验证码: {code}")
@@ -143,15 +162,21 @@ class SMSService:
         if not is_success:
             await cache_client.delete(rate_key)
 
-        # 8. 全量写入 sms_logs 审计流水日志
+        # 8. 全量写入 sms_logs 审计流水日志 (无论挡板还是真实外发均无遗漏记录)
         sms_log = SMSLog(
             id=log_id,
             phone=phone,
             code=code,
             scene=scene,
             status="sent" if is_success else "failed",
+            is_success=is_success,
             provider=provider_driver,
             ip_address=client_ip,
+            content=sms_content,
+            remark=remark,
+            request_time=request_time,
+            response_time=response_time,
+            use_time_ms=use_time_ms,
             request_payload=request_payload_str,
             response_payload=response_payload_str,
             error_message=error_msg,
@@ -160,6 +185,9 @@ class SMSService:
         session.add(sms_log)
         await session.commit()
         await session.refresh(sms_log)
+        logger.info(
+            f"[SMSService] 短信流水已记录入库 -> ID: {sms_log.id}, 手机: {masked_tel}, 成功: {is_success}, 耗时: {use_time_ms}ms, 备注: {remark}"
+        )
 
         if not is_success:
             return False, error_msg or "短信下发失败，请稍后重试", {}

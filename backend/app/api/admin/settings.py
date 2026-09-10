@@ -583,3 +583,98 @@ async def test_sms_gateway(
         "message": msg,
         "data": data
     }
+
+@router.get("/sms/logs")
+async def list_sms_logs(
+    page: int = 1,
+    page_size: int = 20,
+    phone: Optional[str] = None,
+    scene: Optional[str] = None,
+    status: Optional[str] = None,
+    is_success: Optional[bool] = None,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取短信验证码全量发送与核验审计日志 (支持手机号检索、场景过滤、成功/失败状态与分页)
+    """
+    from sqlalchemy import desc, func
+    from app.models.sms_log import SMSLog
+    from app.services.sms_service import mask_mobile
+
+    query = select(SMSLog)
+    count_query = select(func.count(SMSLog.id))
+
+    if phone and phone.strip():
+        phone_clean = phone.strip()
+        query = query.where(SMSLog.phone.like(f"%{phone_clean}%"))
+        count_query = count_query.where(SMSLog.phone.like(f"%{phone_clean}%"))
+
+    if scene and scene.strip() and scene.strip() != "all":
+        query = query.where(SMSLog.scene == scene.strip())
+        count_query = count_query.where(SMSLog.scene == scene.strip())
+
+    if status and status.strip() and status.strip() != "all":
+        query = query.where(SMSLog.status == status.strip())
+        count_query = count_query.where(SMSLog.status == status.strip())
+
+    if is_success is not None:
+        query = query.where(SMSLog.is_success == is_success)
+        count_query = count_query.where(SMSLog.is_success == is_success)
+
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    offset = (page - 1) * page_size
+
+    # 优先按请求发起时间 request_time 倒序排列
+    query = query.order_by(desc(SMSLog.request_time), desc(SMSLog.created_at)).offset(offset).limit(page_size)
+    result = await db.execute(query)
+    records = result.scalars().all()
+
+    scene_names = {
+        "login": "登录核验",
+        "register": "新用户注册",
+        "change_pwd": "修改密码",
+        "reset_pwd": "找回密码",
+        "auth": "授权核身",
+        "bind": "手机换绑"
+    }
+
+    items = []
+    for r in records:
+        req_t = r.request_time or r.created_at
+        items.append({
+            "id": r.id,
+            "phone": r.phone,
+            "phone_masked": mask_mobile(r.phone),
+            "code": r.code,
+            "scene": r.scene,
+            "scene_name": scene_names.get(r.scene, r.scene),
+            "status": r.status,
+            "is_success": bool(r.is_success),
+            "provider": r.provider,
+            "content": r.content or f"【成都享宇森云科技】验证码：{r.code} (历史存证)",
+            "remark": r.remark or (r.error_message if not r.is_success else "发送成功"),
+            "request_time": req_t.strftime("%Y-%m-%d %H:%M:%S") if req_t else None,
+            "response_time": r.response_time.strftime("%Y-%m-%d %H:%M:%S") if r.response_time else None,
+            "use_time_ms": r.use_time_ms or 0,
+            "ip_address": r.ip_address,
+            "error_message": r.error_message,
+            "expire_at": r.expire_at.strftime("%Y-%m-%d %H:%M:%S") if r.expire_at else None,
+            "verified_at": r.verified_at.strftime("%Y-%m-%d %H:%M:%S") if r.verified_at else None,
+            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else None,
+        })
+
+    return {
+        "code": 0,
+        "data": {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": items
+        }
+    }
+

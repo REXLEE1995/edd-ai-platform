@@ -24,7 +24,14 @@ import {
   Check, 
   Terminal, 
   SlidersHorizontal, 
-  Power
+  Power,
+  Search,
+  Copy,
+  RotateCcw,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  ListFilter
 } from 'lucide-react';
 import { message, Tooltip, Switch } from 'antd';
 import apiClient from '../../api/client';
@@ -87,6 +94,20 @@ export default function AdminSettingsPage() {
   const [smsTestPhone, setSmsTestPhone] = useState('');
   const [smsTestResult, setSmsTestResult] = useState(null);
   const [showSmsKey, setShowSmsKey] = useState(false);
+
+  // =========================================================================
+  // 2.1 短信发送与核验流水日志状态 (全量存证)
+  // =========================================================================
+  const [smsLogs, setSmsLogs] = useState([]);
+  const [smsLogsTotal, setSmsLogsTotal] = useState(0);
+  const [smsLogsLoading, setSmsLogsLoading] = useState(false);
+  const [smsLogsPage, setSmsLogsPage] = useState(1);
+  const [smsLogsPageSize, setSmsLogsPageSize] = useState(10);
+  const [smsSearchPhone, setSmsSearchPhone] = useState('');
+  const [smsFilterScene, setSmsFilterScene] = useState('all');
+  const [smsFilterStatus, setSmsFilterStatus] = useState('all');
+  const [smsFilterSuccess, setSmsFilterSuccess] = useState('all');
+  const [copiedCodeId, setCopiedCodeId] = useState(null);
 
   // =========================================================================
   // 数据获取
@@ -152,10 +173,50 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const fetchSmsLogs = async (targetPage = 1) => {
+    setSmsLogsLoading(true);
+    try {
+      const params = {
+        page: targetPage,
+        page_size: smsLogsPageSize,
+      };
+      if (smsSearchPhone.trim()) {
+        params.phone = smsSearchPhone.trim();
+      }
+      if (smsFilterScene && smsFilterScene !== 'all') {
+        params.scene = smsFilterScene;
+      }
+      if (smsFilterStatus && smsFilterStatus !== 'all') {
+        params.status = smsFilterStatus;
+      }
+      if (smsFilterSuccess !== 'all') {
+        params.is_success = smsFilterSuccess === 'true';
+      }
+      const res = await apiClient.get('/admin/settings/sms/logs', { params });
+      const d = res?.data?.data || res?.data || res;
+      if (d) {
+        setSmsLogs(d.items || []);
+        setSmsLogsTotal(d.total || 0);
+        setSmsLogsPage(d.page || targetPage);
+      }
+    } catch (err) {
+      console.error('获取短信流水日志失败:', err);
+    } finally {
+      setSmsLogsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAiSettings();
     fetchSmsSettings();
+    fetchSmsLogs(1);
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'sms') {
+      fetchSmsLogs(1);
+    }
+  }, [activeTab]);
 
   const isDirty = initialData && (
     formData.llm_provider !== initialData.llm_provider ||
@@ -327,6 +388,7 @@ export default function AdminSettingsPage() {
         msg: resData?.message || '发送成功',
         data: resData?.data
       });
+      fetchSmsLogs(1);
     } catch (err) {
       const errMsg = err.response?.data?.detail || err.message || '测试失败';
       message.error('测试短信发送失败: ' + errMsg);
@@ -334,6 +396,7 @@ export default function AdminSettingsPage() {
         success: false,
         msg: errMsg
       });
+      fetchSmsLogs(1);
     } finally {
       setSmsTesting(false);
     }
@@ -972,6 +1035,290 @@ export default function AdminSettingsPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* 模块 2.2: 短信发送与核验全量流水日志表 (数据库全量存证) */}
+          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#0096DB]" />
+                  <h2 className="font-bold text-sm text-slate-950">
+                    短信发送与核验流水日志 (全量数据库存证)
+                  </h2>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                    共 {smsLogsTotal} 条记录
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  无论真实外发还是挡板拦截均完整落库，包含完整发送文案、三方响应时间、耗时与详细失败/拦截备注
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fetchSmsLogs(smsLogsPage)}
+                  disabled={smsLogsLoading}
+                  className="px-3 py-1.5 text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="刷新日志列表"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${smsLogsLoading ? 'animate-spin' : ''}`} />
+                  <span>刷新</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 检索过滤条 */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/60">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">手机号码检索</label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={smsSearchPhone}
+                    onChange={(e) => setSmsSearchPhone(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && fetchSmsLogs(1)}
+                    placeholder="输入手机号模糊查询"
+                    className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-zinc-200 rounded-lg focus:outline-hidden focus:border-[#0096DB]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">业务场景</label>
+                <select
+                  value={smsFilterScene}
+                  onChange={(e) => {
+                    setSmsFilterScene(e.target.value);
+                  }}
+                  className="w-full text-xs px-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg focus:outline-hidden focus:border-[#0096DB]"
+                >
+                  <option value="all">全部业务场景</option>
+                  <option value="login">login (登录核验)</option>
+                  <option value="register">register (新用户注册)</option>
+                  <option value="change_pwd">change_pwd (修改密码)</option>
+                  <option value="reset_pwd">reset_pwd (找回密码)</option>
+                  <option value="auth">auth (授权核身)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 mb-1">发送结果</label>
+                <select
+                  value={smsFilterSuccess}
+                  onChange={(e) => {
+                    setSmsFilterSuccess(e.target.value);
+                  }}
+                  className="w-full text-xs px-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg focus:outline-hidden focus:border-[#0096DB]"
+                >
+                  <option value="all">全部结果 (成功/失败/挡板)</option>
+                  <option value="true">发送成功 (含挡板拦截)</option>
+                  <option value="false">发送失败 (网关/网络异常)</option>
+                </select>
+              </div>
+
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => fetchSmsLogs(1)}
+                  className="flex-1 py-1.5 px-3 bg-[#0096DB] text-white text-xs font-semibold rounded-lg hover:bg-[#0084c2] transition-colors shadow-xs"
+                >
+                  查询
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSmsSearchPhone('');
+                    setSmsFilterScene('all');
+                    setSmsFilterSuccess('all');
+                    setSmsFilterStatus('all');
+                  }}
+                  className="py-1.5 px-3 bg-white border border-zinc-200 text-slate-600 text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  重置
+                </button>
+              </div>
+            </div>
+
+            {/* 短信日志表格 */}
+            <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-200 bg-slate-50/80 text-zinc-600 font-semibold">
+                    <th className="py-2.5 px-3 whitespace-nowrap">接收手机 / 验证码</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">场景</th>
+                    <th className="py-2.5 px-3 min-w-[260px]">短信完整下发内容</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">发送状态 / 结果</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">耗时 (ms)</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">请求 / 响应时间</th>
+                    <th className="py-2.5 px-3 min-w-[200px]">备注 (失败原因 / 挡板说明)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 bg-white">
+                  {smsLogsLoading ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-zinc-400">
+                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0096DB]" />
+                        <span>正在加载短信审计日志...</span>
+                      </td>
+                    </tr>
+                  ) : smsLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-zinc-400">
+                        <MessageSquare className="w-6 h-6 mx-auto mb-2 text-zinc-300" />
+                        <span>暂无符合条件的短信记录</span>
+                      </td>
+                    </tr>
+                  ) : (
+                    smsLogs.map((log) => {
+                      const isMockOrBarrier = (log.remark || '').includes('挡板') || log.provider === 'mock';
+                      const isRealSuccess = log.is_success && !isMockOrBarrier;
+                      const isVerified = log.status === 'verified';
+
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
+                          {/* 手机与验证码 */}
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <div className="font-mono font-bold text-slate-900">{log.phone}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="font-mono text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-semibold border border-slate-200/60">
+                                验证码: {log.code}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(log.code);
+                                  setCopiedCodeId(log.id);
+                                  setTimeout(() => setCopiedCodeId(null), 1500);
+                                  message.success(`已复制验证码: ${log.code}`);
+                                }}
+                                className="text-zinc-400 hover:text-slate-700"
+                                title="复制验证码"
+                              >
+                                {copiedCodeId === log.id ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* 场景 */}
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-cyan-50 text-cyan-800 border border-cyan-200/60">
+                              {log.scene_name || log.scene}
+                            </span>
+                          </td>
+
+                          {/* 短信完整内容 */}
+                          <td className="py-3 px-3 text-[11px] text-slate-700 leading-relaxed font-sans">
+                            <div className="p-1.5 rounded-lg bg-slate-50/80 border border-slate-100 text-slate-800 break-all">
+                              {log.content}
+                            </div>
+                          </td>
+
+                          {/* 发送状态与结果 */}
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <div className="space-y-1">
+                              {isVerified ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                  <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                                  已核验成功
+                                </span>
+                              ) : isRealSuccess ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  真实外发成功
+                                </span>
+                              ) : isMockOrBarrier ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                                  <ShieldCheck className="w-3 h-3 text-sky-600" />
+                                  挡板拦截成功
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  <XCircle className="w-3 h-3 text-rose-600" />
+                                  发送失败
+                                </span>
+                              )}
+                              <div className="text-[10px] text-zinc-400 font-mono">通道: {log.provider}</div>
+                            </div>
+                          </td>
+
+                          {/* 耗时 */}
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <span className={`font-mono font-bold text-xs ${
+                              log.use_time_ms > 1000 
+                                ? 'text-amber-600' 
+                                : log.use_time_ms > 0 
+                                  ? 'text-emerald-600' 
+                                  : 'text-zinc-500'
+                            }`}>
+                              {log.use_time_ms} ms
+                            </span>
+                          </td>
+
+                          {/* 请求时间与响应时间 */}
+                          <td className="py-3 px-3 whitespace-nowrap font-mono text-[11px] text-zinc-600">
+                            <div><span className="text-zinc-400">请求:</span> {log.request_time || log.created_at || '-'}</div>
+                            {log.response_time && (
+                              <div className="text-[10px] text-zinc-400">
+                                <span>响应:</span> {log.response_time}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 备注 */}
+                          <td className="py-3 px-3 text-[11px] text-zinc-600">
+                            <div className={`p-1.5 rounded-lg border text-[11px] leading-relaxed break-all ${
+                              log.is_success 
+                                ? 'bg-zinc-50/60 border-zinc-200/70 text-zinc-700' 
+                                : 'bg-rose-50/60 border-rose-200 text-rose-700'
+                            }`}>
+                              {log.remark || log.error_message || (log.is_success ? '发送成功' : '失败')}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 分页控制条 */}
+            {smsLogsTotal > 0 && (
+              <div className="flex items-center justify-between pt-2 text-xs text-zinc-500">
+                <div>
+                  显示第 {(smsLogsPage - 1) * smsLogsPageSize + 1} 至 {Math.min(smsLogsPage * smsLogsPageSize, smsLogsTotal)} 条，共 {smsLogsTotal} 条
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={smsLogsPage <= 1 || smsLogsLoading}
+                    onClick={() => fetchSmsLogs(smsLogsPage - 1)}
+                    className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="font-medium text-slate-800">
+                    第 {smsLogsPage} 页 / 共 {Math.ceil(smsLogsTotal / smsLogsPageSize) || 1} 页
+                  </span>
+                  <button
+                    type="button"
+                    disabled={smsLogsPage >= Math.ceil(smsLogsTotal / smsLogsPageSize) || smsLogsLoading}
+                    onClick={() => fetchSmsLogs(smsLogsPage + 1)}
+                    className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
 
         </div>
