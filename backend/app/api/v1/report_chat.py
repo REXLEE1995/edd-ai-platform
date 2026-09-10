@@ -13,12 +13,13 @@ from sqlalchemy import select, delete
 
 from app.core.database import get_db, AsyncSessionLocal
 from app.models.user import User
+from app.models.admin import AdminUser
 from app.models.report import XYZPReport
 from app.models.report_chat_message import ReportChatMessage
 from app.schemas.chat import ChatStreamRequest, ChatMessageOut
 from app.core.prompts import QueryType, build_kb_messages
 from app.services.ai_service import AIService
-from app.api.deps import get_current_user
+from app.api.deps import get_current_admin_or_user
 
 logger = logging.getLogger("xyzp.report_chat")
 
@@ -69,7 +70,7 @@ async def report_chat_stream(
     report_id: str,
     req: ChatStreamRequest,
     request: Request,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -91,7 +92,8 @@ async def report_chat_stream(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定的尽调报告资产不存在")
     
     # 租户隔离校验
-    if report.user_id != user.id and getattr(user, "role", "") != "admin":
+    is_admin = isinstance(actor, AdminUser) or getattr(actor, "role", "") == "admin"
+    if not is_admin and report.user_id != actor.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该报告的对话资产")
 
     # 2. 提取或注入知识库内容
@@ -100,7 +102,7 @@ async def report_chat_stream(
     # 3. 提问立即持久化入库 (User 消息)
     user_msg = ReportChatMessage(
         report_id=report_id,
-        user_id=user.id,
+        user_id=actor.id,
         role="user",
         query_type=req.query_type.value,
         catalog_key=req.catalog_key,
@@ -123,21 +125,17 @@ async def report_chat_stream(
     # 5. 构造 SSE 流式输出生成器并在完成/中断后落库 Assistant 消息
     async def sse_generator():
         full_assistant_reply: List[str] = []
-        user_id_val = user.id
+        user_id_val = actor.id
         report_id_val = report_id
         q_type_val = req.query_type.value
         cat_key_val = req.catalog_key
         cat_name_val = req.catalog_name
 
-        async def is_disconnected():
-            return await request.is_disconnected()
-
         try:
             async for delta in AIService.stream_chat_completion(
                 messages=messages,
                 temperature=0.1,  # 严格事实模式，严禁自由发挥
-                max_tokens=2500,
-                stop_check_fn=is_disconnected
+                max_tokens=2500
             ):
                 full_assistant_reply.append(delta)
                 payload = json.dumps({"delta": delta, "status": "generating"}, ensure_ascii=False)
@@ -189,7 +187,7 @@ async def report_chat_stream(
 @router.get("/{report_id}/chat/history")
 async def get_report_chat_history(
     report_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -203,14 +201,22 @@ async def get_report_chat_history(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定的尽调报告资产不存在")
 
     # 2. 查询该用户在该报告下的所有对话记录
-    stmt = (
-        select(ReportChatMessage)
-        .where(
-            ReportChatMessage.report_id == report_id,
-            ReportChatMessage.user_id == user.id
+    is_admin = isinstance(actor, AdminUser) or getattr(actor, "role", "") == "admin"
+    if is_admin:
+        stmt = (
+            select(ReportChatMessage)
+            .where(ReportChatMessage.report_id == report_id)
+            .order_by(ReportChatMessage.created_at.asc())
         )
-        .order_by(ReportChatMessage.created_at.asc())
-    )
+    else:
+        stmt = (
+            select(ReportChatMessage)
+            .where(
+                ReportChatMessage.report_id == report_id,
+                ReportChatMessage.user_id == actor.id
+            )
+            .order_by(ReportChatMessage.created_at.asc())
+        )
     result = await db.execute(stmt)
     records = result.scalars().all()
 
@@ -239,16 +245,20 @@ async def get_report_chat_history(
 @router.delete("/{report_id}/chat/history")
 async def clear_report_chat_history(
     report_id: str,
-    user: User = Depends(get_current_user),
+    actor = Depends(get_current_admin_or_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     清空当前用户在该报告下的所有对话历史记录
     """
-    stmt = delete(ReportChatMessage).where(
-        ReportChatMessage.report_id == report_id,
-        ReportChatMessage.user_id == user.id
-    )
+    is_admin = isinstance(actor, AdminUser) or getattr(actor, "role", "") == "admin"
+    if is_admin:
+        stmt = delete(ReportChatMessage).where(ReportChatMessage.report_id == report_id)
+    else:
+        stmt = delete(ReportChatMessage).where(
+            ReportChatMessage.report_id == report_id,
+            ReportChatMessage.user_id == actor.id
+        )
     await db.execute(stmt)
     await db.commit()
 

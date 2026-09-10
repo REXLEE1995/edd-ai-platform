@@ -18,6 +18,9 @@ async def get_current_user(
         # 本地开发模式下：如果没有 Token，自动退回到默认演示用户，极大提升调试体验
         result = await db.execute(select(User).where(User.phone == "13800138000"))
         default_user = result.scalar_one_or_none()
+        if not default_user:
+            result = await db.execute(select(User).order_by(User.created_at).limit(1))
+            default_user = result.scalar_one_or_none()
         if default_user:
             return default_user
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")

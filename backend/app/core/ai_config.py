@@ -35,14 +35,49 @@ def get_default_ai_config() -> Dict[str, Any]:
         **_DIAGNOSTIC_STATE
     }
 
+def _sync_read_db_ai_config() -> Optional[Dict[str, Any]]:
+    try:
+        import sqlite3
+        import json
+        import os
+        from app.core.config import db_path_str
+        if os.path.exists(db_path_str):
+            conn = sqlite3.connect(db_path_str, timeout=5)
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT value FROM system_settings WHERE key = ?", ("ai_config",))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    val = row[0]
+                    if isinstance(val, str):
+                        return json.loads(val)
+                    elif isinstance(val, dict):
+                        return val
+            finally:
+                conn.close()
+    except Exception as e:
+        logger.debug(f"[ai_config] 同步加载持久层 AI 配置跳过: {e}")
+    return None
+
 def load_ai_config() -> Dict[str, Any]:
     """
     同步加载接口 (供 AIService 等快速读取已热加载的配置)
+    优先读取内存缓存，冷启动时直读数据库持久化配置
     """
     global _ACTIVE_AI_CACHE
     if _ACTIVE_AI_CACHE is not None:
         return _ACTIVE_AI_CACHE
-    return get_default_ai_config()
+
+    cfg = get_default_ai_config()
+    db_val = _sync_read_db_ai_config()
+    if db_val and isinstance(db_val, dict):
+        for k, v in db_val.items():
+            if v is not None and str(v).strip() != "":
+                cfg[k] = v
+        _ACTIVE_AI_CACHE = cfg
+        return cfg
+
+    return cfg
 
 async def get_active_ai_config(db: Optional[AsyncSession] = None) -> Dict[str, Any]:
     """

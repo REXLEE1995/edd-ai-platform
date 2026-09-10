@@ -69,6 +69,15 @@ async def lifespan(app: FastAPI):
     # 启动时自动初始化数据库表结构与预置系统数据
     logger.info(f"🚀 正在以 [{settings.ENVIRONMENT.upper()}] 模式启动尽调平台后端服务...")
     await init_db()
+    # 自动热加载持久化的大模型配置
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.core.ai_config import get_active_ai_config
+        async with AsyncSessionLocal() as session:
+            active_cfg = await get_active_ai_config(session)
+            logger.info(f"🤖 AI 模型网关已热加载生效: Provider={active_cfg.get('llm_provider')}, Model={active_cfg.get('new_api_model')}, URL={active_cfg.get('new_api_base_url')}")
+    except Exception as e:
+        logger.warning(f"[lifespan] AI 配置热加载警告: {e}")
     logger.info("✅ 尽调平台后端服务启动就绪，数据清洗中台与 MinIO 存证引擎已待命！")
     yield
     logger.info("🛑 尽调平台后端服务已安全关闭。")
