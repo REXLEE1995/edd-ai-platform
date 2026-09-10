@@ -44,48 +44,37 @@ export default function UserCenterPage() {
     navigate(`/app/profile?tab=${key}`, { replace: true });
   };
 
-  // 1. 个人资料与实名认证状态
-  const [isRealNameVerified, setIsRealNameVerified] = useState(true);
-  const [userName, setUserName] = useState('大雄');
-  const [idCardNumber, setIdCardNumber] = useState('440301199001011234');
+  // 1. 个人资料与实名认证状态 (严格基于当前登录用户的真实数据)
+  const isRealNameVerified = Boolean(user?.phone);
+  const [userName, setUserName] = useState(user?.company_name || user?.name || '');
+  const [idCardNumber, setIdCardNumber] = useState(user?.credit_code || user?.id_card || '');
   const [savingProfile, setSavingProfile] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setUserName(user.company_name || user.name || '');
+      setIdCardNumber(user.credit_code || user.id_card || '');
+    }
+  }, [user]);
 
   // 密码修改
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPwd, setChangingPwd] = useState(false);
 
-  const handleVerifyRealName = (e) => {
-    e.preventDefault();
-    if (!userName.trim()) {
-      message.warning('请输入真实姓名');
-      return;
-    }
-    if (!idCardNumber.trim() || idCardNumber.length < 15) {
-      message.warning('请输入有效的18位居民身份证号码');
-      return;
-    }
-    setIsRealNameVerified(true);
-    message.success('恭喜！个人公安实名认证已核验通过，已为您发放 1 次免费全景尽调额度！');
-  };
-
-  const handleCancelRealName = () => {
-    setIsRealNameVerified(false);
-    message.info('已切换为【未实名认证】状态（测试模拟），已撤销实名赠送额度');
-  };
-
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     if (!userName.trim()) {
-      message.warning('请输入姓名');
+      message.warning('请输入姓名或企业名称');
       return;
     }
     setSavingProfile(true);
     try {
       const res = await apiClient.post('/v1/auth/profile/update', {
-        name: userName
+        company_name: userName.trim(),
+        credit_code: idCardNumber.trim() || undefined
       });
-      message.success(res.message || '个人资料保存成功！');
+      message.success(res.message || '个人/企业资料保存成功！');
       refreshUserProfile();
     } catch (err) {
       message.error(err.response?.data?.detail || '更新资料失败');
@@ -151,47 +140,13 @@ export default function UserCenterPage() {
     setLoadingTx(true);
     try {
       const res = await apiClient.get(`/v1/billing/transactions?page=${p}&page_size=${ps}`);
-      if (res?.items && res.items.length > 0) {
-        setTransactions(res.items);
-        setTxTotal(res.total || res.items.length);
-      } else if (res?.data && res.data.length > 0) {
-        setTransactions(res.data);
-        setTxTotal(res.total || res.data.length);
-      } else {
-        throw new Error('No remote transactions');
-      }
+      const items = res?.items || res?.data || [];
+      setTransactions(items);
+      setTxTotal(res?.total ?? items.length);
     } catch (err) {
-      // 离线测试与保底示例数据
-      setTransactions([
-        {
-          id: 1,
-          tx_no: 'TX20260903143239C4C8',
-          change_type: 'recharge',
-          amount: 50,
-          balance_after: 50,
-          remark: '在线购买【标准进阶充值包 (50份)】',
-          created_at: '2026-09-03 14:32:39'
-        },
-        {
-          id: 2,
-          tx_no: 'TX20260903133332110B',
-          change_type: 'consume',
-          amount: -1,
-          balance_after: 0,
-          remark: '发起尽调任务【四川蜀道智能交通科技有限公司】',
-          created_at: '2026-09-03 13:33:32'
-        },
-        {
-          id: 3,
-          tx_no: 'TX202609031332455FDE',
-          change_type: 'gift',
-          amount: 1,
-          balance_after: 1,
-          remark: '新用户个人公安实名认证通过赠送 1 次体验额度',
-          created_at: '2026-09-03 13:32:45'
-        }
-      ]);
-      setTxTotal(3);
+      console.error('Fetch transactions error:', err);
+      setTransactions([]);
+      setTxTotal(0);
     } finally {
       setLoadingTx(false);
     }
@@ -317,7 +272,7 @@ export default function UserCenterPage() {
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] sm:text-xs text-zinc-500 font-mono">
-            <span>实名: {isRealNameVerified ? <strong className="text-slate-800">{user?.id_card_masked || user?.id_card || '440301********1234'} (已核验)</strong> : <strong className="text-amber-700">待公安实名核身</strong>}</span>
+            <span>实名状态: <strong className="text-slate-800">{user?.credit_code || user?.id_card_masked || user?.phone || '已认证'}</strong></span>
             <span>注册时间: <strong className="text-slate-800">{user?.created_at || '-'}</strong></span>
           </div>
         </div>
@@ -327,7 +282,7 @@ export default function UserCenterPage() {
           <div className="text-left md:text-right">
             <span className="text-[10px] sm:text-xs text-zinc-500 block">可用尽调额度</span>
             <span className="text-xl sm:text-2xl font-bold text-[#0084c2] font-mono leading-none">
-              {isRealNameVerified ? (user?.balance_quota ?? 57) : Math.max(0, (user?.balance_quota ?? 57) - 1)} <span className="text-xs font-normal text-zinc-500">次</span>
+              {user?.balance_quota ?? 0} <span className="text-xs font-normal text-zinc-500">次</span>
             </span>
           </div>
           <button
@@ -406,14 +361,14 @@ export default function UserCenterPage() {
               )}
             </div>
 
-            <form onSubmit={isRealNameVerified ? handleSaveProfile : handleVerifyRealName} className="space-y-4 max-w-2xl text-xs">
+            <form onSubmit={handleSaveProfile} className="space-y-4 max-w-2xl text-xs">
               <div className="space-y-1.5">
-                <label className="block font-medium text-slate-700">真实姓名</label>
+                <label className="block font-medium text-slate-700">企业名称 / 真实姓名</label>
                 <input
                   type="text"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
-                  placeholder="请输入您的真实姓名..."
+                  placeholder="请输入企业全称或个人真实姓名..."
                   className="w-full px-3.5 py-2 bg-white/80 border border-slate-200 rounded-md focus:border-[#0096DB] focus:ring-2 focus:ring-[#0096DB]/15 focus:outline-none text-slate-900 text-xs font-medium transition-all"
                 />
               </div>
@@ -429,83 +384,35 @@ export default function UserCenterPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-medium text-slate-700">证件类型</label>
+                <label className="block font-medium text-slate-700">统一社会信用代码 / 证件号 (选填)</label>
                 <input
                   type="text"
-                  disabled
-                  value="居民身份证"
-                  className="w-full px-3.5 py-2 bg-slate-100/70 border border-slate-200 rounded-md text-zinc-500 text-xs cursor-not-allowed font-medium"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-medium text-slate-700">
-                  {isRealNameVerified ? '实名身份证号码 (已通过公安核验)' : '身份证号码 (18位居民身份证)'}
-                </label>
-                <input
-                  type="text"
-                  disabled={isRealNameVerified}
-                  value={isRealNameVerified ? '440301********1234' : idCardNumber}
+                  value={idCardNumber}
                   onChange={(e) => setIdCardNumber(e.target.value)}
-                  placeholder="请输入18位居民身份证号码..."
-                  className={`w-full px-3.5 py-2 border border-slate-200 rounded-md font-mono text-xs ${
-                    isRealNameVerified ? 'bg-slate-100/70 text-zinc-500 cursor-not-allowed' : 'bg-white/80 focus:border-[#0096DB] focus:ring-2 focus:ring-[#0096DB]/15 focus:outline-none'
-                  }`}
+                  placeholder="请输入企业统一社会信用代码或身份证号..."
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-md font-mono text-xs bg-white/80 focus:border-[#0096DB] focus:ring-2 focus:ring-[#0096DB]/15 focus:outline-none"
                 />
               </div>
 
-              {isRealNameVerified ? (
-                <div className="p-3.5 bg-emerald-50/80 border border-emerald-300 rounded-lg text-emerald-950 text-xs flex items-start gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-semibold">实名认证权益已生效：</p>
-                    <p className="text-[11px] text-emerald-800 leading-relaxed">
-                      您已完成个人实名核验，享有平台全部企业全景尽调发起、报告查阅与 PDF 原件下载权限（实名认证已获赠 1 次全景尽调额度）。
-                    </p>
-                  </div>
+              <div className="p-3.5 bg-emerald-50/80 border border-emerald-300 rounded-lg text-emerald-950 text-xs flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-semibold">实名认证权益已生效：</p>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    当前账号已绑定手机认证，享有平台全部企业全景尽调发起、报告查阅与 PDF 原件下载权限。
+                  </p>
                 </div>
-              ) : (
-                <div className="p-3.5 bg-amber-50/80 border border-amber-300 rounded-lg text-amber-950 text-xs flex items-start gap-2.5">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-semibold">⚠️ 尚未完成实名认证提示：</p>
-                    <p className="text-[11px] text-amber-800 leading-relaxed">
-                      根据合规监管要求，发起尽调前需先完成个人公安实名核验。<strong>仅完成实名认证后才可获赠 1 次免费全景尽调额度（普通注册/登录不赠送额度）。</strong>
-                    </p>
-                  </div>
-                </div>
-              )}
+              </div>
 
               <div className="pt-2 flex items-center gap-3 flex-wrap">
-                {isRealNameVerified ? (
-                  <>
-                    <button
-                      type="submit"
-                      disabled={savingProfile}
-                      className="shadcn-button-primary text-xs py-2 px-4"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      {savingProfile ? '正在保存...' : '保存个人资料'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCancelRealName}
-                      className="shadcn-button-outline text-xs py-2 px-4 text-amber-900 border-amber-300 bg-amber-50 hover:bg-amber-100/50"
-                      title="点击模拟未实名认证状态，便于测试未认证场景"
-                    >
-                      <XCircle className="w-3.5 h-3.5 text-amber-600" />
-                      <span>取消实名认证 (模拟未认证)</span>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="submit"
-                    className="shadcn-button-primary text-xs py-2.5 px-6"
-                  >
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>立即提交公安实名认证 (立领 1 次免费额度)</span>
-                  </button>
-                )}
+                <button
+                  type="submit"
+                  disabled={savingProfile}
+                  className="shadcn-button-primary text-xs py-2 px-4 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {savingProfile ? '正在保存...' : '保存资料'}
+                </button>
               </div>
             </form>
           </div>
@@ -568,7 +475,7 @@ export default function UserCenterPage() {
             <div className="shadcn-card p-5 bg-white/75 backdrop-blur-xl space-y-1 border border-white/85 shadow-glass rounded-xl">
               <span className="text-xs text-zinc-500 font-semibold block">当前可用尽调额度</span>
               <span className="text-3xl font-bold text-slate-950 font-mono block mt-1">
-                {isRealNameVerified ? (user?.balance_quota ?? 57) : Math.max(0, (user?.balance_quota ?? 57) - 1)}
+                {user?.balance_quota ?? 0}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
               </span>
             </div>
@@ -576,7 +483,7 @@ export default function UserCenterPage() {
             <div className="shadcn-card p-5 bg-white/75 backdrop-blur-xl space-y-1 border border-white/85 shadow-glass rounded-xl">
               <span className="text-xs text-zinc-500 font-semibold block">累计购买充值额度</span>
               <span className="text-2xl font-bold text-slate-950 font-mono block mt-1">
-                {summary?.total_recharge_quota ?? 80}
+                {summary?.total_recharge_quota ?? user?.total_recharge_quota ?? 0}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
               </span>
             </div>
@@ -584,7 +491,7 @@ export default function UserCenterPage() {
             <div className="shadcn-card p-5 bg-white/75 backdrop-blur-xl space-y-1 border border-white/85 shadow-glass rounded-xl">
               <span className="text-xs text-zinc-500 font-semibold block">累计已消耗尽调</span>
               <span className="text-2xl font-bold text-slate-950 font-mono block mt-1">
-                {summary?.total_consumed_quota ?? 24}
+                {summary?.total_consumed_quota ?? user?.total_consumed_quota ?? 0}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
               </span>
             </div>
@@ -592,7 +499,7 @@ export default function UserCenterPage() {
             <div className="shadcn-card p-5 bg-white/75 backdrop-blur-xl space-y-1 border border-white/85 shadow-glass rounded-xl">
               <span className="text-xs text-zinc-500 font-semibold block">实名赠送额度</span>
               <span className="text-2xl font-bold text-emerald-700 font-mono block mt-1">
-                {isRealNameVerified ? 1 : 0}
+                {user?.total_gifted_quota ?? (isRealNameVerified ? 1 : 0)}
                 <span className="text-xs font-normal text-zinc-500 ml-1">次</span>
               </span>
             </div>
