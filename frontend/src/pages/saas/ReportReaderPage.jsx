@@ -747,6 +747,23 @@ export default function ReportReaderPage() {
       if (reportData) {
         setReport(reportData);
 
+        // 标记该报告为已读（消除任务与报告资产中心的红色“新”标识）
+        try {
+          const viewed = JSON.parse(localStorage.getItem('edd_viewed_report_ids') || '[]');
+          const keysToAdd = [reportId, reportData.id, reportData.report_no, reportData.task_id, reportData.task_no].filter(Boolean);
+          let changed = false;
+          keysToAdd.forEach(k => {
+            const strK = String(k);
+            if (!viewed.includes(strK)) {
+              viewed.push(strK);
+              changed = true;
+            }
+          });
+          if (changed) {
+            localStorage.setItem('edd_viewed_report_ids', JSON.stringify(viewed));
+          }
+        } catch (e) {}
+
         // 如果主详情接口中已包含大纲目录，直接解析复用，绝不重复调用独立 /catalog 接口
         const detailCatalog = (reportData.content?.toc_catalog && Array.isArray(reportData.content.toc_catalog) && reportData.content.toc_catalog.length > 0)
           ? reportData.content.toc_catalog
