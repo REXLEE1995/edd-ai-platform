@@ -582,6 +582,163 @@ def normalize_rules(rules: Optional[Union[List[Dict[str, Any]], Dict[str, str]]]
     
     return [dict(r) for r in rules if r.get('enabled', True)]
 
+# ==========================================
+# 面向对象领域模型与自适应窗口分片引擎 (Adaptive Window Chunking & Ordered Reducer)
+# ==========================================
+
+@dataclass
+class SectionNode:
+    """逻辑大纲章节节点"""
+    chapter_no: str
+    title: str
+    start_page: int
+    end_page: int
+    children: List[Any] = field(default_factory=list)
+
+
+@dataclass
+class SubWindow:
+    """物理计算微切片"""
+    section_no: str
+    section_title: str
+    start_page: int
+    end_page: int
+    window_index: int
+    total_windows: int
+    raw_text: str
+
+
+class AdaptiveWindowChunker:
+    """
+    通用自适应窗口切片器：
+    - 绝不硬编码任何特定章节或附件名称；
+    - 基于物理跨度与字符密度自适应切片；
+    - 保证任意大篇幅章节或附录均切分为安全微任务，杜绝大模型超时与截断。
+    """
+    MAX_PAGES_PER_WINDOW: int = 2
+    MAX_CHARS_PER_WINDOW: int = 3000
+
+    @classmethod
+    def chunk_section(
+        cls,
+        section: SectionNode,
+        raw_pages: List[Dict[str, Any]]
+    ) -> List[SubWindow]:
+        s_p = section.start_page
+        e_p = section.end_page
+        ch_pages = [p for p in raw_pages if s_p <= p.get("page", 1) <= e_p]
+        if not ch_pages:
+            return [SubWindow(
+                section_no=section.chapter_no,
+                section_title=section.title,
+                start_page=s_p,
+                end_page=e_p,
+                window_index=1,
+                total_windows=1,
+                raw_text=""
+            )]
+
+        # 按每 MAX_PAGES_PER_WINDOW 页进行物理窗口切片
+        page_chunks: List[List[Dict[str, Any]]] = []
+        cur_chunk: List[Dict[str, Any]] = []
+        cur_chars = 0
+
+        for p in ch_pages:
+            p_text_len = len(p.get("text", ""))
+            # 超过页数阈值或者单个窗口字符累计超过阈值，切出新窗口
+            if cur_chunk and (len(cur_chunk) >= cls.MAX_PAGES_PER_WINDOW or (cur_chars + p_text_len > cls.MAX_CHARS_PER_WINDOW)):
+                page_chunks.append(cur_chunk)
+                cur_chunk = [p]
+                cur_chars = p_text_len
+            else:
+                cur_chunk.append(p)
+                cur_chars += p_text_len
+
+        if cur_chunk:
+            page_chunks.append(cur_chunk)
+
+        total_windows = len(page_chunks)
+        sub_windows: List[SubWindow] = []
+        for idx, p_list in enumerate(page_chunks, start=1):
+            w_start = p_list[0].get("page", s_p)
+            w_end = p_list[-1].get("page", e_p)
+            w_text = "\n\n".join([f"--- [P.{p['page']}] ---\n{p.get('text', '').strip()}" for p in p_list])
+            sub_windows.append(SubWindow(
+                section_no=section.chapter_no,
+                section_title=section.title,
+                start_page=w_start,
+                end_page=w_end,
+                window_index=idx,
+                total_windows=total_windows,
+                raw_text=w_text
+            ))
+        return sub_windows
+
+
+class OrderedReducer:
+    """
+    保序规约装配器：
+    - 按物理页码与 TOC 大纲严格保序合并各个 SubWindow 转换成果；
+    - 自动注入规范的标准 TOC 锚点与来源索引；
+    - 统一规整 Markdown 层级与去除冗余代码块标记。
+    """
+    @classmethod
+    def reduce_section(
+        cls,
+        section: SectionNode,
+        converted_subwindows: List[Tuple[SubWindow, str]]
+    ) -> str:
+        sorted_subs = sorted(converted_subwindows, key=lambda x: (x[0].start_page, x[0].window_index))
+        content_parts = []
+        for sub, converted_text in sorted_subs:
+            text = converted_text.strip()
+            if text:
+                content_parts.append(text)
+
+        merged_body = "\n\n".join(content_parts) if content_parts else "（该章节暂无有效文本内容）"
+        anchor = f"chapter-{section.chapter_no}"
+        return (
+            f'<a id="{anchor}"></a>\n'
+            f'## {section.chapter_no} {section.title} (P.{section.start_page} ~ P.{section.end_page})\n'
+            f'> [!NOTE] 来源索引：原 PDF 第 {section.start_page} ~ {section.end_page} 页\n\n'
+            f'{merged_body}\n\n---\n'
+        )
+
+
+def assert_summary_entity_integrity(raw_text: str) -> str:
+    """
+    实体完整性守门员 (Semantic Boundary Asserter)：
+    - 治理大模型输出可能残留的省略号（...、……、等等、等。）、未闭合标点（，、；：-）与半句残缺
+    - 自动清理 Markdown 装饰符与非法控制字符
+    - 平滑规范收敛并闭环中文终结标点（。），确保流入持久层与前端的研判句子 100% 语法完整且无截断痕迹
+    """
+    if not raw_text or not isinstance(raw_text, str):
+        return ""
+
+    # 1. 清理 Markdown 标记与冗余空白
+    text = re.sub(r"[*#`_~]", "", raw_text)
+    text = re.sub(r"[ \t]+", " ", text).strip()
+    if not text:
+        return ""
+
+    # 2. 循环修剪末尾的省略号、悬空连接词与非终结标点
+    pattern_trailing_ellipsis = r"(?:\.{3,}|…+|等等|等。?|等[，,；;:]?|略[。，,]?)$"
+    pattern_trailing_dangling_punct = r"[,，、;；:：\-—–/\\]+$"
+
+    for _ in range(3):
+        text = re.sub(pattern_trailing_ellipsis, "", text).strip()
+        text = re.sub(pattern_trailing_dangling_punct, "", text).strip()
+
+    if not text:
+        return ""
+
+    # 3. 终结符完整性闭环：若末尾无终结符（。！？!?），补全标准中文句号
+    if not re.search(r"[。！？!?]$", text):
+        text += "。"
+
+    return text
+
+
 class DataCleansingService:
     """
     AI 企业风险评估与尽调数据工作流核心引擎 (v4.5 工业级工作流形态与享宇智评全景版)
@@ -1253,163 +1410,6 @@ class DataCleansingService:
             logger.warning(f"[DataCleansingService] 【步骤 2·目录提取】AI 增强抽取跳过 ({e})，使用平滑降级启发式真实物理页目录大纲。")
 
         return heuristic_data
-
-# ==========================================
-# 面向对象领域模型与自适应窗口分片引擎 (Adaptive Window Chunking & Ordered Reducer)
-# ==========================================
-
-@dataclass
-class SectionNode:
-    """逻辑大纲章节节点"""
-    chapter_no: str
-    title: str
-    start_page: int
-    end_page: int
-    children: List[Any] = field(default_factory=list)
-
-
-@dataclass
-class SubWindow:
-    """物理计算微切片"""
-    section_no: str
-    section_title: str
-    start_page: int
-    end_page: int
-    window_index: int
-    total_windows: int
-    raw_text: str
-
-
-class AdaptiveWindowChunker:
-    """
-    通用自适应窗口切片器：
-    - 绝不硬编码任何特定章节或附件名称；
-    - 基于物理跨度与字符密度自适应切片；
-    - 保证任意大篇幅章节或附录均切分为安全微任务，杜绝大模型超时与截断。
-    """
-    MAX_PAGES_PER_WINDOW: int = 2
-    MAX_CHARS_PER_WINDOW: int = 3000
-
-    @classmethod
-    def chunk_section(
-        cls,
-        section: SectionNode,
-        raw_pages: List[Dict[str, Any]]
-    ) -> List[SubWindow]:
-        s_p = section.start_page
-        e_p = section.end_page
-        ch_pages = [p for p in raw_pages if s_p <= p.get("page", 1) <= e_p]
-        if not ch_pages:
-            return [SubWindow(
-                section_no=section.chapter_no,
-                section_title=section.title,
-                start_page=s_p,
-                end_page=e_p,
-                window_index=1,
-                total_windows=1,
-                raw_text=""
-            )]
-
-        # 按每 MAX_PAGES_PER_WINDOW 页进行物理窗口切片
-        page_chunks: List[List[Dict[str, Any]]] = []
-        cur_chunk: List[Dict[str, Any]] = []
-        cur_chars = 0
-
-        for p in ch_pages:
-            p_text_len = len(p.get("text", ""))
-            # 超过页数阈值或者单个窗口字符累计超过阈值，切出新窗口
-            if cur_chunk and (len(cur_chunk) >= cls.MAX_PAGES_PER_WINDOW or (cur_chars + p_text_len > cls.MAX_CHARS_PER_WINDOW)):
-                page_chunks.append(cur_chunk)
-                cur_chunk = [p]
-                cur_chars = p_text_len
-            else:
-                cur_chunk.append(p)
-                cur_chars += p_text_len
-
-        if cur_chunk:
-            page_chunks.append(cur_chunk)
-
-        total_windows = len(page_chunks)
-        sub_windows: List[SubWindow] = []
-        for idx, p_list in enumerate(page_chunks, start=1):
-            w_start = p_list[0].get("page", s_p)
-            w_end = p_list[-1].get("page", e_p)
-            w_text = "\n\n".join([f"--- [P.{p['page']}] ---\n{p.get('text', '').strip()}" for p in p_list])
-            sub_windows.append(SubWindow(
-                section_no=section.chapter_no,
-                section_title=section.title,
-                start_page=w_start,
-                end_page=w_end,
-                window_index=idx,
-                total_windows=total_windows,
-                raw_text=w_text
-            ))
-        return sub_windows
-
-
-class OrderedReducer:
-    """
-    保序规约装配器：
-    - 按物理页码与 TOC 大纲严格保序合并各个 SubWindow 转换成果；
-    - 自动注入规范的标准 TOC 锚点与来源索引；
-    - 统一规整 Markdown 层级与去除冗余代码块标记。
-    """
-    @classmethod
-    def reduce_section(
-        cls,
-        section: SectionNode,
-        converted_subwindows: List[Tuple[SubWindow, str]]
-    ) -> str:
-        sorted_subs = sorted(converted_subwindows, key=lambda x: (x[0].start_page, x[0].window_index))
-        content_parts = []
-        for sub, converted_text in sorted_subs:
-            text = converted_text.strip()
-            if text:
-                content_parts.append(text)
-
-        merged_body = "\n\n".join(content_parts) if content_parts else "（该章节暂无有效文本内容）"
-        anchor = f"chapter-{section.chapter_no}"
-        return (
-            f'<a id="{anchor}"></a>\n'
-            f'## {section.chapter_no} {section.title} (P.{section.start_page} ~ P.{section.end_page})\n'
-            f'> [!NOTE] 来源索引：原 PDF 第 {section.start_page} ~ {section.end_page} 页\n\n'
-            f'{merged_body}\n\n---\n'
-        )
-
-
-def assert_summary_entity_integrity(raw_text: str) -> str:
-    """
-    实体完整性守门员 (Semantic Boundary Asserter)：
-    - 治理大模型输出可能残留的省略号（...、……、等等、等。）、未闭合标点（，、；：-）与半句残缺
-    - 自动清理 Markdown 装饰符与非法控制字符
-    - 平滑规范收敛并闭环中文终结标点（。），确保流入持久层与前端的研判句子 100% 语法完整且无截断痕迹
-    """
-    if not raw_text or not isinstance(raw_text, str):
-        return ""
-
-    # 1. 清理 Markdown 标记与冗余空白
-    text = re.sub(r"[*#`_~]", "", raw_text)
-    text = re.sub(r"[ \t]+", " ", text).strip()
-    if not text:
-        return ""
-
-    # 2. 循环修剪末尾的省略号、悬空连接词与非终结标点
-    pattern_trailing_ellipsis = r"(?:\.{3,}|…+|等等|等。?|等[，,；;:]?|略[。，,]?)$"
-    pattern_trailing_dangling_punct = r"[,，、;；:：\-—–/\\]+$"
-
-    for _ in range(3):
-        text = re.sub(pattern_trailing_ellipsis, "", text).strip()
-        text = re.sub(pattern_trailing_dangling_punct, "", text).strip()
-
-    if not text:
-        return ""
-
-    # 3. 终结符完整性闭环：若末尾无终结符（。！？!?），补全标准中文句号
-    if not re.search(r"[。！？!?]$", text):
-        text += "。"
-
-    return text
-
 
     @classmethod
     async def generate_ai_markdown_knowledge_base(
