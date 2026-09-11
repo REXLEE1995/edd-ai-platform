@@ -2,7 +2,7 @@ import uuid
 from typing import Optional
 from datetime import datetime, timedelta
 from app.core.timezone import shanghai_now
-from sqlalchemy import String, Integer, JSON, Text, DateTime
+from sqlalchemy import String, Integer, JSON, Text, DateTime, Boolean, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
@@ -54,6 +54,20 @@ class XYZPReport(Base, TimestampMixin):
         String(50), 
         nullable=True,
         comment="法定代表人"
+    )
+    
+    # 用户已读查阅状态跟踪
+    is_read: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default=text("0"),
+        comment="用户是否已查阅该报告（False=新报告，True=已读）"
+    )
+    read_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="用户首次查阅/打开该报告的时间戳"
     )
     
     # 研判评级与结论

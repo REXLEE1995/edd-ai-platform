@@ -80,6 +80,10 @@ async def init_db():
                 cols = [row[1] for row in res.fetchall()]
                 if "expired_at" not in cols:
                     await conn.execute(text("ALTER TABLE xyzp_reports ADD COLUMN expired_at DATETIME"))
+                if "is_read" not in cols:
+                    await conn.execute(text("ALTER TABLE xyzp_reports ADD COLUMN is_read BOOLEAN DEFAULT 0"))
+                if "read_at" not in cols:
+                    await conn.execute(text("ALTER TABLE xyzp_reports ADD COLUMN read_at DATETIME"))
             except Exception as e:
                 print(f"[DB Auto-Migration SQLite] migration note: {e}")
 
@@ -92,6 +96,14 @@ async def init_db():
                 await conn.execute(text("ALTER TABLE xyzp_tasks MODIFY COLUMN auth_qrcode_url LONGTEXT COMMENT '微风企法人授权专属二维码图片 URL'"))
                 await conn.execute(text("ALTER TABLE xyzp_tasks MODIFY COLUMN wfq_pdf_url LONGTEXT COMMENT '微风企返回的原始远程报告 PDF 下载地址'"))
                 await conn.execute(text("ALTER TABLE xyzp_tasks MODIFY COLUMN error_message LONGTEXT COMMENT '若任务异常终止时的错误原因详情'"))
+                try:
+                    await conn.execute(text("ALTER TABLE xyzp_reports ADD COLUMN is_read TINYINT(1) NOT NULL DEFAULT 0 COMMENT '用户是否已查阅该报告'"))
+                except Exception:
+                    pass
+                try:
+                    await conn.execute(text("ALTER TABLE xyzp_reports ADD COLUMN read_at DATETIME COMMENT '用户首次查阅时间'"))
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[DB Auto-Migration MySQL] migration note: {e}")
     
