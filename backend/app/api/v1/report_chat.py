@@ -34,10 +34,9 @@ async def _extract_report_kb_context(
     catalog_name: Optional[str] = None
 ) -> str:
     """
-    通过接口/存储层自动聚合当前尽调报告的真实 PDF 识别底稿：
-    1. 优先从 MinIO 中读取步骤 4 生成的标准 Markdown 知识库 (pdf_knowledge_md)
-    2. 优先从 MinIO 中读取步骤 3 提取的原始 PDF 全文本与物理页码标记 (pdf_content_txt)
-    3. 融合报告结构化核心指标与风控综述，综合生成供 AI 解析的全景 PDF 识别底稿
+    通过接口/存储层获取当前尽调报告的 Markdown 知识库底料：
+    1. 严格以步骤 4 生成的标准 Markdown 知识库 (pdf_knowledge_md) 作为纯净底稿
+    2. 若 Markdown 知识库暂未生成，降级读取逐页提取的原始文本或结构化字段兜底
     """
     minio_mgr = get_minio_client()
     task_id = report.task_id or report.id
@@ -45,7 +44,7 @@ async def _extract_report_kb_context(
     md_content = ""
     txt_content = ""
 
-    # 1. 尝试从 MinIO 读取该任务关联的 PDF 解析底稿文件 (knowledge-base 与 content-text)
+    # 1. 尝试从 MinIO 读取该任务关联的 Markdown 知识库 (pdf_knowledge_md)
     try:
         file_result = await db.execute(
             select(TaskFile).where(TaskFile.task_id == task_id)
@@ -61,33 +60,20 @@ async def _extract_report_kb_context(
     except Exception as e:
         logger.warning(f"[ReportChat] 从 MinIO 读取 PDF 底稿文件异常 (task={task_id}): {e}")
 
-    # 2. 如果成功获取到 PDF 识别的 Markdown 知识库或 Content Text
-    if md_content or txt_content:
-        parts = [
-            f"# 企业尽调原始 PDF 报告识别底稿",
-            f"目标尽调企业：{report.company_name} (统一社会信用代码: {report.credit_code})",
-            f"法定代表人：{report.legal_person or '未记载'}",
-            f"风控评级：{report.risk_level} (综合量化评分: {report.score} 分)",
-            f"建议授信区间：{report.suggested_quota_min} ~ {report.suggested_quota_max} 万元",
-        ]
-        if report.summary_ai_comment:
-            parts.append(f"【AI风控总括研判】：\n{report.summary_ai_comment}")
+    # 2. 纯净返回 Markdown 知识库全文（满足问答仅基于 Markdown 知识库进行答复的要求）
+    if md_content and md_content.strip():
+        return md_content.strip()
 
-        if md_content:
-            # 优先全量注入结构化 Markdown 知识库（包含目录、各章节分析及附件财务明细表）
-            parts.append(f"【PDF 报告结构化章节与附件完整底稿内容】：\n{md_content}")
-        elif txt_content:
-            # 若无结构化 Markdown，回退注入逐页提取的物理页码纯文本
-            parts.append(f"【PDF 报告原始物理页码逐页提取底稿】：\n{txt_content}")
-
-        return "\n\n".join(parts)
+    if txt_content and txt_content.strip():
+        return txt_content.strip()
 
     # 3. 兜底回退：若 MinIO 文件不存在，从数据库结构化字段聚合
     parts = [
-        f"目标尽调企业：{report.company_name} (统一社会信用代码: {report.credit_code})",
-        f"法定代表人：{report.legal_person or '未记载'}",
-        f"风控评级：{report.risk_level} (综合量化评分: {report.score} 分)",
-        f"AI 测算建议授信区间：{report.suggested_quota_min} ~ {report.suggested_quota_max} 万元",
+        f"# {report.company_name} · 尽调与风控评级深度知识库",
+        f"统一社会信用代码: {report.credit_code}",
+        f"法定代表人: {report.legal_person or '未记载'}",
+        f"风控评级: {report.risk_level} (综合量化评分: {report.score} 分)",
+        f"建议授信区间: {report.suggested_quota_min} ~ {report.suggested_quota_max} 万元",
     ]
     if report.summary_ai_comment:
         parts.append(f"【AI风控综述与研判依据】：\n{report.summary_ai_comment}")
