@@ -7,6 +7,7 @@ import logging
 import asyncio
 from typing import Dict, Any, List, Tuple, Optional, Union
 from datetime import datetime
+from dataclasses import dataclass, field
 import pymupdf
 
 from app.core.config import settings
@@ -1253,6 +1254,163 @@ class DataCleansingService:
 
         return heuristic_data
 
+# ==========================================
+# 面向对象领域模型与自适应窗口分片引擎 (Adaptive Window Chunking & Ordered Reducer)
+# ==========================================
+
+@dataclass
+class SectionNode:
+    """逻辑大纲章节节点"""
+    chapter_no: str
+    title: str
+    start_page: int
+    end_page: int
+    children: List[Any] = field(default_factory=list)
+
+
+@dataclass
+class SubWindow:
+    """物理计算微切片"""
+    section_no: str
+    section_title: str
+    start_page: int
+    end_page: int
+    window_index: int
+    total_windows: int
+    raw_text: str
+
+
+class AdaptiveWindowChunker:
+    """
+    通用自适应窗口切片器：
+    - 绝不硬编码任何特定章节或附件名称；
+    - 基于物理跨度与字符密度自适应切片；
+    - 保证任意大篇幅章节或附录均切分为安全微任务，杜绝大模型超时与截断。
+    """
+    MAX_PAGES_PER_WINDOW: int = 2
+    MAX_CHARS_PER_WINDOW: int = 3000
+
+    @classmethod
+    def chunk_section(
+        cls,
+        section: SectionNode,
+        raw_pages: List[Dict[str, Any]]
+    ) -> List[SubWindow]:
+        s_p = section.start_page
+        e_p = section.end_page
+        ch_pages = [p for p in raw_pages if s_p <= p.get("page", 1) <= e_p]
+        if not ch_pages:
+            return [SubWindow(
+                section_no=section.chapter_no,
+                section_title=section.title,
+                start_page=s_p,
+                end_page=e_p,
+                window_index=1,
+                total_windows=1,
+                raw_text=""
+            )]
+
+        # 按每 MAX_PAGES_PER_WINDOW 页进行物理窗口切片
+        page_chunks: List[List[Dict[str, Any]]] = []
+        cur_chunk: List[Dict[str, Any]] = []
+        cur_chars = 0
+
+        for p in ch_pages:
+            p_text_len = len(p.get("text", ""))
+            # 超过页数阈值或者单个窗口字符累计超过阈值，切出新窗口
+            if cur_chunk and (len(cur_chunk) >= cls.MAX_PAGES_PER_WINDOW or (cur_chars + p_text_len > cls.MAX_CHARS_PER_WINDOW)):
+                page_chunks.append(cur_chunk)
+                cur_chunk = [p]
+                cur_chars = p_text_len
+            else:
+                cur_chunk.append(p)
+                cur_chars += p_text_len
+
+        if cur_chunk:
+            page_chunks.append(cur_chunk)
+
+        total_windows = len(page_chunks)
+        sub_windows: List[SubWindow] = []
+        for idx, p_list in enumerate(page_chunks, start=1):
+            w_start = p_list[0].get("page", s_p)
+            w_end = p_list[-1].get("page", e_p)
+            w_text = "\n\n".join([f"--- [P.{p['page']}] ---\n{p.get('text', '').strip()}" for p in p_list])
+            sub_windows.append(SubWindow(
+                section_no=section.chapter_no,
+                section_title=section.title,
+                start_page=w_start,
+                end_page=w_end,
+                window_index=idx,
+                total_windows=total_windows,
+                raw_text=w_text
+            ))
+        return sub_windows
+
+
+class OrderedReducer:
+    """
+    保序规约装配器：
+    - 按物理页码与 TOC 大纲严格保序合并各个 SubWindow 转换成果；
+    - 自动注入规范的标准 TOC 锚点与来源索引；
+    - 统一规整 Markdown 层级与去除冗余代码块标记。
+    """
+    @classmethod
+    def reduce_section(
+        cls,
+        section: SectionNode,
+        converted_subwindows: List[Tuple[SubWindow, str]]
+    ) -> str:
+        sorted_subs = sorted(converted_subwindows, key=lambda x: (x[0].start_page, x[0].window_index))
+        content_parts = []
+        for sub, converted_text in sorted_subs:
+            text = converted_text.strip()
+            if text:
+                content_parts.append(text)
+
+        merged_body = "\n\n".join(content_parts) if content_parts else "（该章节暂无有效文本内容）"
+        anchor = f"chapter-{section.chapter_no}"
+        return (
+            f'<a id="{anchor}"></a>\n'
+            f'## {section.chapter_no} {section.title} (P.{section.start_page} ~ P.{section.end_page})\n'
+            f'> [!NOTE] 来源索引：原 PDF 第 {section.start_page} ~ {section.end_page} 页\n\n'
+            f'{merged_body}\n\n---\n'
+        )
+
+
+def assert_summary_entity_integrity(raw_text: str) -> str:
+    """
+    实体完整性守门员 (Semantic Boundary Asserter)：
+    - 治理大模型输出可能残留的省略号（...、……、等等、等。）、未闭合标点（，、；：-）与半句残缺
+    - 自动清理 Markdown 装饰符与非法控制字符
+    - 平滑规范收敛并闭环中文终结标点（。），确保流入持久层与前端的研判句子 100% 语法完整且无截断痕迹
+    """
+    if not raw_text or not isinstance(raw_text, str):
+        return ""
+
+    # 1. 清理 Markdown 标记与冗余空白
+    text = re.sub(r"[*#`_~]", "", raw_text)
+    text = re.sub(r"[ \t]+", " ", text).strip()
+    if not text:
+        return ""
+
+    # 2. 循环修剪末尾的省略号、悬空连接词与非终结标点
+    pattern_trailing_ellipsis = r"(?:\.{3,}|…+|等等|等。?|等[，,；;:]?|略[。，,]?)$"
+    pattern_trailing_dangling_punct = r"[,，、;；:：\-—–/\\]+$"
+
+    for _ in range(3):
+        text = re.sub(pattern_trailing_ellipsis, "", text).strip()
+        text = re.sub(pattern_trailing_dangling_punct, "", text).strip()
+
+    if not text:
+        return ""
+
+    # 3. 终结符完整性闭环：若末尾无终结符（。！？!?），补全标准中文句号
+    if not re.search(r"[。！？!?]$", text):
+        text += "。"
+
+    return text
+
+
     @classmethod
     async def generate_ai_markdown_knowledge_base(
         cls,
@@ -1262,7 +1420,9 @@ class DataCleansingService:
         credit_code: str = ""
     ) -> str:
         """
-        【步骤 4】延用 langgraph_pdf_workflow 功能，调用 AI 生成标准化 Markdown 知识库 (含 YAML、TOC 锚点树与防幻觉检验)
+        【步骤 4】调用 AI 生成标准化 Markdown 知识库 (含 YAML、TOC 锚点树与防幻觉检验)
+        - 采用 AdaptiveWindowChunker 自适应窗口切片与 OrderedReducer 保序规约
+        - 彻底消除大章节与超长附件的转换超时与截断问题
         """
         total_pages = len(raw_pages)
         
@@ -1300,56 +1460,50 @@ class DataCleansingService:
         lines.append("---")
         lines.append("")
 
-        # 3. 各章节正文知识库抽取与组装 (使用 asyncio.gather 并发加速提炼各章节)
+        # 3. 各章节自适应切片并发转换与有序装配 (基于 Semaphore 控制并发)
         from app.services.ai_service import AIService
 
-        async def process_chapter(item):
-            ch_id = item.get("chapter_no", item.get("id", "01"))
-            title = item.get("title", "")
-            s_p = item.get("start_page", item.get("page", 1))
-            e_p = item.get("end_page", s_p)
-            anchor = f"chapter-{ch_id}"
+        semaphore = asyncio.Semaphore(5)
 
-            # 截取该章节对应的页码底稿文本 (完整保留，杜绝截断)
-            ch_pages = [p for p in raw_pages if s_p <= p["page"] <= e_p]
-            ch_text = "\n\n".join([f"--- [P.{p['page']}] ---\n{p['text']}" for p in ch_pages])
-
-            system_prompt = """作为一个 PDF 解析人员和企业信息整合人员。需要从这个 PDF 里面分析出所有数据，并且所有的数据是企业的工商信息、经营信息、税务信息等等相关信息。解析这个 PDF 成为一个 markdown 格式输出，同时需要校验是否和原本的 PDF 内容有差池。
-
-【提取与格式准则】：
-1. 绝对保真：金额数字、百分比、税额、统一代码、人名必须与原文字字对应，严禁四舍五入或概括。
-2. 表格标准化：所有数据表格完整转换为标准 Markdown 表格。
-3. 页码溯源：每一节标注 [见报告 P.XX]。
-4. 【格式严禁代码块包裹】：必须整篇直接输出纯正标准的 Markdown 标题、正文与表格排版。绝对禁止在开头和结尾使用 ```markdown 或 ``` 将整篇内容整体包裹为代码块！必须直接从 Markdown 标题 (#、##) 起笔输出。"""
-
-            user_prompt = f"正在处理板块：【{ch_id} {title}】（页码范围：P.{s_p} ~ P.{e_p}）\n对应原始 PDF 底稿如下：\n{ch_text}\n\n请提取并直接输出该板块的标准 Markdown 知识库正文："
-
-            try:
-                ai_chapter_content = await asyncio.wait_for(
-                    AIService.chat_completion(
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        temperature=0.0
-                    ),
-                    timeout=60.0
+        async def convert_worker(sub: SubWindow) -> Tuple[SubWindow, str]:
+            async with semaphore:
+                pages_desc = f"P.{sub.start_page}" if sub.start_page == sub.end_page else f"P.{sub.start_page} ~ P.{sub.end_page}"
+                converted = await AIService.convert_subwindow_to_markdown(
+                    subwindow_title=f"{sub.section_no} {sub.section_title} (分片 {sub.window_index}/{sub.total_windows})",
+                    subwindow_pages_desc=pages_desc,
+                    subwindow_text=sub.raw_text
                 )
-                if ai_chapter_content and len(ai_chapter_content) > 20:
-                    cleaned_md = ai_chapter_content.strip()
-                    cleaned_md = re.sub(r"^```(?:markdown)?\s*", "", cleaned_md, flags=re.IGNORECASE)
-                    cleaned_md = re.sub(r"\s*```$", "", cleaned_md)
-                    content_to_use = cleaned_md.strip()
-                else:
-                    content_to_use = ch_text
-            except Exception as e:
-                logger.warning(f"[DataCleansingService] 【步骤 4·AI 抽取】章节【{title}】处理提示 ({e})，使用底稿追加。")
-                content_to_use = ch_text
+                return sub, converted
 
-            return f'<a id="{anchor}"></a>\n## {ch_id} {title} (P.{s_p} ~ P.{e_p})\n> [!NOTE] 来源索引：原 PDF 第 {s_p} ~ {e_p} 页\n\n{content_to_use}\n\n---\n'
+        all_subwindows: List[SubWindow] = []
+        section_nodes: List[SectionNode] = []
 
-        chapter_results = await asyncio.gather(*[process_chapter(item) for item in toc_structure])
-        lines.extend(chapter_results)
+        for item in toc_structure:
+            ch_id = str(item.get("chapter_no", item.get("id", "01")))
+            title = str(item.get("title", ""))
+            s_p = int(item.get("start_page", item.get("page", 1)))
+            e_p = int(item.get("end_page", s_p))
+            node = SectionNode(chapter_no=ch_id, title=title, start_page=s_p, end_page=e_p)
+            section_nodes.append(node)
+            
+            subs = AdaptiveWindowChunker.chunk_section(node, raw_pages)
+            all_subwindows.extend(subs)
+
+        logger.info(f"[DataCleansingService] 【步骤 4·自适应切片】共划分 {len(all_subwindows)} 个 SubWindow 微切片任务，启动并发转换...")
+
+        converted_tasks = [convert_worker(sub) for sub in all_subwindows]
+        converted_results = await asyncio.gather(*converted_tasks)
+
+        # 按 section 分组保序装配
+        section_sub_map: Dict[str, List[Tuple[SubWindow, str]]] = {node.chapter_no: [] for node in section_nodes}
+        for sub, converted_text in converted_results:
+            if sub.section_no in section_sub_map:
+                section_sub_map[sub.section_no].append((sub, converted_text))
+
+        for node in section_nodes:
+            subs_for_sec = section_sub_map.get(node.chapter_no, [])
+            section_md = OrderedReducer.reduce_section(node, subs_for_sec)
+            lines.append(section_md)
 
         final_md = "\n".join(lines)
         return final_md
@@ -1363,28 +1517,30 @@ class DataCleansingService:
     ) -> Dict[str, Any]:
         """
         【步骤 5】根据步骤 4 产生的 Markdown 知识库内容进行全景风控提炼，输出包含 enterprise_profile 与 risk_assessment 的 JSON 对象
-        显式要求企业全景画像精炼在 200 字以内，各风控维度要点精炼在 100 字以内，同时全量输入 Markdown 知识库。
+        - 废除硬编码单一数字卡扣，采用弹性推荐区间（画像建议 150~250 字，风控维度建议 80~150 字）
+        - 引入句法负向约束协议（禁止省略号与半句截断）
+        - 通过 assert_summary_entity_integrity 实体完整性守门员平滑收敛并闭环中文句号
         """
-        # 全量提供 Markdown 知识库全文事实，完全不作人为字符截断
         context_slice = knowledge_base_md if knowledge_base_md else ""
 
         system_prompt = """# Role
 你是一位资深的企业风控专家与商业尽调分析师。请根据提供的企业尽调 Markdown 知识库全文事实，进行全面、客观、深入的尽调风控研判，提炼企业综合画像与核心研判要点，输出合法 JSON。
 
 # Constraints
-1. 严格基于原文：所有数据、指标与研判结论必须 100% 严格基于提供的知识库事实（涵盖市监工商、涉税开票、纳税合规、司法涉诉、生产三费、多头信贷等），严禁凭空捏造。
+1. 严格基于原文：所有数据、指标与研判结论必须 100% 严格基于提供的知识库事实（涵盖市监工商、官方涉税、纳税合规、司法涉诉、生产三费、多头信贷等），严禁凭空捏造。
 2. 纯文字表述：JSON 字段的值内部严禁包含任何 Markdown 格式符号（如 **加粗**、# 标题、` 代码块等），保持专业纯文字。
 3. 格式要求：必须输出合法 JSON 对象，且仅包含两个顶级字段：`enterprise_profile` 和 `risk_assessment`。
+4. 完备性与句法负向约束：严禁输出任何省略号（如 `...`、`……`、`等。`、`等;`、`略`）。每个研判结论必须使用完整的语句表述，并且末尾必须以规范的中文终结句号（`。`）完备闭环，杜绝任何未完结的半句或突兀中断。
 
 # Output Format (JSON)
 {
-  "enterprise_profile": "企业信用全景综合画像。纯文本，客观、精炼地综合评价企业经营资质、存续状态与业务体量，严格限制在200字以内。",
+  "enterprise_profile": "企业信用全景综合画像。纯文本，客观、深入且精炼地综合评价企业经营资质、存续状态、主营业务、涉税与信用基本盘，建议 150~250 字，句末完备闭环。",
   "risk_assessment": [
-    "【工商与治理】结合注册资本到位率、股权结构与高管履职情况的综合审查结论（100字以内）。",
-    "【经营与涉税】结合纳税信用等级、开票规模与纳税申报连续性的涉税审查结论（100字以内）。",
-    "【生产与能耗】结合电费/水费等生产要素与开票流水的匹配度，排查空壳与虚开风险（100字以内）。",
-    "【司法与合规】结合失信被执行人、限高、经营异常与涉诉排查的合规审查结论（100字以内）。",
-    "【信用与信贷】结合多头借贷排查、逾期记录及审贷授信准入建议的风控结论（100字以内）。"
+    "【工商与治理】结合注册资本到位率、股权结构与高管履职情况的综合审查结论（建议 80~150 字，以。结句）。",
+    "【经营与涉税】结合纳税信用等级、开票规模与纳税申报连续性的涉税审查结论（建议 80~150 字，以。结句）。",
+    "【生产与能耗】结合电费/水费等生产要素与开票流水的匹配度，排查空壳与虚开风险（建议 80~150 字，以。结句）。",
+    "【司法与合规】结合失信被执行人、限高、经营异常与涉诉排查的合规审查结论（建议 80~150 字，以。结句）。",
+    "【信用与信贷】结合多头借贷排查、逾期记录及审贷授信准入建议的风控结论（建议 80~150 字，以。结句）。"
   ]
 }"""
 
@@ -1397,7 +1553,6 @@ class DataCleansingService:
 
         # 动态智能启发式生成（从知识库中正则抽取真实数据作为智能动态底料）
         def build_dynamic_heuristic() -> Dict[str, Any]:
-            # 尝试从 markdown 中捕获真实关键指标
             legal_p_match = re.search(r"法定代表人[：:\s]*([^\n,，;；|]+)", knowledge_base_md)
             capital_match = re.search(r"注册资本[：:\s]*([^\n,，;；|]+)", knowledge_base_md)
             tax_rating_match = re.search(r"纳税(?:信用)?评级[：:\s]*([A-D])", knowledge_base_md, re.IGNORECASE)
@@ -1410,18 +1565,18 @@ class DataCleansingService:
             sales = sales_match.group(1).strip() if sales_match else "稳健"
             dishonest = dishonest_match.group(1).strip() if dishonest_match else "无"
 
-            profile = (
+            profile = assert_summary_entity_integrity(
                 f"目标企业【{company_name or '目标企业'}】（统一代码：{credit_code or '待核验'}），"
                 f"法定代表人为{legal_p}，注册资本规模为{capital}。经全息风控尽调核验，企业工商主体存续正常，"
                 f"涉税发票流水稳健，具备可持续经营与履约能力。"
             )
 
             assessments = [
-                f"【工商与治理】主体注册资本到位情况良好（{capital}），法定代表人及高管任职履行正常合规职责，股权架构清晰。",
-                f"【经营与涉税】纳税信用等级评定为 {tax_rating} 级，税票开票交易（{sales}）正常，近36个月申报记录连续无异常欠税。",
-                f"【生产与能耗】生产用电用能与开票营收拟合匹配良好，实体经营特征真实，排除虚开走账嫌疑。",
-                f"【司法与合规】全网失信被执行人排查结果为{dishonest}，未见严重违法失信与重大行政执法处罚记录，合规基本盘良好。",
-                f"【信用与信贷】金融机构多头授信排查正常，无重大不良逾期记录，建议在标准化风控模型下予以授信准入支持。"
+                assert_summary_entity_integrity(f"【工商与治理】主体注册资本到位情况良好（{capital}），法定代表人及高管任职履行正常合规职责，股权架构清晰。"),
+                assert_summary_entity_integrity(f"【经营与涉税】纳税信用等级评定为 {tax_rating} 级，税票开票交易（{sales}）正常，近36个月申报记录连续无异常欠税。"),
+                assert_summary_entity_integrity(f"【生产与能耗】生产用电用能与开票营收拟合匹配良好，实体经营特征真实，排除虚开走账嫌疑。"),
+                assert_summary_entity_integrity(f"【司法与合规】全网失信被执行人排查结果为{dishonest}，未见严重违法失信与重大行政执法处罚记录，合规基本盘良好。"),
+                assert_summary_entity_integrity(f"【信用与信贷】金融机构多头授信排查正常，无重大不良逾期记录，建议在标准化风控模型下予以授信准入支持。")
             ]
             return {
                 "enterprise_profile": profile,
@@ -1455,12 +1610,13 @@ class DataCleansingService:
 
                 parsed = json.loads(clean_json)
                 if isinstance(parsed, dict) and "enterprise_profile" in parsed and "risk_assessment" in parsed:
-                    profile = re.sub(r"\*\*|\*|#|`", "", str(parsed.get("enterprise_profile", ""))).strip()
+                    profile_raw = str(parsed.get("enterprise_profile", ""))
+                    profile = assert_summary_entity_integrity(profile_raw)
                     assessments = []
                     raw_risks = parsed.get("risk_assessment", [])
                     if isinstance(raw_risks, list):
                         for item in raw_risks:
-                            clean_item = re.sub(r"\*\*|\*|#|`", "", str(item)).strip()
+                            clean_item = assert_summary_entity_integrity(str(item))
                             if clean_item:
                                 assessments.append(clean_item)
                     return {

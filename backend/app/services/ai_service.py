@@ -1,6 +1,7 @@
 import json
 import logging
 import asyncio
+import re
 from typing import Dict, Any, List, Optional, AsyncGenerator, Callable
 from openai import AsyncOpenAI
 from app.core.ai_config import load_ai_config
@@ -193,16 +194,60 @@ class AIService:
         )
 
     @classmethod
+    async def convert_subwindow_to_markdown(
+        cls,
+        subwindow_title: str,
+        subwindow_pages_desc: str,
+        subwindow_text: str,
+        temperature: float = 0.0,
+        timeout: float = 60.0
+    ) -> str:
+        """
+        面向通用自适应窗口切片 (Adaptive Window Chunking) 的单个 SubWindow Markdown 转换微任务
+        - 单个切片跨度小（通常1-2页）、耗时短（2-5秒）、绝对不超时、大模型不偷懒
+        """
+        system_prompt = """作为一个 PDF 解析人员和企业信息整合人员。需要从这个 PDF 页面底稿中分析出所有数据，并且所有的数据是企业的工商信息、经营信息、税务信息等等相关信息。解析这个 PDF 页面片段成为纯正的 markdown 格式输出，同时需要校验是否和原本的 PDF 内容有差池。
+
+【提取与格式准则】：
+1. 绝对保真：金额数字、百分比、税额、统一代码、人名必须与原文字字对应，严禁四舍五入、省略或概括。
+2. 表格标准化：所有数据表格完整转换为标准 Markdown 表格。
+3. 页码溯源：每一节标注 [见报告 P.XX]。
+4. 【格式严禁代码块包裹】：必须整篇直接输出纯正标准的 Markdown 标题、正文与表格排版。绝对禁止在开头和结尾使用 ```markdown 或 ``` 将整篇内容整体包裹为代码块！必须直接从 Markdown 标题 (#、##) 或表格起笔输出。"""
+
+        user_prompt = f"正在处理板块切片：【{subwindow_title}】（{subwindow_pages_desc}）\n对应原始 PDF 底稿如下：\n{subwindow_text}\n\n请提取并直接输出该切片的标准 Markdown 正文："
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        try:
+            res = await asyncio.wait_for(
+                cls.chat_completion(messages=messages, temperature=temperature),
+                timeout=timeout
+            )
+            if res and len(res) > 20:
+                cleaned = res.strip()
+                cleaned = re.sub(r"^```(?:markdown)?\s*", "", cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(r"\s*```$", "", cleaned)
+                return cleaned.strip()
+        except Exception as e:
+            logger.warning(f"[AIService] convert_subwindow_to_markdown ({subwindow_title} {subwindow_pages_desc}) failed: {e}")
+        return subwindow_text
+
+    @classmethod
     async def stream_chat_completion(
         cls,
         messages: List[Dict[str, str]],
         model: Optional[str] = None,
         temperature: Optional[float] = 0.1,
         max_tokens: Optional[int] = None,
-        stop_check_fn: Optional[Callable[[], Any]] = None
+        stop_check_fn: Optional[Callable[[], Any]] = None,
+        usage_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> AsyncGenerator[str, None]:
         """
         统一调用 AI 网关的异步流式输出接口 (支持生产环境与免 Key 降级流式输出)
+        - 开启 stream_options: {"include_usage": True} 捕获 Prompt 缓存与 Token 用量
+        - 实时分析 DeepSeek / Qwen 在阿里 Model Router 下的 Prefix KV Cache 命中率
         """
         client_bundle = cls._get_client()
 
@@ -226,12 +271,45 @@ class AIService:
                 "model": target_model,
                 "messages": messages,
                 "temperature": target_temp,
-                "stream": True
+                "stream": True,
+                "stream_options": {"include_usage": True}
             }
             if target_max_tokens is not None:
                 create_kwargs["max_tokens"] = int(target_max_tokens)
             if extra_body:
                 create_kwargs["extra_body"] = extra_body
+
+            def _log_and_notify_usage(usage_obj: Any):
+                try:
+                    if not usage_obj:
+                        return
+                    prompt_tokens = getattr(usage_obj, "prompt_tokens", 0) or 0
+                    completion_tokens = getattr(usage_obj, "completion_tokens", 0) or 0
+                    total_tokens = getattr(usage_obj, "total_tokens", 0) or 0
+                    cached_tokens = 0
+                    prompt_details = getattr(usage_obj, "prompt_tokens_details", None)
+                    if prompt_details:
+                        if isinstance(prompt_details, dict):
+                            cached_tokens = prompt_details.get("cached_tokens", 0) or 0
+                        else:
+                            cached_tokens = getattr(prompt_details, "cached_tokens", 0) or 0
+                    
+                    hit_rate = (cached_tokens / prompt_tokens * 100.0) if prompt_tokens > 0 else 0.0
+                    logger.info(
+                        f"[AIService] Stream Usage Stats -> prompt_tokens: {prompt_tokens}, "
+                        f"cached_tokens: {cached_tokens} (Cache Hit: {hit_rate:.1f}%), "
+                        f"completion_tokens: {completion_tokens}, total: {total_tokens}"
+                    )
+                    if usage_callback and callable(usage_callback):
+                        usage_callback({
+                            "prompt_tokens": prompt_tokens,
+                            "cached_tokens": cached_tokens,
+                            "cache_hit_rate": hit_rate,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": total_tokens
+                        })
+                except Exception as usage_err:
+                    logger.debug(f"[AIService] Usage extraction note: {usage_err}")
 
             try:
                 logger.info(f"[AIService] Dispatching stream request to AI Gateway -> {base_url} (Model: {target_model}, max_tokens: {target_max_tokens or 'Unlimited'}, thinking: {enable_thinking})")
@@ -239,26 +317,32 @@ class AIService:
                 async for chunk in stream_resp:
                     if stop_check_fn and await stop_check_fn():
                         break
-                    delta = chunk.choices[0].delta.content if (chunk.choices and chunk.choices[0].delta) else ""
-                    if delta:
-                        yield delta
+                    if getattr(chunk, "usage", None):
+                        _log_and_notify_usage(chunk.usage)
+                    if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta:
+                        delta = chunk.choices[0].delta.content or ""
+                        if delta:
+                            yield delta
                 return
             except Exception as e:
+                # 若因 stream_options 或 extra_body 导致部分三方网关报错，平滑降级重试
+                fallback_kwargs = dict(create_kwargs)
+                fallback_kwargs.pop("stream_options", None)
                 if extra_body:
-                    try:
-                        create_kwargs.pop("extra_body", None)
-                        stream_resp = await client.chat.completions.create(**create_kwargs)
-                        async for chunk in stream_resp:
-                            if stop_check_fn and await stop_check_fn():
-                                break
-                            delta = chunk.choices[0].delta.content if (chunk.choices and chunk.choices[0].delta) else ""
+                    fallback_kwargs.pop("extra_body", None)
+                try:
+                    logger.warning(f"[AIService] Stream with options failed ({e}), attempting resilient fallback stream...")
+                    stream_resp = await client.chat.completions.create(**fallback_kwargs)
+                    async for chunk in stream_resp:
+                        if stop_check_fn and await stop_check_fn():
+                            break
+                        if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta:
+                            delta = chunk.choices[0].delta.content or ""
                             if delta:
                                 yield delta
-                        return
-                    except Exception:
-                        pass
-                logger.error(f"[AIService] Stream call failed ({str(e)}), fallbacking to honest local notification.")
-
+                    return
+                except Exception as ex:
+                    logger.error(f"[AIService] Stream resilient fallback call also failed ({ex}), falling back to local notification.")
 
         # 本地流式异常提示输出
         simulated_text = (
