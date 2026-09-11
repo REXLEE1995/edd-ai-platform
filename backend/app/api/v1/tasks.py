@@ -21,6 +21,7 @@ from app.core.minio_client import get_minio_client
 from app.schemas.task import TaskCreateRequest, TaskSummaryResponse
 from app.services.quota_service import QuotaService
 from app.services.task_service import TaskService
+from app.services.file_storage_service import FileStorageService
 from app.providers import get_weifengqi_provider
 from app.models.admin import AdminUser
 from app.api.deps import get_current_user, get_current_admin_or_user
