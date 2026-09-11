@@ -57,7 +57,7 @@ class TaskService:
         4. 打上 Step 2 成功 Checkpoint（记录 task.storage_file_id 与 task.wfq_pdf_url）。
         """
         task.status = "pulling_data"
-        cls.append_task_log(task, "【数据获取】正在获取微风企贷前尽调原始底稿，建立安全流式传输管道...")
+        cls.append_task_log(task, "【数据获取】已建立微风企安全数据管道，启动 10 分钟自适应阶梯退避探测...")
         await session.commit()
 
         company_name = task.company_name
@@ -65,12 +65,52 @@ class TaskService:
         order_no = task.wfq_order_no or task.task_no
         wfq_provider = get_weifengqi_provider()
 
-        # 1. 检查并获取远程 PDF 下载直链
-        status_info = await wfq_provider.check_report_status(order_no=order_no, taxpayer_id=credit_code, db=session)
-        if not status_info.get("is_ready"):
-            pdf_download_url = await wfq_provider.get_report_pdf_url(order_no=order_no, taxpayer_id=credit_code, db=session)
-        else:
-            pdf_download_url = status_info.get("pdf_url") or await wfq_provider.get_report_pdf_url(order_no=order_no, taxpayer_id=credit_code, db=session)
+        # 1. 执行 10 分钟自适应阶梯退避探测 (0~60s 每5s, 60~240s 每15s, 240~600s 每30s, 最长 600s)
+        pdf_download_url = None
+        elapsed_seconds = 0
+        max_duration = 600  # 10 分钟上限
+
+        last_logged_time = -999
+
+        while elapsed_seconds < max_duration:
+            # 判断当前时钟阶段的探测间隔
+            if elapsed_seconds < 60:
+                step_interval = 5
+            elif elapsed_seconds < 240:
+                step_interval = 15
+            else:
+                step_interval = 30
+
+            status_info = await wfq_provider.check_report_status(order_no=order_no, taxpayer_id=credit_code, db=session)
+            if status_info.get("is_ready") and status_info.get("pdf_url"):
+                pdf_download_url = status_info.get("pdf_url")
+                cls.append_task_log(task, f"【数据获取】微风企贷前底稿生成就绪（累计等待 {elapsed_seconds}s），成功获取天翼云安全直链。")
+                await session.commit()
+                break
+
+            # 动态推送思维链心跳日志（避免频繁写库，每隔 30~60s 或关键阶段更新一次）
+            if elapsed_seconds - last_logged_time >= 30 or elapsed_seconds in [0, 15, 60, 180, 360, 480]:
+                mins = elapsed_seconds // 60
+                secs = elapsed_seconds % 60
+                time_desc = f"{mins}分{secs}秒" if mins > 0 else f"{secs}秒"
+                
+                if elapsed_seconds < 60:
+                    cls.append_task_log(task, f"【数据归集】微风企云端正在交叉归集企业近 36 个月发票明细与纳税申报（已等待 {time_desc}）...")
+                elif elapsed_seconds < 240:
+                    cls.append_task_log(task, f"【数据归集】正在汇总全量开票流水与上下游交易对手，生成 30+ 页全景底稿中（已等待 {time_desc}）...")
+                else:
+                    cls.append_task_log(task, f"【数据归集】企业开票与涉税数据体量较大，云端正在深度渲染排版中（已等待 {time_desc}）...")
+                
+                await session.commit()
+                last_logged_time = elapsed_seconds
+
+            await asyncio.sleep(step_interval)
+            elapsed_seconds += step_interval
+
+        if not pdf_download_url:
+            cls.append_task_log(task, "【取数超时】微风企云端底稿在 10 分钟窗口内尚未准备完毕。已暂停本次查询以释放服务器资源，法人授权凭证已安全保存。请稍后在任务列表点击【从数据获取重试】开启新一轮阶梯探测。")
+            await session.commit()
+            raise TimeoutError("微风企涉税报告归集超时(已达10分钟上限)，三方平台仍在排队处理中。法人授权已生效，请稍后点击【从数据获取重试】再次发起查询。")
 
         task.wfq_pdf_url = pdf_download_url
         cls.append_task_log(task, "【数据清洗】执行 PyMuPDF 敏感词脱敏替换、内置高保真字体嵌入与第1页封面剔除（纯代码清洗完成）...")

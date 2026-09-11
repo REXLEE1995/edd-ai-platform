@@ -57,6 +57,8 @@ export default function AdminSettingsPage() {
     has_key: false,
     new_api_model: '',
     temperature: 0.3,
+    max_tokens: '',
+    enable_thinking: false,
     timeout_seconds: 60,
     is_enabled: true
   });
@@ -126,6 +128,8 @@ export default function AdminSettingsPage() {
           has_key: Boolean(d.has_key),
           new_api_model: d.new_api_model || '',
           temperature: typeof d.temperature === 'number' ? d.temperature : 0.3,
+          max_tokens: d.max_tokens !== null && d.max_tokens !== undefined ? d.max_tokens : '',
+          enable_thinking: Boolean(d.enable_thinking),
           timeout_seconds: typeof d.timeout_seconds === 'number' ? d.timeout_seconds : 60,
           is_enabled: d.is_enabled !== undefined ? Boolean(d.is_enabled) : true,
         };
@@ -251,11 +255,17 @@ export default function AdminSettingsPage() {
 
     setSaving(true);
     try {
+      const parsedMaxTokens = formData.max_tokens !== '' && formData.max_tokens !== null && !isNaN(Number(formData.max_tokens))
+        ? parseInt(formData.max_tokens, 10)
+        : null;
+
       const payload = {
         llm_provider: formData.llm_provider,
         new_api_base_url: formData.new_api_base_url.trim(),
         new_api_model: formData.new_api_model.trim(),
         temperature: parseFloat(formData.temperature),
+        max_tokens: parsedMaxTokens && parsedMaxTokens > 0 ? parsedMaxTokens : null,
+        enable_thinking: Boolean(formData.enable_thinking),
         timeout_seconds: parseInt(formData.timeout_seconds, 10),
         is_enabled: Boolean(formData.is_enabled)
       };
@@ -680,6 +690,57 @@ export default function AdminSettingsPage() {
                           <span>0.0 (最严谨/低幻觉，推荐尽调场景)</span>
                           <span>0.3 (尽调报告标准推荐)</span>
                           <span>1.0 (通用创意)</span>
+                        </div>
+                      </div>
+
+                      {/* 输出 Token 配额 Max Tokens */}
+                      <div className="pt-2 border-t border-zinc-100">
+                        <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                          单次最大输出 Token 配额 (max_tokens)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="256"
+                            value={formData.max_tokens}
+                            onChange={(e) => setFormData(prev => ({ ...prev, max_tokens: e.target.value }))}
+                            placeholder="留空或填 0 (不限制，推荐)"
+                            className="w-44 px-3 py-2 text-xs text-slate-900 bg-white border border-zinc-200 rounded-xl focus:outline-hidden focus:border-[#0096DB] focus:ring-2 focus:ring-cyan-100 transition-all font-mono"
+                          />
+                          <span className="text-xs text-zinc-500 font-medium">Tokens</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          留空或填 0 表示完全不限制输出 Token，由模型自然生成完毕，杜绝大表与长文被强行截断。
+                        </p>
+                      </div>
+
+                      {/* 深度推理思考开关 Enable Thinking */}
+                      <div className="pt-2 border-t border-zinc-100">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-800">
+                              启用深度推理思考 (Reasoning / Thinking)
+                            </label>
+                            <p className="text-[11px] text-zinc-500 mt-0.5">
+                              针对 DeepSeek-R1 / Qwen 推理模型。建议保持【关闭】，可提升 3 倍响应速度并杜绝思考 Token 溢出截断。
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={formData.enable_thinking}
+                            onClick={() => setFormData(prev => ({ ...prev, enable_thinking: !prev.enable_thinking }))}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                              formData.enable_thinking ? 'bg-[#0096DB]' : 'bg-zinc-200'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                formData.enable_thinking ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
                         </div>
                       </div>
 

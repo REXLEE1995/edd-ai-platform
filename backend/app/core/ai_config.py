@@ -30,6 +30,8 @@ def get_default_ai_config() -> Dict[str, Any]:
         "new_api_key": getattr(settings, "NEW_API_KEY", ""),
         "new_api_model": getattr(settings, "NEW_API_MODEL", "xyzp-ai"),
         "temperature": 0.3,
+        "max_tokens": None,  # None / 0 代表完全不限制输出 Token 上限，由模型自然生成完毕
+        "enable_thinking": False,  # 默认关闭深度推理思维链 (Reasoning)，大幅提速并杜绝截断
         "timeout_seconds": getattr(settings, "NEW_API_TIMEOUT_SECONDS", 60),
         "is_enabled": True,
         **_DIAGNOSTIC_STATE

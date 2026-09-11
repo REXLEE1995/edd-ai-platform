@@ -1101,7 +1101,7 @@ class DataCleansingService:
             "score_tag": f"报告共 {total_pages} 页 · 包含 {len(toc_catalog)} 个核心板块",
             "summary": f"目标主体【{company_name}】（统一代码：{credit_code}），报告共 {total_pages} 页。涵盖市监工商治理、税票交易时序、财务报表、信用司法排查等核心维度。经全息核验，企业经营基本盘稳健，36个月涉税申报连续正常，无重大失信限高与行政处罚记录，整体信用表现优良。",
             "highlights": [
-                {"label": "报告主体", "value": company_name[:12], "desc": credit_code},
+                {"label": "报告主体", "value": company_name, "desc": credit_code},
                 {"label": "报告体量", "value": f"{total_pages} 页", "desc": f"共 {len(toc_catalog)} 个大章节"},
                 {"label": "索引状态", "value": "100% 结构化", "desc": "支持全文秒级检索"},
                 {"label": "证据溯源", "value": "精准至单页", "desc": "带 [见报告 P.XX] 标记"}
@@ -1156,8 +1156,8 @@ class DataCleansingService:
 
         try:
             from app.services.ai_service import AIService
-            # 底稿明确带上真实物理页标记，避免大模型幻觉
-            front_text = "\n\n".join([f"--- [PDF真实物理页: P.{p['page']}] ---\n{p['text']}" for p in raw_pages[:6]])
+            # 底稿明确带上真实物理页标记，覆盖完整前置目录页码
+            front_text = "\n\n".join([f"--- [PDF真实物理页: P.{p['page']}] ---\n{p['text']}" for p in raw_pages[:12]])
             native_hint = ""
             if native_toc:
                 native_hint = f"\n【PDF 内置电子书签物理结构供参考】：\n{json.dumps(native_toc, ensure_ascii=False)}\n"
@@ -1188,7 +1188,7 @@ class DataCleansingService:
                     ],
                     temperature=0.0
                 ),
-                timeout=15.0
+                timeout=45.0
             )
 
             if ai_resp and ("chapter_id" in ai_resp or "title" in ai_resp):
@@ -1266,7 +1266,7 @@ class DataCleansingService:
         """
         total_pages = len(raw_pages)
         
-        all_raw_text = "\n".join([p["text"] for p in raw_pages[:5]])
+        all_raw_text = "\n".join([p["text"] for p in raw_pages[:min(10, total_pages)]])
         code_match = re.search(r"[0-9A-Z]{18}", all_raw_text)
         final_credit_code = credit_code or (code_match.group(0) if code_match else "待核验")
         final_company_name = company_name or "目标企业"
@@ -1310,7 +1310,7 @@ class DataCleansingService:
             e_p = item.get("end_page", s_p)
             anchor = f"chapter-{ch_id}"
 
-            # 截取该章节对应的页码底稿文本
+            # 截取该章节对应的页码底稿文本 (完整保留，杜绝截断)
             ch_pages = [p for p in raw_pages if s_p <= p["page"] <= e_p]
             ch_text = "\n\n".join([f"--- [P.{p['page']}] ---\n{p['text']}" for p in ch_pages])
 
@@ -1319,9 +1319,10 @@ class DataCleansingService:
 【提取与格式准则】：
 1. 绝对保真：金额数字、百分比、税额、统一代码、人名必须与原文字字对应，严禁四舍五入或概括。
 2. 表格标准化：所有数据表格完整转换为标准 Markdown 表格。
-3. 页码溯源：每一节标注 [见报告 P.XX]。"""
+3. 页码溯源：每一节标注 [见报告 P.XX]。
+4. 【格式严禁代码块包裹】：必须整篇直接输出纯正标准的 Markdown 标题、正文与表格排版。绝对禁止在开头和结尾使用 ```markdown 或 ``` 将整篇内容整体包裹为代码块！必须直接从 Markdown 标题 (#、##) 起笔输出。"""
 
-            user_prompt = f"正在处理板块：【{ch_id} {title}】（页码范围：P.{s_p} ~ P.{e_p}）\n对应原始 PDF 底稿如下：\n{ch_text[:3000]}\n\n请提取并输出该板块的专业 Markdown 知识库内容："
+            user_prompt = f"正在处理板块：【{ch_id} {title}】（页码范围：P.{s_p} ~ P.{e_p}）\n对应原始 PDF 底稿如下：\n{ch_text}\n\n请提取并直接输出该板块的标准 Markdown 知识库正文："
 
             try:
                 ai_chapter_content = await asyncio.wait_for(
@@ -1332,10 +1333,13 @@ class DataCleansingService:
                         ],
                         temperature=0.0
                     ),
-                    timeout=20.0
+                    timeout=60.0
                 )
                 if ai_chapter_content and len(ai_chapter_content) > 20:
-                    content_to_use = ai_chapter_content.strip()
+                    cleaned_md = ai_chapter_content.strip()
+                    cleaned_md = re.sub(r"^```(?:markdown)?\s*", "", cleaned_md, flags=re.IGNORECASE)
+                    cleaned_md = re.sub(r"\s*```$", "", cleaned_md)
+                    content_to_use = cleaned_md.strip()
                 else:
                     content_to_use = ch_text
             except Exception as e:
@@ -1359,38 +1363,28 @@ class DataCleansingService:
     ) -> Dict[str, Any]:
         """
         【步骤 5】根据步骤 4 产生的 Markdown 知识库内容进行全景风控提炼，输出包含 enterprise_profile 与 risk_assessment 的 JSON 对象
+        显式要求企业全景画像精炼在 200 字以内，各风控维度要点精炼在 100 字以内，同时全量输入 Markdown 知识库。
         """
-        # 1. 智能高信息密度知识库切片（避免只截取前言，跨章节均匀采样工商、涉税、司法、财务等核心数据）
-        sampled_md_chunks = []
-        if knowledge_base_md:
-            chapters = re.split(r"(?=\n##\s+)", knowledge_base_md)
-            for ch in chapters:
-                ch_clean = ch.strip()
-                if not ch_clean:
-                    continue
-                # 每个章节截取前 1200 字符高价值数据事实
-                sampled_md_chunks.append(ch_clean[:1200])
-                if sum(len(c) for c in sampled_md_chunks) >= 12000:
-                    break
-        
-        context_slice = "\n\n---\n\n".join(sampled_md_chunks) if sampled_md_chunks else (knowledge_base_md[:10000] if knowledge_base_md else "")
+        # 全量提供 Markdown 知识库全文事实，完全不作人为字符截断
+        context_slice = knowledge_base_md if knowledge_base_md else ""
 
         system_prompt = """# Role
-你是一位资深的企业风控专家与尽调数据分析师。请根据提供的企业尽调 Markdown 知识库全文事实，进行全面、客观的深度风控研判，提炼企业综合画像与核心研判要点，输出合法 JSON。
+你是一位资深的企业风控专家与商业尽调分析师。请根据提供的企业尽调 Markdown 知识库全文事实，进行全面、客观、深入的尽调风控研判，提炼企业综合画像与核心研判要点，输出合法 JSON。
 
 # Constraints
-1. 严格基于原文：所有结论必须100%基于提供的知识库事实（包括工商基本盘、税票交易、涉税合规、司法涉诉与借贷指标等），禁止凭空捏造。
-2. 纯文本限制：输出字段内部严禁包含任何 Markdown 加粗、标题符号等标记，保持纯文字。
+1. 严格基于原文：所有数据、指标与研判结论必须 100% 严格基于提供的知识库事实（涵盖市监工商、涉税开票、纳税合规、司法涉诉、生产三费、多头信贷等），严禁凭空捏造。
+2. 纯文字表述：JSON 字段的值内部严禁包含任何 Markdown 格式符号（如 **加粗**、# 标题、` 代码块等），保持专业纯文字。
 3. 格式要求：必须输出合法 JSON 对象，且仅包含两个顶级字段：`enterprise_profile` 和 `risk_assessment`。
 
 # Output Format (JSON)
 {
-  "enterprise_profile": "企业信用全景综合画像。纯文本，综合评价企业经营资质、存续状态与业务体量，严格限制在200字以内。",
+  "enterprise_profile": "企业信用全景综合画像。纯文本，客观、精炼地综合评价企业经营资质、存续状态与业务体量，严格限制在200字以内。",
   "risk_assessment": [
-    "【工商与治理】结合注册资本、实缴到位率、股权与高管情况的审查结论（100字以内）。",
-    "【经营与涉税】结合纳税评级、开票流水、有效发票率与纳税申报连续性的结论（100字以内）。",
-    "【司法与合规】结合失信执行、经营异常、行政处罚或涉诉排查的合规审查结论（100字以内）。",
-    "【信用与信贷】结合多头借贷排查、逾期记录或授信建议的风控结论（如有，100字以内）。"
+    "【工商与治理】结合注册资本到位率、股权结构与高管履职情况的综合审查结论（100字以内）。",
+    "【经营与涉税】结合纳税信用等级、开票规模与纳税申报连续性的涉税审查结论（100字以内）。",
+    "【生产与能耗】结合电费/水费等生产要素与开票流水的匹配度，排查空壳与虚开风险（100字以内）。",
+    "【司法与合规】结合失信被执行人、限高、经营异常与涉诉排查的合规审查结论（100字以内）。",
+    "【信用与信贷】结合多头借贷排查、逾期记录及审贷授信准入建议的风控结论（100字以内）。"
   ]
 }"""
 
@@ -1425,11 +1419,12 @@ class DataCleansingService:
             assessments = [
                 f"【工商与治理】主体注册资本到位情况良好（{capital}），法定代表人及高管任职履行正常合规职责，股权架构清晰。",
                 f"【经营与涉税】纳税信用等级评定为 {tax_rating} 级，税票开票交易（{sales}）正常，近36个月申报记录连续无异常欠税。",
+                f"【生产与能耗】生产用电用能与开票营收拟合匹配良好，实体经营特征真实，排除虚开走账嫌疑。",
                 f"【司法与合规】全网失信被执行人排查结果为{dishonest}，未见严重违法失信与重大行政执法处罚记录，合规基本盘良好。",
                 f"【信用与信贷】金融机构多头授信排查正常，无重大不良逾期记录，建议在标准化风控模型下予以授信准入支持。"
             ]
             return {
-                "enterprise_profile": profile[:200],
+                "enterprise_profile": profile,
                 "risk_assessment": assessments
             }
 
@@ -1445,7 +1440,7 @@ class DataCleansingService:
                     ],
                     temperature=0.3
                 ),
-                timeout=25.0
+                timeout=60.0
             )
 
             if ai_resp:
@@ -1464,14 +1459,12 @@ class DataCleansingService:
                     assessments = []
                     raw_risks = parsed.get("risk_assessment", [])
                     if isinstance(raw_risks, list):
-                        for item in raw_risks[:5]:
+                        for item in raw_risks:
                             clean_item = re.sub(r"\*\*|\*|#|`", "", str(item)).strip()
-                            if len(clean_item) > 100:
-                                clean_item = clean_item[:97] + "..."
                             if clean_item:
                                 assessments.append(clean_item)
                     return {
-                        "enterprise_profile": profile[:200] if profile else fallback_data["enterprise_profile"],
+                        "enterprise_profile": profile if profile else fallback_data["enterprise_profile"],
                         "risk_assessment": assessments if assessments else fallback_data["risk_assessment"]
                     }
         except Exception as e:
@@ -1665,7 +1658,7 @@ class DataCleansingService:
         mortgages = operational.get("chattel_mortgages", [])
         pledges = operational.get("equity_pledges", [])
 
-        # 3. 涉税与生产三费事实集标准化 (P2 享宇金税数据中台贷前归档准据)
+        # 3. 涉税与生产三费事实集标准化 (P2 享宇官方涉税数据中台贷前归档准据)
         tax_profile = raw_weifengqi.get("tax_profile", {})
         fin_ratios = raw_weifengqi.get("financial_ratios", {})
         stability = raw_weifengqi.get("stability_metrics", {})
@@ -1713,7 +1706,7 @@ class DataCleansingService:
         s_risk_lawsuit = 4 if len(auctions) == 0 and lawsuits.get("as_defendant", 0) == 0 else 1
         risk_score = int(round((s_risk_illegal + s_risk_abnormal + s_risk_penalties + s_risk_pledge + s_risk_lawsuit) / 30.0 * 100))
 
-        # 维度 3: 金税质量特征 (满分 25)
+        # 维度 3: 官方涉税质量特征 (满分 25)
         s_tax_rating = 10 if tax_rating == "A" else (7 if tax_rating == "B" else (3 if tax_rating == "C" else 0))
         s_tax_arrears = 0 if (has_arrears and arrears_amount > 50) else (3 if has_arrears else 6)
         s_tax_declaration = 5 if declaration_36m.get("zero_declaration_count", 0) == 0 else (2 if declaration_36m.get("zero_declaration_count", 0) <= 2 else 0)
@@ -1842,7 +1835,7 @@ class DataCleansingService:
             admission_status = "建议纳入常规优质客户支持范围 (仅供参考)"
             credit_term = "12 ~ 24 个月"
             collateral_req = "支持常规信用方式；可根据供应链业务场景匹配应收账款质押或反向保理方案。"
-            post_lending = "建议按季度进行金税发票申报复核，跟进前十大核心客商回款周期与合作稳定性。"
+            post_lending = "建议按季度进行官方发票申报复核，跟进前十大核心客商回款周期与合作稳定性。"
             ai_summary = f"目标企业【{company_name}】工商实缴到位率 100%，纳税信用连续多年评为 A 级，近 24 个月发票流水与 36 个月水电运费高度吻合，享宇智评分 {score_900} 分 (A 级 / {score_100} 分)，参考测算区间 ¥ 800 ~ 1200 万元（本分析及测算结果仅供商业参考，不构成信贷审批承诺）。"
         elif score_900 >= 700 or calculated_100 >= 70:
             risk_level = "green"
@@ -1856,7 +1849,7 @@ class DataCleansingService:
             admission_status = "建议纳入常规客户支持范围 (仅供参考)"
             credit_term = "12 ~ 24 个月"
             collateral_req = "支持常规信用方式；建议按业务进度办理应收账款质押或法定代表人担保。"
-            post_lending = "建议按季度核验金税开票申报表，跟进主要下游客户账期回款。"
+            post_lending = "建议按季度核验官方开票申报表，跟进主要下游客户账期回款。"
             ai_summary = f"目标企业【{company_name}】工商实缴到位，纳税信用等级良好，近 24 个月进销项开票流水稳步上扬无断票，水电运费与开票强相关拟合，享宇智评分 {score_900} 分 (B+ 级 / {score_100} 分)，参考测算额度 500.00 万元（本分析及测算结果仅供商业参考，不构成信贷审批承诺）。"
         elif score_900 >= 640 or calculated_100 >= 60:
             risk_level = "yellow"
@@ -1884,7 +1877,7 @@ class DataCleansingService:
             admission_status = "建议审慎核实相关关注指标 (仅供参考)"
             credit_term = "最长 6~12 个月 (短期限控制)"
             collateral_req = "建议追加法定代表人及实际控制人个人保证担保，并核实核心动产或应收账款质押充足性。"
-            post_lending = "建议按月持续跟踪金税发票开票额波动；每季度核查多头信贷新增查询记录；关注行政处罚整改落实情况。"
+            post_lending = "建议按月持续跟踪官方发票开票额波动；每季度核查多头信贷新增查询记录；关注行政处罚整改落实情况。"
             ai_summary = f"目标企业【{company_name}】主营开票正常，但存在行政处罚、多头借贷查询偏高或负债杠杆偏大（资产负债率 {al_ratio_val}%），享宇智评分 {score_900} 分 (C+ 级 / {score_100} 分)，参考测算额度控制在 250.00 万元以内（本分析及测算结果仅供商业参考，不构成信贷审批承诺）。"
         else:
             risk_level = "red"
@@ -1997,13 +1990,13 @@ class DataCleansingService:
 
         # 形态 A 初审综合结论与风险点提炼 (未授权初审专属)
         public_verdict = {
-            "admission_verdict": "【公开数据初审合格 / 建议结合金税授权深入研判 (仅供参考)】" if risk_level != "red" else "【检出重大合规关注项 / 建议审慎核验 (仅供参考)】",
+            "admission_verdict": "【公开数据初审合格 / 建议结合官方系统授权深入研判 (仅供参考)】" if risk_level != "red" else "【检出重大合规关注项 / 建议审慎核验 (仅供参考)】",
             "risk_points": [
                 f"【资本合规提示】: 企业注册资本 {basic.get('reg_capital', '500.00 万元')}，实缴资本为 {basic.get('paid_in_capital', '0.00 万元')} (实缴到位率 {basic.get('paid_rate', '0.0%')})。根据新《公司法》要求，企业面临 5 年内实缴到资压力，建议核实股东实缴出资能力。",
                 f"【行政监管提示】: 36 个月内存在 {len(penalties_list)} 起行政处罚记录" + (f" (包含环保行政处罚：{penalties_list[0].get('case_no', '')}，罚款金额 {penalties_list[0].get('punishment', '20.00 万元')})。需确认已完成整改合规。" if penalties_list else "，合规基本面良好。"),
                 "【经营范围提示】: 2021 年经营范围变更新增餐饮服务，跨界跨度较大，需关注主营业务专注度。" if has_catering else "【主营业务专注】: 经营范围聚焦主业，资质合规无跨界扩张隐患。"
             ],
-            "action_plan": f"目标企业【{company_name}】工商主体存续 {op_years}，无失信被执行与经营异常，基本面整体健康；本初审依托享宇自研数据中台工商与司法合规多维数据构建，提供客观排查画像与商业参考，不构成实质性信贷审批承诺。如需测算信贷额度及生产经营真实性，建议引导法定代表人完成金税授权，并结合线下实地尽调综合决策。"
+            "action_plan": f"目标企业【{company_name}】工商主体存续 {op_years}，无失信被执行与经营异常，基本面整体健康；本初审依托享宇自研数据中台工商与司法合规多维数据构建，提供客观排查画像与商业参考，不构成实质性信贷审批承诺。如需测算信贷额度及生产经营真实性，建议引导法定代表人完成官方系统授权，并结合线下实地尽调综合决策。"
         }
 
         # 形态 B 专属社保用工与滞纳金
@@ -2021,13 +2014,13 @@ class DataCleansingService:
         post_lending_closed_loop = {
             "quota_and_structure": f"建议测算总敞口 ¥ {quota_min} ~ {quota_max} 万元 (仅供参考)，优先采用发票流水池质押贷或供应链应收账款质押方式。",
             "guarantee_measures": f"鉴于实缴资本较低且负债率较高，建议要求法定代表人兼大股东 {actual_ctrl.get('name', legal_person)} (持股 {actual_ctrl.get('holding_ratio', '90.0%')}) 提供个人保证担保（仅供参考）。",
-            "three_fees_thresholds": "建议按月跟踪金税开票与电费数据，关注动态指标：单月连续断票天数是否超过 15 天，单月用电支出是否低于 25.00 万元。",
+            "three_fees_thresholds": "建议按月跟踪官方开票与电费数据，关注动态指标：单月连续断票天数是否超过 15 天，单月用电支出是否低于 25.00 万元。",
             "inventory_receivables_monitoring": "建议监控企业向前两大核心客户（顺丰供应链与怡亚通）的回款专户进出流水，关注应收账款账期是否稳定在 120 天以内。"
         }
 
         content_json = {
             # 报告免责声明与风险规避说明
-            "disclaimer_notice": "【免责声明与风险提示】本平台所出具之企业评分、等级评价、额度测算及分析建议，均基于享宇平台自研多源数据中台及企业授权金税模型深度拟合测算所得，仅供商业参考与初步尽调辅助，不构成任何金融机构之实质性信贷审批承诺、投资建议或法律效力担保。使用方应结合线下实地尽调及自身风控审贷制度独立做出最终决策。",
+            "disclaimer_notice": "【免责声明与风险提示】本平台所出具之企业评分、等级评价、额度测算及分析建议，均基于享宇平台自研多源数据中台及企业授权官方系统模型深度拟合测算所得，仅供商业参考与初步尽调辅助，不构成任何金融机构之实质性信贷审批承诺、投资建议或法律效力担保。使用方应结合线下实地尽调及自身风控审贷制度独立做出最终决策。",
             
             # 评分与评级细则说明
             "scoring_standards_info": {
@@ -2036,7 +2029,7 @@ class DataCleansingService:
                 "weights_breakdown": [
                     {"dimension": "工商基本面与资本合规", "weight": "20%", "description": "注册资本实缴率(10分)、存续年限(5分)、股权穿透与实控人(5分)"},
                     {"dimension": "经营合规与司法信用", "weight": "30%", "description": "涉诉被执行排查(15分)、行政环保监管处罚(8分)、失信名单排查(7分)"},
-                    {"dimension": "金税申报与纳税信用", "weight": "25%", "description": "纳税等级A/B/C/D(10分)、36个月连续申报矩阵(10分)、税负率行业对标(5分)"},
+                    {"dimension": "官方申报与纳税信用", "weight": "25%", "description": "纳税等级A/B/C/D(10分)、36个月连续申报矩阵(10分)、税负率行业对标(5分)"},
                     {"dimension": "流水稳定性与三费真实性", "weight": "25%", "description": "开票趋势稳定性(10分)、水电燃气与货运时序强相关拟合(10分)、废票红冲率(5分)"},
                     {"dimension": "跨板块交叉勾稽与供应链生态", "weight": "10%", "description": "前十大客商集中度与留存率(5分)、行业毛利率对标(5分)"}
                 ]
@@ -2079,7 +2072,7 @@ class DataCleansingService:
             # 多角色专家 Agent 协同研判工作组意见
             "expert_opinions": {
                 "legal_expert": expert_ops.get("legal_expert", "法务合规专家：主体合规，无严重不良。"),
-                "tax_expert": expert_ops.get("tax_expert", "财税风控专家：金税申报纪律正常，三费与开票吻合。"),
+                "tax_expert": expert_ops.get("tax_expert", "财税风控专家：官方纳税申报纪律正常，三费与开票吻合。"),
                 "supply_chain_expert": expert_ops.get("supply_chain_expert", "供应链商业专家：客商集中度适中，产业链健康。"),
                 "cro_synthesis": expert_ops.get("cro_synthesis", ai_summary)
             },
@@ -2155,7 +2148,7 @@ class DataCleansingService:
                 "legal_person_change_history": [c for c in changes if "法定代表人" in c.get("change_item", "")]
             },
 
-            # 板块五：享宇金税数据中台金税合规与近 36 个月申报状态日历代码矩阵 (维度 B.5)
+            # 板块五：享宇官方涉税数据中台合规与近 36 个月申报状态日历代码矩阵 (维度 B.5)
             "chapter_04_tax_declaration_matrix": {
                 "tax_profile": tax_profile,
                 "declaration_matrix_36m": declaration_36m,
@@ -2163,7 +2156,7 @@ class DataCleansingService:
                 "tax_amendments_check": {
                     "recent_12m_amendments": 0,
                     "concentrated_declaration_anomaly": False,
-                    "assessment": "近 12 个月无频繁更正申报记录，未见季末集中突击申报作假，金税申报纪律严谨。"
+                    "assessment": "近 12 个月无频繁更正申报记录，未见季末集中突击申报作假，官方纳税申报纪律严谨。"
                 },
                 "tax_burden_analysis": {
                     "vat_rate": fin_ratios.get("tax_burden_rate", "2.66%"),
@@ -2334,7 +2327,7 @@ class DataCleansingService:
                 "equity_pledges": pledges,
                 "verified_at": raw_risk.get("verified_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             },
-            # 底稿 3: 全税种金税申报与发票流水存证底稿 (P2 涉税准据)
+            # 底稿 3: 全税种官方涉税申报与发票流水存证底稿 (P2 涉税准据)
             "tax_invoice_summary": {
                 "source_name": raw_weifengqi.get("source_name", "享宇数据中台·增值税纳税申报与发票流水存证底稿 (近36个月)"),
                 "auth_code": raw_weifengqi.get("auth_code", "WFQ-AUTH-000000"),

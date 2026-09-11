@@ -23,19 +23,6 @@ async def search_companies(keyword: str = Query(..., min_length=1)):
                 "address": c["address"],
                 "industry": c["industry"]
             })
-    
-    # 如果没匹配到，动态生成一个合理的企业信息供体验
-    if not matches and len(keyword_clean) >= 2:
-        matches.append({
-            "company_name": keyword.strip() if "公司" in keyword else f"{keyword.strip()}实业发展有限公司",
-            "credit_code": f"91440300MA5{abs(hash(keyword)) % 1000000000:09d}X",
-            "legal_person": "张法定",
-            "reg_capital": "2,000 万元人民币",
-            "established_date": "2020-06-18",
-            "address": "高新技术产业园区",
-            "industry": "科技推广和应用服务业"
-        })
-
     return {"code": 0, "data": matches}
 
 @router.get("/companies/ic-info")
@@ -56,7 +43,7 @@ async def get_company_tax_info(
     company_name: Optional[str] = Query(None)
 ):
     """
-    【三方接口1·享宇金税数据中台】获取目标企业增值税纳税申报表底稿与发票明细
+    【三方接口1·享宇官方涉税数据中台】获取目标企业增值税纳税申报表底稿与发票明细
     """
     provider = get_weifengqi_provider()
     data = await provider.fetch_tax_data(credit_code or "", company_name or "")

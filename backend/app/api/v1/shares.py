@@ -491,54 +491,27 @@ async def verify_share_access_code(
     r = res_rep.scalar_one_or_none()
 
     if not r:
-        # 若为内置报告 fallback
-        pdf_path = "/reports/shunjie_preloan.pdf"
-        total_p = 61
-        if "hangzhou" in share.report_id.lower() or "16320551" in share.report_id.lower():
-            pdf_path = "/reports/hangzhou_preloan.pdf"
-            total_p = 39
+        raise HTTPException(status_code=404, detail="该分享链接关联的企业尽调报告不存在或已被删除")
 
-        report_data = {
-            "id": share.report_id,
-            "company_name": share.company_name,
-            "credit_code": share.credit_code,
-            "legal_person": "吕顺光",
-            "risk_level": "blue",
-            "score": 88,
-            "suggested_quota_min": 300,
-            "suggested_quota_max": 500,
-            "summary_ai_comment": "企业全景尽调分析报告（享宇智评版）",
-            "total_pages": total_p,
-            "pdf_url": pdf_path,
-            "content": {"is_locked": False, "is_public_only": False},
-            "raw_sources": {},
-            "created_at": share.created_at.strftime("%Y-%m-%d %H:%M:%S") if share.created_at else ""
-        }
-    else:
-        pdf_path = "/reports/shunjie_preloan.pdf"
-        total_p = 61
-        if "hangzhou" in r.id.lower() or "16320551" in r.id.lower():
-            pdf_path = "/reports/hangzhou_preloan.pdf"
-            total_p = 39
-        elif r.pdf_file_path:
-            pdf_path = f"/api/v1/reports/{r.id}/pdf"
+    pdf_path = f"/api/v1/reports/{r.id}/pdf"
+    total_p = (r.content_json.get("report_meta", {}).get("total_pages") if r.content_json else 0) or 1
 
-        report_data = {
-            "id": r.id,
-            "company_name": r.company_name,
-            "credit_code": r.credit_code,
-            "legal_person": r.legal_person,
-            "risk_level": r.risk_level,
-            "score": r.score,
-            "suggested_quota_min": r.suggested_quota_min,
-            "suggested_quota_max": r.suggested_quota_max,
-            "summary_ai_comment": r.summary_ai_comment,
-            "total_pages": total_p,
-            "pdf_url": pdf_path,
-            "content": r.content_json,
-            "raw_sources": r.raw_sources_json,
-            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""
-        }
+    report_data = {
+        "id": r.id,
+        "company_name": r.company_name,
+        "credit_code": r.credit_code,
+        "legal_person": r.legal_person,
+        "risk_level": r.risk_level,
+        "score": r.score,
+        "suggested_quota_min": r.suggested_quota_min,
+        "suggested_quota_max": r.suggested_quota_max,
+        "summary_ai_comment": r.summary_ai_comment,
+        "total_pages": total_p,
+        "pdf_url": pdf_path,
+        "content": r.content_json,
+        "raw_sources": r.raw_sources_json,
+        "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""
+    }
 
     is_expired, remaining_days, expires_in_text, exp_str = compute_share_expiry_info(share.expire_at)
 

@@ -102,7 +102,7 @@ async def _extract_report_kb_context(
         tax = report.content_json.get("tax_info", {})
         if tax:
             parts.append(
-                f"【涉税与金税开票】：纳税评级 {tax.get('tax_rating', '--')} 级，近36个月开票总额 {tax.get('annual_vat_sales', '--')}，"
+                f"【涉税与官方开票】：纳税评级 {tax.get('tax_rating', '--')} 级，近36个月开票总额 {tax.get('annual_vat_sales', '--')}，"
                 f"发票有效率 {tax.get('valid_ratio', '--')}，红冲废票率 {tax.get('cancel_ratio', '极低')}。"
             )
         risk = report.content_json.get("risk_radar", {})
@@ -114,7 +114,7 @@ async def _extract_report_kb_context(
 
     if report.raw_sources_json and isinstance(report.raw_sources_json, dict):
         raw_snippet = json.dumps(report.raw_sources_json, ensure_ascii=False)
-        parts.append(f"【原始金税与征信申报底稿切片】：\n{raw_snippet[:4000]}")
+        parts.append(f"【原始官方涉税与征信申报底稿切片】：\n{raw_snippet[:40000]}")
 
     return "\n\n".join(parts)
 
@@ -203,8 +203,7 @@ async def report_chat_stream(
         try:
             async for delta in AIService.stream_chat_completion(
                 messages=messages,
-                temperature=0.1,  # 严格事实模式，严禁自由发挥
-                max_tokens=2500
+                temperature=0.1  # 严格事实模式，严禁自由发挥
             ):
                 full_assistant_reply.append(delta)
                 payload = json.dumps({"delta": delta, "status": "generating"}, ensure_ascii=False)

@@ -23,41 +23,30 @@ class FileStorageService:
     @classmethod
     async def download_raw_remote_pdf(cls, remote_url: str) -> bytes:
         """
-        流式下载远程 PDF 原始二进制数据流（附带本地真实样本兜底）
+        流式下载远程 PDF 原始二进制数据流
         """
+        if not remote_url:
+            raise RuntimeError("远程 PDF 下载地址为空，三方云端底稿尚未生成就绪")
+
         file_bytes_list = []
         try:
             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
                 async with client.stream("GET", remote_url) as response:
                     if response.status_code != 200:
-                        raise RuntimeError(f"Download remote file failed with HTTP status {response.status_code}: {remote_url}")
+                        raise RuntimeError(f"下载微风企远程底稿失败 (HTTP 状态码 {response.status_code}): {remote_url}")
                     
                     async for chunk in response.aiter_bytes(chunk_size=65536):
                         if chunk:
                             file_bytes_list.append(chunk)
         except Exception as e:
-            logger.warning(f"[FileStorageService] Failed to stream remote file ({remote_url}): {e}. Checking local sample PDF candidates...")
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-            candidates = [
-                os.path.join(base_dir, "pdftest", "测试样例#真实报告.pdf"),
-                os.path.join(base_dir, "pdftest", "测试样例#测试报告.pdf"),
-                os.path.join(base_dir, "pdftest", "output.pdf"),
-                os.path.join(base_dir, "frontend", "public", "reports", "hangzhou_preloan.pdf"),
-                os.path.join(base_dir, "wfqmockserver", "贷前报告样例-享宇智评版.pdf"),
-            ]
-            fallback_found = False
-            for c_path in candidates:
-                if os.path.exists(c_path):
-                    with open(c_path, "rb") as f:
-                        file_bytes_list = [f.read()]
-                    fallback_found = True
-                    logger.info(f"[FileStorageService] Loaded fallback local sample PDF: {c_path}")
-                    break
-            if not fallback_found:
-                logger.error(f"[FileStorageService] Failed to stream remote file and no local fallback found ({remote_url}): {e}")
-                raise
+            logger.error(f"[FileStorageService] 远程底稿流式下载异常 ({remote_url}): {e}")
+            raise RuntimeError(f"微风企原始贷前报告 PDF 下载异常: {str(e)}")
 
-        return b"".join(file_bytes_list)
+        raw_bytes = b"".join(file_bytes_list)
+        if not raw_bytes or len(raw_bytes) < 100:
+            raise RuntimeError("微风企原始贷前报告 PDF 内容为空或不完整")
+
+        return raw_bytes
 
     @classmethod
     async def store_cleaned_pdf(

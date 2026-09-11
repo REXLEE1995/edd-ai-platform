@@ -171,6 +171,8 @@ async def health():
     }
 
 @app.get("/s/{short_code}")
+@app.get("/api/s/{short_code}")
+@app.get("/api/v1/s/{short_code}")
 async def redirect_short_link(short_code: str):
     """
     自研本地短链重定向服务 (302 自动跳转至微风企 H5 授权超长地址)

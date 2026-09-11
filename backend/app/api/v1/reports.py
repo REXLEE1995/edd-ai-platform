@@ -296,74 +296,34 @@ async def get_report_pdf_file(
                 await db.commit()
                 target_object_key = migrated_key
 
-    # 2. 兜底策略：检查或自动上传模版样本 PDF 至 MinIO
-    if not target_object_key:
-        template_key = "templates/sample_report.pdf"
-        if not minio_mgr.object_exists(template_key):
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-            candidates = [
-                os.path.join(base_dir, "frontend", "public", "reports", "hangzhou_preloan.pdf"),
-                os.path.join(base_dir, "wfqmockserver", "贷前报告样例-享宇智评版.pdf"),
-                os.path.join(base_dir, "frontend", "public", "sample_report.pdf"),
-            ]
-            for c_path in candidates:
-                if os.path.exists(c_path):
-                    try:
-                        minio_mgr.upload_file(c_path, template_key)
-                        target_object_key = template_key
-                        break
-                    except Exception:
-                        pass
-        else:
-            target_object_key = template_key
+    # 2. 若 MinIO 中未查到真实报告 PDF 资产，严格抛出 404
+    if not target_object_key or not minio_mgr.object_exists(target_object_key):
+        raise HTTPException(status_code=404, detail="该尽调报告原始 PDF 资产尚未生成就绪或已被归档")
 
-    # 3. 从 MinIO 提取对象流并通过 StreamingResponse 流式直出
-    if target_object_key and minio_mgr.object_exists(target_object_key):
-        minio_stream = minio_mgr.get_object_stream(target_object_key)
-        encoded_filename = urllib.parse.quote(display_filename)
+    # 3. 从 MinIO 提取真实对象流并通过 StreamingResponse 流式直出
+    minio_stream = minio_mgr.get_object_stream(target_object_key)
+    encoded_filename = urllib.parse.quote(display_filename)
+    ascii_filename = f"report_{report_id}.pdf"
 
-        def iter_minio_stream():
-            try:
-                for chunk in minio_stream.stream(32 * 1024):
-                    yield chunk
-            finally:
-                minio_stream.close()
-                minio_stream.release_conn()
+    def iter_minio_stream():
+        try:
+            for chunk in minio_stream.stream(32 * 1024):
+                yield chunk
+        finally:
+            minio_stream.close()
+            minio_stream.release_conn()
 
-        return StreamingResponse(
-            iter_minio_stream(),
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"inline; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}",
-                "Access-Control-Allow-Origin": "*",
-                "X-Storage-Engine": "MinIO",
-                "X-MinIO-Bucket": minio_mgr.default_bucket,
-                "X-MinIO-Object": urllib.parse.quote(target_object_key)
-            }
-        )
-
-    # 4. 容错兜底：若 MinIO 不可用或未命中，检测本地工程预置 PDF 样本直接响应
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    candidates = [
-        os.path.join(base_dir, "贷前报告样例-享宇智评版.pdf"),
-        os.path.join(base_dir, "wfqmockserver", "贷前报告样例-享宇智评版.pdf"),
-        os.path.join(base_dir, "frontend", "public", "reports", "hangzhou_preloan.pdf"),
-        os.path.join(base_dir, "frontend", "public", "sample_report.pdf"),
-    ]
-    for c_path in candidates:
-        if os.path.exists(c_path):
-            encoded_filename = urllib.parse.quote(display_filename)
-            return FileResponse(
-                path=c_path,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"inline; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}",
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Storage-Engine": "Local-Fallback"
-                }
-            )
-
-    raise HTTPException(status_code=404, detail="未检索到报告 PDF 存证文件")
+    return StreamingResponse(
+        iter_minio_stream(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}",
+            "Access-Control-Allow-Origin": "*",
+            "X-Storage-Engine": "MinIO",
+            "X-MinIO-Bucket": minio_mgr.default_bucket,
+            "X-Storage-File-Key": urllib.parse.quote(target_object_key),
+        }
+    )
 
 @router.post("/ai/chat")
 async def ai_chat_with_report(

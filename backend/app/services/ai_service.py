@@ -30,7 +30,7 @@ class AIService:
             client = AsyncOpenAI(
                 api_key=api_key.strip(),
                 base_url=base_url,
-                timeout=float(cfg.get("timeout_seconds", 30)),
+                timeout=float(cfg.get("timeout_seconds", 60)),
                 max_retries=1
             )
             return client, cfg
@@ -44,11 +44,11 @@ class AIService:
         messages: List[Dict[str, str]],
         model: Optional[str] = None,
         temperature: Optional[float] = None,
-        max_tokens: int = 2500,
+        max_tokens: Optional[int] = None,
         stream: bool = False
     ) -> str:
         """
-        统一调用 New-API 网关的大语言模型接口 (支持 Admin 动态配置)
+        统一调用 New-API 网关的大语言模型接口 (支持 Admin 动态配置，默认不限制 Token，关闭思维链)
         """
         client_bundle = cls._get_client()
 
@@ -57,15 +57,33 @@ class AIService:
             target_model = model or cfg.get("new_api_model") or "xyzp-ai"
             target_temp = temperature if temperature is not None else cfg.get("temperature", 0.3)
             base_url = cfg.get("new_api_base_url", "")
+
+            # Token 配额策略：如果未显式传参，读取配置；若配置为 None 或 0 则完全不限制
+            configured_max_tokens = cfg.get("max_tokens")
+            target_max_tokens = max_tokens if max_tokens is not None else configured_max_tokens
+            if target_max_tokens is not None and int(target_max_tokens) <= 0:
+                target_max_tokens = None
+
+            # 思考模式策略：默认关闭思维链 (Reasoning/Thinking) 以大幅提速并杜绝截断
+            enable_thinking = cfg.get("enable_thinking", False)
+            extra_body = {}
+            if not enable_thinking:
+                extra_body["enable_thinking"] = False
+
+            create_kwargs: Dict[str, Any] = {
+                "model": target_model,
+                "messages": messages,
+                "temperature": target_temp,
+                "stream": stream
+            }
+            if target_max_tokens is not None:
+                create_kwargs["max_tokens"] = int(target_max_tokens)
+            if extra_body:
+                create_kwargs["extra_body"] = extra_body
+
             try:
-                logger.info(f"[AIService] Dispatching request to AI Gateway -> {base_url} (Model: {target_model})")
-                response = await client.chat.completions.create(
-                    model=target_model,
-                    messages=messages,
-                    temperature=target_temp,
-                    max_tokens=max_tokens,
-                    stream=stream
-                )
+                logger.info(f"[AIService] Dispatching request to AI Gateway -> {base_url} (Model: {target_model}, max_tokens: {target_max_tokens or 'Unlimited'}, thinking: {enable_thinking})")
+                response = await client.chat.completions.create(**create_kwargs)
                 if response and response.choices:
                     msg = response.choices[0].message
                     content = (msg.content or "").strip()
@@ -73,6 +91,16 @@ class AIService:
                         content = msg.reasoning.strip()
                     return content
             except Exception as e:
+                # 若因 extra_body 不支持报错，自动剥离 extra_body 降级重试
+                if extra_body:
+                    try:
+                        create_kwargs.pop("extra_body", None)
+                        response = await client.chat.completions.create(**create_kwargs)
+                        if response and response.choices:
+                            msg = response.choices[0].message
+                            return (msg.content or "").strip()
+                    except Exception:
+                        pass
                 logger.error(f"[AIService] AI Gateway call failed ({str(e)}), fallbacking to local heuristic engine.")
 
         # 本地拟真降级返回
@@ -91,7 +119,7 @@ class AIService:
         基于全景多源底稿数据，调用 AI 生成全景综合研判结论
         """
         system_prompt = (
-            "你是一名资深的金融风控总监 (CRO) 与商业尽调专家。请根据提供的企业多源工商、金税、司法与征信底稿数据，"
+            "你是一名资深的金融风控总监 (CRO) 与商业尽调专家。请根据提供的企业多源工商、官方涉税、司法与征信底稿数据，"
             "出具客观、精炼、专业且具有决策指导意义的综合尽调结论（字数控制在 250-400 字之间）。"
             "结构包含：1. 企业基本盘与经营真实性；2. 核心风险排查与涉税/司法表现；3. 准入与授信综合建议。"
         )
@@ -123,7 +151,7 @@ class AIService:
         )
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"章节名称：{chapter_title}\n\n章节文本数据：\n{chapter_text[:3000]}"}
+            {"role": "user", "content": f"章节名称：{chapter_title}\n\n章节文本数据：\n{chapter_text[:40000]}"}
         ]
         return await cls.chat_completion(messages, temperature=0.2)
 
@@ -149,7 +177,7 @@ class AIService:
         if history:
             messages.extend(history[-6:])  # 保留最近 3 轮对话上下文
 
-        user_content = f"【尽调报告相关底稿上下文】：\n{context_text[:4000]}\n\n【用户问题】：{question}"
+        user_content = f"【尽调报告相关底稿上下文】：\n{context_text[:40000]}\n\n【用户问题】：{question}"
         messages.append({"role": "user", "content": user_content})
 
         return await cls.chat_completion(messages, temperature=0.3)
@@ -157,18 +185,11 @@ class AIService:
     @classmethod
     def _local_heuristic_fallback(cls, messages: List[Dict[str, str]]) -> str:
         """
-        本地自适应启发式分析引擎（在网关未配置或网络故障时的优雅降级）
+        本地自适应提示（在网关未配置或网络故障时的真实提示）
         """
-        user_msg = ""
-        for m in reversed(messages):
-            if m.get("role") == "user":
-                user_msg = m.get("content", "")
-                break
-        
         return (
-            "目标主体工商底盘稳健，法定代表人及董监高任职合规，股权结构清晰；"
-            "近36个月增值税申报与企业所得税申报数据连续正常，销项发票流水稳步递增，红废票比极低；"
-            "全网司法合规排查无重大被执行记录及行政处罚。综合信用表现优良，建议在常规风控准入框架内予以审慎授信支持。"
+            "⚠️ **[大模型服务暂时不可用]** AI 大语言模型网关调用异常，无法生成实时研判结论。"
+            "请前往管理后台【系统设置 -> AI 大模型配置】核查网关地址与 API Key 后重试。"
         )
 
     @classmethod
@@ -177,7 +198,7 @@ class AIService:
         messages: List[Dict[str, str]],
         model: Optional[str] = None,
         temperature: Optional[float] = 0.1,
-        max_tokens: int = 2500,
+        max_tokens: Optional[int] = None,
         stop_check_fn: Optional[Callable[[], Any]] = None
     ) -> AsyncGenerator[str, None]:
         """
@@ -190,15 +211,31 @@ class AIService:
             target_model = model or cfg.get("new_api_model") or "xyzp-ai"
             target_temp = temperature if temperature is not None else cfg.get("temperature", 0.1)
             base_url = cfg.get("new_api_base_url", "")
+
+            configured_max_tokens = cfg.get("max_tokens")
+            target_max_tokens = max_tokens if max_tokens is not None else configured_max_tokens
+            if target_max_tokens is not None and int(target_max_tokens) <= 0:
+                target_max_tokens = None
+
+            enable_thinking = cfg.get("enable_thinking", False)
+            extra_body = {}
+            if not enable_thinking:
+                extra_body["enable_thinking"] = False
+
+            create_kwargs: Dict[str, Any] = {
+                "model": target_model,
+                "messages": messages,
+                "temperature": target_temp,
+                "stream": True
+            }
+            if target_max_tokens is not None:
+                create_kwargs["max_tokens"] = int(target_max_tokens)
+            if extra_body:
+                create_kwargs["extra_body"] = extra_body
+
             try:
-                logger.info(f"[AIService] Dispatching stream request to AI Gateway -> {base_url} (Model: {target_model})")
-                stream_resp = await client.chat.completions.create(
-                    model=target_model,
-                    messages=messages,
-                    temperature=target_temp,
-                    max_tokens=max_tokens,
-                    stream=True
-                )
+                logger.info(f"[AIService] Dispatching stream request to AI Gateway -> {base_url} (Model: {target_model}, max_tokens: {target_max_tokens or 'Unlimited'}, thinking: {enable_thinking})")
+                stream_resp = await client.chat.completions.create(**create_kwargs)
                 async for chunk in stream_resp:
                     if stop_check_fn and await stop_check_fn():
                         break
@@ -207,10 +244,28 @@ class AIService:
                         yield delta
                 return
             except Exception as e:
-                logger.error(f"[AIService] Stream call failed ({str(e)}), fallbacking to local heuristic streaming engine.")
+                if extra_body:
+                    try:
+                        create_kwargs.pop("extra_body", None)
+                        stream_resp = await client.chat.completions.create(**create_kwargs)
+                        async for chunk in stream_resp:
+                            if stop_check_fn and await stop_check_fn():
+                                break
+                            delta = chunk.choices[0].delta.content if (chunk.choices and chunk.choices[0].delta) else ""
+                            if delta:
+                                yield delta
+                        return
+                    except Exception:
+                        pass
+                logger.error(f"[AIService] Stream call failed ({str(e)}), fallbacking to honest local notification.")
 
-        # 本地拟真降级流式输出 (保障无真实 Key 或网络故障时前端打字机效果依然可用且合规)
-        simulated_text = cls._local_kb_stream_fallback(messages)
+
+        # 本地流式异常提示输出
+        simulated_text = (
+            "⚠️ **【AI 大模型网关调用异常】**\n\n"
+            "当前大语言模型网关响应失败或尚未配置有效密钥，无法根据尽调报告底稿进行实时问答。\n\n"
+            "请联系系统管理员或前往 **管理后台 -> 系统配置 -> AI大模型配置** 检查 API Key 与网关连接。"
+        )
         chunk_size = 4
         for i in range(0, len(simulated_text), chunk_size):
             if stop_check_fn and await stop_check_fn():
@@ -218,47 +273,4 @@ class AIService:
             yield simulated_text[i:i + chunk_size]
             await asyncio.sleep(0.02)
 
-    @classmethod
-    def _local_kb_stream_fallback(cls, messages: List[Dict[str, str]]) -> str:
-        """
-        根据核心纪律输出严格符合规范的本地降级 Markdown 文本
-        """
-        system_text = ""
-        user_text = ""
-        for m in messages:
-            if m.get("role") == "system":
-                system_text = m.get("content", "")
-            elif m.get("role") == "user":
-                user_text = m.get("content", "")
-
-        # 判断是否为目录定向模式
-        if "CATALOG_SPECIFIC" in system_text:
-            return (
-                "## 章节核心研判与数据归纳\n\n"
-                "针对当前目录章节底稿分析，提炼关键数据事实与风控结论如下：\n\n"
-                "- **合规状况**：纳税申报与发票数据链条完整，近24个月未发现虚开或涉税稽查异动。（来源：底稿第1节）\n"
-                "- **业务体量**：开票总额持续稳健，有效发票率保持在 99% 以上，上下游合作生态稳定。（来源：底稿第2节）\n\n"
-                "| 审核项目 | 实际指标 | 研判评价 |\n"
-                "| :--- | :--- | :--- |\n"
-                "| 发票有效率 | 99.8% | **优良** |\n"
-                "| 涉税稽查状态 | 无异常处罚 | **正常** |\n"
-                "| 涉诉被执行 | 0 条 | **正常** |\n"
-            )
-
-        # 判断问题是否在知识库中找不到或无相关信息
-        if any(neg in user_text for neg in ["海外子公司", "专利纠纷", "境外上市", "非法集资", "火灾事故"]):
-            return "未找到相关内容"
-
-        # 常规对话总结
-        return (
-            "### 业务咨询归纳总结\n\n"
-            "根据知识库参考底稿归纳，关键指标与业务表现如下：\n\n"
-            "- **经营真实性**：目标企业营业状态为存续，工商照面信息与金税开票数据吻合，未发现失信或异常经营名录。（来源：尽调底稿总览）\n"
-            "- **涉税与合规**：纳税信用等级为 A 级，近三年无欠税记录与税务行政处罚记录。（来源：涉税申报表）\n\n"
-            "| 核心维度 | 关键事实 / 数值 | 综合结论 |\n"
-            "| :--- | :--- | :--- |\n"
-            "| 综合信用评分 | 85 分以上 | **建议准入** |\n"
-            "| 涉诉被执行记录 | 0 次 | **合规正常** |\n"
-            "| 测算建议授信区间 | 300 ~ 500 万元 | **予以授信支持** |\n"
-        )
 

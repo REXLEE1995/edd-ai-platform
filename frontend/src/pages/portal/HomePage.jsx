@@ -684,7 +684,7 @@ export default function HomePage() {
               <span className="text-[10px] sm:text-xs font-mono font-bold text-[#0070a4] px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-cyan-50 border border-cyan-200/60 inline-block">场景 01</span>
               <h3 className="text-xs sm:text-base font-bold text-slate-900 leading-snug">商业银行普惠信贷审批</h3>
               <p className="text-[11px] sm:text-sm text-slate-600 leading-relaxed line-clamp-3 sm:line-clamp-none">
-                贷前 0 接触快速初审，金税强授权精准测算商业参考额度（¥300~500万），尽调会材料秒级生成。
+                贷前 0 接触快速初审，官方系统强授权精准测算商业参考额度（¥300~500万），尽调会材料秒级生成。
               </p>
             </motion.div>
 

@@ -188,13 +188,22 @@ class WeifengqiProvider(BaseProvider):
                     if error_code == 0:
                         field_obj = res_data.get("body", {}).get("field", {})
                         pdf_url = field_obj.get("url") or field_obj.get("reportPdfUrl")
-                        return {
-                            "is_ready": True,
-                            "errorCode": 0,
-                            "errMsg": res_data.get("errMsg", "操作成功"),
-                            "url": pdf_url or f"{self.base_url}/files/微风企贷前报告{order_no}.pdf",
-                            "raw_response": res_data
-                        }
+                        if pdf_url:
+                            return {
+                                "is_ready": True,
+                                "errorCode": 0,
+                                "errMsg": res_data.get("errMsg", "操作成功"),
+                                "url": pdf_url,
+                                "raw_response": res_data
+                            }
+                        else:
+                            return {
+                                "is_ready": False,
+                                "errorCode": 555,
+                                "errMsg": "资料准备中，尚未生成下载直链",
+                                "url": None,
+                                "raw_response": res_data
+                            }
                     elif error_code == 555:
                         logger.info(f"[WFQ Script Method - PDF Fetch] Report preparing (errorCode=555): {res_data.get('errMsg')}")
                         return {
@@ -221,9 +230,9 @@ class WeifengqiProvider(BaseProvider):
             return {
                 "is_ready": False,
                 "errorCode": 400,
-                "errMsg": "未检测到微风企实名授权完成",
+                "errMsg": "微风企底稿未就绪或生成中",
                 "url": None,
-                "raw_response": {"fallback": True, "call_mode": "http"}
+                "raw_response": {"fallback": False, "call_mode": "http"}
             }
 
         # 仅在明确开启 mock 模式时提供 mock 兜底
@@ -249,14 +258,14 @@ class WeifengqiProvider(BaseProvider):
         """
         res = await self.fetch_report_pdf_result(order_no=order_no, taxpayer_id=taxpayer_id, request_no=request_no, db=db)
         return {
-            "is_ready": res["is_ready"],
-            "status": "SUCCESS" if res["is_ready"] else "PREPARING",
-            "errorCode": res["errorCode"],
-            "errMsg": res["errMsg"],
+            "is_ready": res.get("is_ready", False),
+            "status": "SUCCESS" if res.get("is_ready") else "PREPARING",
+            "errorCode": res.get("errorCode", 555),
+            "errMsg": res.get("errMsg", "资料准备中"),
             "order_no": order_no,
-            "progress": 100 if res["is_ready"] else 50,
-            "pdf_url": res["url"],
-            "raw_response": res["raw_response"]
+            "progress": 100 if res.get("is_ready") else 50,
+            "pdf_url": res.get("url"),
+            "raw_response": res.get("raw_response")
         }
 
     async def get_report_pdf_url(
@@ -266,23 +275,23 @@ class WeifengqiProvider(BaseProvider):
         request_no: Optional[str] = None,
         app_no: str = "be51gABP3iPL781L",
         db: Optional[AsyncSession] = None
-    ) -> str:
+    ) -> Optional[str]:
         """
         第三步脚本方法：获取微风企 PDF 报告下载地址
         直接调用 fetch_report_pdf_result 解析成功的 body.field.url
         """
         res = await self.fetch_report_pdf_result(order_no=order_no, taxpayer_id=taxpayer_id, request_no=request_no, db=db)
-        return res["url"] or f"{self.base_url}/files/微风企贷前报告{order_no}.pdf"
+        return res.get("url")
 
     async def fetch_tax_data(self, credit_code: str, company_name: str) -> Dict[str, Any]:
         """
-        获取金税全税种申报与发票明细解析数据 (提供给 DataCleansingService)
+        获取官方全税种申报与发票明细解析数据 (提供给 DataCleansingService)
         """
         return self._mock_tax_data(credit_code, company_name)
 
     def _mock_tax_data(self, credit_code: str, company_name: str) -> Dict[str, Any]:
         """
-        本地规则引擎：根据企业信用代码或名称返回拟真的享宇金税数据中台税务底稿
+        本地规则引擎：根据企业信用代码或名称返回拟真的享宇官方涉税数据中台税务底稿
         """
         matched = next(
             (c for c in MOCK_COMPANIES if c["credit_code"] == credit_code or c["company_name"] in company_name or company_name in c["company_name"]),
