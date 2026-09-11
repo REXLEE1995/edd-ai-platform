@@ -199,18 +199,26 @@ async def report_chat_stream(
         q_type_val = req.query_type.value
         cat_key_val = req.catalog_key
         cat_name_val = req.catalog_name
+        usage_stats: Dict[str, Any] = {}
+
+        def _on_usage(u: Dict[str, Any]):
+            usage_stats.update(u)
 
         try:
             async for delta in AIService.stream_chat_completion(
                 messages=messages,
-                temperature=0.1  # 严格事实模式，严禁自由发挥
+                temperature=0.1,  # 严格事实模式，严禁自由发挥
+                usage_callback=_on_usage
             ):
                 full_assistant_reply.append(delta)
                 payload = json.dumps({"delta": delta, "status": "generating"}, ensure_ascii=False)
                 yield f"data: {payload}\n\n"
 
             # 正常输出完成
-            yield f"data: {json.dumps({'status': 'done'}, ensure_ascii=False)}\n\n"
+            done_payload = {"status": "done"}
+            if usage_stats:
+                done_payload["usage"] = usage_stats
+            yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
         except Exception as e:
@@ -222,6 +230,7 @@ async def report_chat_stream(
             # 6. 流结束或异常中断后，持久化完整回答到数据库
             complete_text = "".join(full_assistant_reply).strip()
             if complete_text:
+                tokens_count = usage_stats.get("completion_tokens") or (len(complete_text) // 2)
                 try:
                     async with AsyncSessionLocal() as session:
                         ai_msg = ReportChatMessage(
@@ -232,11 +241,11 @@ async def report_chat_stream(
                             catalog_key=cat_key_val,
                             catalog_name=cat_name_val,
                             content=complete_text,
-                            tokens_used=len(complete_text) // 2
+                            tokens_used=tokens_count
                         )
                         session.add(ai_msg)
                         await session.commit()
-                        logger.info(f"[ReportChat] Persisted AI message ({len(complete_text)} chars) for report {report_id_val}")
+                        logger.info(f"[ReportChat] Persisted AI message ({len(complete_text)} chars, {tokens_count} tokens) for report {report_id_val}")
                 except Exception as db_err:
                     logger.error(f"[ReportChat] Failed to persist AI message: {db_err}")
 
