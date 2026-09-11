@@ -447,7 +447,7 @@ export default function AdminSettingsPage() {
             }`}
           >
             <MessageSquare className="w-4 h-4 text-[#0096DB]" />
-            <span>享畅通短信网关</span>
+            <span>短信网关设置</span>
             <span className={`w-1.5 h-1.5 rounded-full ${smsSettings.is_open ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
           </button>
         </div>
@@ -810,7 +810,7 @@ export default function AdminSettingsPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 模块 2: 享畅通短信网关与签名配置面板                                      */}
+      {/* 模块 2: 短信网关与签名配置面板                                            */}
       {/* ========================================================================= */}
       {activeTab === 'sms' && (
         <div className="space-y-6">
@@ -821,7 +821,7 @@ export default function AdminSettingsPage() {
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-[#0096DB]" />
                 <h2 className="font-bold text-sm text-slate-950">
-                  享畅通短信网关与签名配置 (商户账号、密码与签名协同配置)
+                  短信网关与签名配置
                 </h2>
               </div>
               <div className="flex items-center gap-2">
@@ -831,10 +831,7 @@ export default function AdminSettingsPage() {
                     : 'bg-amber-50 text-amber-700 border border-amber-200'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${smsSettings.is_open ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                  {smsSettings.is_open ? '真实短信外发已开启' : '挡板拦截模式 (零资费)'}
-                </span>
-                <span className="text-[11px] font-mono text-zinc-400">
-                  动态配置热生效
+                  {smsSettings.is_open ? '正式外发模式' : '模拟测试模式'}
                 </span>
               </div>
             </div>
@@ -849,7 +846,7 @@ export default function AdminSettingsPage() {
                     type="text"
                     value={smsForm.name}
                     onChange={(e) => setSmsForm({ ...smsForm, name: e.target.value })}
-                    placeholder="请输入享畅通分配的商户账号"
+                    placeholder="请输入短信商户账号"
                     className="w-full text-xs font-mono px-3.5 py-2 text-slate-900 bg-white border border-zinc-200 rounded-xl focus:outline-hidden focus:border-[#0096DB] focus:ring-2 focus:ring-cyan-100"
                   />
                 </div>
@@ -879,7 +876,7 @@ export default function AdminSettingsPage() {
                 {/* 短信签名 */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700">
-                    短信签名 (与商户账号密码统一配置)
+                    短信签名
                   </label>
                   <input
                     type="text"
@@ -888,7 +885,7 @@ export default function AdminSettingsPage() {
                     placeholder="例如: 成都享宇森云科技"
                     className="w-full text-xs font-semibold px-3.5 py-2 text-slate-900 bg-white border border-zinc-200 rounded-xl focus:outline-hidden focus:border-[#0096DB] focus:ring-2 focus:ring-cyan-100"
                   />
-                  <p className="text-[10px] text-zinc-400">系统自动清洗中英文括号，严格以【签名】格式组装发送</p>
+                  <p className="text-[10px] text-zinc-400">短信前缀签名，无需手动添加【】</p>
                 </div>
 
                 {/* 网关 URL */}
@@ -901,7 +898,7 @@ export default function AdminSettingsPage() {
                     placeholder="http://api.xct.com/sms/send"
                     className="w-full text-xs font-mono px-3.5 py-2 text-slate-900 bg-white border border-zinc-200 rounded-xl focus:outline-hidden focus:border-[#0096DB] focus:ring-2 focus:ring-cyan-100"
                   />
-                  <p className="text-[10px] text-zinc-400">服务商分配的生产 HTTP GET 网关地址（通常需配置服务器公网 IP 白名单）</p>
+                  <p className="text-[10px] text-zinc-400">短信服务商提供的网关接口地址</p>
                 </div>
 
                 {/* 发送开关 */}
@@ -912,18 +909,15 @@ export default function AdminSettingsPage() {
                     onChange={(e) => setSmsForm({ ...smsForm, is_open: e.target.value === 'true' })}
                     className="w-full text-xs px-3.5 py-2 text-slate-900 bg-white border border-zinc-200 rounded-xl focus:outline-hidden focus:border-[#0096DB] focus:ring-2 focus:ring-cyan-100"
                   >
-                    <option value="false">挡板拦截模式 (开发/测试推荐，0资费模拟成功)</option>
-                    <option value="true">正式外发模式 (生产环境真实调用服务商扣费发送)</option>
+                    <option value="false">模拟测试模式 (仅在系统内记录，不真实发送)</option>
+                    <option value="true">正式外发模式 (真实向手机下发短信)</option>
                   </select>
                 </div>
 
               </div>
 
               {/* 保存操作条 */}
-              <div className="flex items-center justify-between pt-3 border-t border-zinc-100">
-                <div className="text-[11px] text-zinc-500">
-                  支持的 4 大报备场景：<span className="font-mono text-slate-800">login (登录)</span>、<span className="font-mono text-slate-800">register (注册)</span>、<span className="font-mono text-slate-800">change_pwd (改密)</span>、<span className="font-mono text-slate-800">reset_pwd (找回密码)</span>
-                </div>
+              <div className="flex items-center justify-end pt-3 border-t border-zinc-100">
                 <button
                   type="submit"
                   disabled={smsSaving}
@@ -939,7 +933,7 @@ export default function AdminSettingsPage() {
             <div className="pt-4 border-t border-zinc-100 space-y-3">
               <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <Send className="w-3.5 h-3.5 text-[#0096DB]" />
-                <span>短信网关与签名连通性测试探针</span>
+                <span>短信连通性测试</span>
               </h3>
               <div className="flex items-center gap-3">
                 <input
@@ -970,7 +964,7 @@ export default function AdminSettingsPage() {
                   {smsTestResult.success ? (
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{smsTestResult.msg} (测试凭证已生成并存入流水)</span>
+                      <span>{smsTestResult.msg}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -984,74 +978,21 @@ export default function AdminSettingsPage() {
 
           </div>
 
-          {/* 预审短信模版一览表 */}
-          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <h2 className="font-bold text-sm text-slate-950 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#0096DB]" />
-                <span>享畅通已过审短信模版清单 (100% 精确复用)</span>
-              </h2>
-              <span className="text-xs text-zinc-400">已报备审核通过</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-medium">
-                    <th className="py-2.5 px-3">场景代码 (Scene)</th>
-                    <th className="py-2.5 px-3">业务用途</th>
-                    <th className="py-2.5 px-3">模版实际下发内容</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  <tr>
-                    <td className="py-3 px-3 font-mono font-bold text-slate-900">login</td>
-                    <td className="py-3 px-3 font-medium text-slate-700">登录身份核验</td>
-                    <td className="py-3 px-3 text-zinc-600 font-mono text-[11px]">
-                      【{smsForm.sign || '成都享宇森云科技'}】您正在进行登录操作，验证码为：${'{validCode}'}，5分钟内有效，请勿向他人泄露。如非本人操作，请忽略！
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-mono font-bold text-slate-900">register</td>
-                    <td className="py-3 px-3 font-medium text-slate-700">新用户注册开户</td>
-                    <td className="py-3 px-3 text-zinc-600 font-mono text-[11px]">
-                      【{smsForm.sign || '成都享宇森云科技'}】您正在进行注册账号操作，验证码为：${'{validCode}'}，5分钟内有效，请勿向他人泄露。如非本人操作，请忽略！
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-mono font-bold text-slate-900">change_pwd</td>
-                    <td className="py-3 px-3 font-medium text-slate-700">修改登录密码</td>
-                    <td className="py-3 px-3 text-zinc-600 font-mono text-[11px]">
-                      【{smsForm.sign || '成都享宇森云科技'}】您正在进行修改密码操作，验证码为：${'{validCode}'}，5分钟内有效，请勿向他人泄露。如非本人操作，请忽略！
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-mono font-bold text-slate-900">reset_pwd</td>
-                    <td className="py-3 px-3 font-medium text-slate-700">找回重置密码</td>
-                    <td className="py-3 px-3 text-zinc-600 font-mono text-[11px]">
-                      【{smsForm.sign || '成都享宇森云科技'}】您正在进行找回密码操作，验证码为：${'{validCode}'}，5分钟内有效，请勿向他人泄露。如非本人操作，请忽略！
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* 模块 2.2: 短信发送与核验全量流水日志表 (数据库全量存证) */}
+          {/* 模块 2.2: 短信发送与核验全量流水日志表 */}
           <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-xs space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 pb-3">
               <div>
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-[#0096DB]" />
                   <h2 className="font-bold text-sm text-slate-950">
-                    短信发送与核验流水日志 (全量数据库存证)
+                    短信发送流水与核验日志
                   </h2>
                   <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
                     共 {smsLogsTotal} 条记录
                   </span>
                 </div>
                 <p className="text-[11px] text-zinc-500 mt-1">
-                  无论真实外发还是挡板拦截均完整落库，包含完整发送文案、三方响应时间、耗时与详细失败/拦截备注
+                  记录短信发送历史、验证码核验状态及发送耗时
                 </p>
               </div>
 
@@ -1149,11 +1090,11 @@ export default function AdminSettingsPage() {
                   <tr className="border-b border-zinc-200 bg-slate-50/80 text-zinc-600 font-semibold">
                     <th className="py-2.5 px-3 whitespace-nowrap">接收手机 / 验证码</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">场景</th>
-                    <th className="py-2.5 px-3 min-w-[260px]">短信完整下发内容</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">发送状态 / 结果</th>
+                    <th className="py-2.5 px-3 min-w-[260px]">短信内容</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">发送状态</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">耗时 (ms)</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">请求 / 响应时间</th>
-                    <th className="py-2.5 px-3 min-w-[200px]">备注 (失败原因 / 挡板说明)</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">请求时间</th>
+                    <th className="py-2.5 px-3 min-w-[200px]">备注</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 bg-white">
@@ -1161,7 +1102,7 @@ export default function AdminSettingsPage() {
                     <tr>
                       <td colSpan={7} className="py-10 text-center text-zinc-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0096DB]" />
-                        <span>正在加载短信审计日志...</span>
+                        <span>正在加载短信日志...</span>
                       </td>
                     </tr>
                   ) : smsLogs.length === 0 ? (
@@ -1225,18 +1166,18 @@ export default function AdminSettingsPage() {
                             <div className="space-y-1">
                               {isVerified ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                                  <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                                <CheckCircle2 className="w-3 h-3 text-purple-600" />
                                   已核验成功
                                 </span>
                               ) : isRealSuccess ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                   <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  真实外发成功
+                                  外发成功
                                 </span>
                               ) : isMockOrBarrier ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
                                   <ShieldCheck className="w-3 h-3 text-sky-600" />
-                                  挡板拦截成功
+                                  模拟发送记录
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">

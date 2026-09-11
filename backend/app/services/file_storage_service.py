@@ -21,48 +21,10 @@ class FileStorageService:
     """
 
     @classmethod
-    async def download_and_store_remote_file(
-        cls,
-        session: AsyncSession,
-        remote_url: str,
-        task_id: str,
-        report_id: Optional[str] = None,
-        file_type: str = "wfq_preloan_pdf",
-        custom_filename: Optional[str] = None,
-        company_name: str = "",
-        credit_code: str = "",
-        replacements: Optional[Dict[str, str]] = None
-    ) -> Tuple[TaskFile, Dict[str, Any]]:
+    async def download_raw_remote_pdf(cls, remote_url: str) -> bytes:
         """
-        从远程 URL (如微风企网关/电信云/Mock服务) 异步流式拉取 PDF，
-        【核心执行流程】：
-        1. 【步骤 1】对三方 PDF 执行字符替换清洗与封面自动判断删除（若第一页有“报告检测时间”等）；
-        2. 【步骤 2】对清洗后的文档做全景目录结构化解析 (toc_catalog)；
-        3. 【步骤 3】解析 PDF 文件内容，抽取形成全篇纯文本内容 (full_text_content)；
-        4. 【MinIO 存证】将步骤 1~3 的所有产物 (PDF 文件、目录 JSON、纯文本 TXT) 上传至 MinIO 对象存储。
-        返回: (file_record, parsed_pdf_data)
+        流式下载远程 PDF 原始二进制数据流（附带本地真实样本兜底）
         """
-        from app.services.cleansing_service import DataCleansingService
-
-        minio_mgr = get_minio_client()
-        timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
-        date_folder = datetime.now().strftime("%Y%m%d")
-
-        # 1. 确定 MinIO 对象存储的层级路径架构: reports/{日期}/{任务ID}/
-        date_folder = datetime.now().strftime("%Y%m%d")
-        task_dir = f"reports/{date_folder}/{task_id}"
-
-        clean_filename = custom_filename or os.path.basename(remote_url.split("?")[0]) or "report.pdf"
-        if not clean_filename.endswith(".pdf") and file_type == "wfq_preloan_pdf":
-            clean_filename += ".pdf"
-        
-        pdf_object_name = f"{task_dir}/{clean_filename}"
-        toc_object_name = f"{task_dir}/catalog.json"
-        text_object_name = f"{task_dir}/content.txt"
-
-        logger.info(f"[FileStorageService] Fetching remote stream: {remote_url} -> Data Cleansing (Step 1~3) -> MinIO Target Directory: {minio_mgr.default_bucket}/{task_dir}/")
-
-        # 2. 流式下载原始二进制流
         file_bytes_list = []
         try:
             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
@@ -95,46 +57,96 @@ class FileStorageService:
                 logger.error(f"[FileStorageService] Failed to stream remote file and no local fallback found ({remote_url}): {e}")
                 raise
 
-        raw_data = b"".join(file_bytes_list)
+        return b"".join(file_bytes_list)
 
-        # 3. 核心步骤 1~4：调用数据清洗中台执行字符替换、封面剔除、目录解析、文本提取与 AI Markdown 知识库生成
-        cleaned_pdf_bytes, parsed_pdf_data = await DataCleansingService.clean_and_process_pdf_bytes(
-            raw_pdf_bytes=raw_data,
-            company_name=company_name,
-            credit_code=credit_code,
-            replacements=replacements
-        )
+    @classmethod
+    async def store_cleaned_pdf(
+        cls,
+        session: AsyncSession,
+        task_id: str,
+        cleaned_pdf_bytes: bytes,
+        custom_filename: Optional[str] = None,
+        company_name: str = "",
+        credit_code: str = "",
+        source_url: str = "",
+        report_id: Optional[str] = None
+    ) -> TaskFile:
+        """
+        【Step 2 专属】将纯代码清洗后的标准 PDF 固化上传至 MinIO，并写入 TaskFile 存证记录
+        """
+        minio_mgr = get_minio_client()
+        date_folder = datetime.now().strftime("%Y%m%d")
+        task_dir = f"reports/{date_folder}/{task_id}"
 
-        # =============================================================
-        # 步骤 1 产物上传 MinIO (reports/{日期}/{任务ID}/{clean_filename})
-        # =============================================================
+        clean_filename = custom_filename or f"企业尽调分析报告_{company_name or '目标企业'}.pdf"
+        if not clean_filename.endswith(".pdf"):
+            clean_filename += ".pdf"
+
+        pdf_object_name = f"{task_dir}/{clean_filename}"
         file_size = len(cleaned_pdf_bytes)
         file_hash = hashlib.sha256(cleaned_pdf_bytes).hexdigest()
+
         minio_mgr.upload_bytes(
             data=cleaned_pdf_bytes,
             object_name=pdf_object_name,
             content_type="application/pdf"
         )
-        logger.info(f"[FileStorageService] 【步骤 1 产物】Cleaned PDF stored to MinIO ({pdf_object_name}), size={file_size} bytes")
+        logger.info(f"[FileStorageService] 【Step 2 存证】Cleaned PDF stored to MinIO ({pdf_object_name}), size={file_size} bytes")
 
-        file_record = TaskFile(
-            id=str(uuid.uuid4()),
-            task_id=task_id,
-            report_id=report_id,
-            file_type=file_type,
-            filename=clean_filename,
-            file_path=pdf_object_name,
-            file_size=file_size,
-            file_hash=file_hash,
-            mime_type="application/pdf",
-            source_url=remote_url,
-            status="stored"
+        # 检查是否已存在记录，存在则更新，不存在则创建
+        result = await session.execute(
+            select(TaskFile).where(TaskFile.task_id == task_id, TaskFile.file_type == "wfq_preloan_pdf")
         )
-        session.add(file_record)
+        file_record = result.scalars().first()
+        if not file_record:
+            file_record = TaskFile(
+                id=str(uuid.uuid4()),
+                task_id=task_id,
+                report_id=report_id,
+                file_type="wfq_preloan_pdf",
+                filename=clean_filename,
+                file_path=pdf_object_name,
+                file_size=file_size,
+                file_hash=file_hash,
+                mime_type="application/pdf",
+                source_url=source_url,
+                status="stored"
+            )
+            session.add(file_record)
+        else:
+            file_record.filename = clean_filename
+            file_record.file_path = pdf_object_name
+            file_record.file_size = file_size
+            file_record.file_hash = file_hash
+            file_record.source_url = source_url or file_record.source_url
+            file_record.status = "stored"
 
-        # =============================================================
-        # 步骤 2 产物上传 MinIO (reports/{日期}/{任务ID}/catalog.json)
-        # =============================================================
+        await session.commit()
+        await session.refresh(file_record)
+        return file_record
+
+    @classmethod
+    async def store_ai_artifacts(
+        cls,
+        session: AsyncSession,
+        task_id: str,
+        parsed_pdf_data: Dict[str, Any],
+        company_name: str = "",
+        credit_code: str = "",
+        source_url: str = "",
+        report_id: Optional[str] = None
+    ) -> Dict[str, TaskFile]:
+        """
+        【Step 3 专属】将 AI 研判生成的 4 大衍生资产 (catalog.json, content.txt, knowledge_base.md, summary.json) 上传至 MinIO
+        """
+        minio_mgr = get_minio_client()
+        date_folder = datetime.now().strftime("%Y%m%d")
+        task_dir = f"reports/{date_folder}/{task_id}"
+
+        records = {}
+
+        # 1. catalog.json
+        toc_object_name = f"{task_dir}/catalog.json"
         toc_catalog = parsed_pdf_data.get("toc_catalog", [])
         toc_payload = {
             "task_id": task_id,
@@ -146,112 +158,254 @@ class FileStorageService:
             "report_meta": parsed_pdf_data.get("report_meta", {})
         }
         toc_bytes = json.dumps(toc_payload, ensure_ascii=False, indent=2).encode("utf-8")
-        minio_mgr.upload_bytes(
-            data=toc_bytes,
-            object_name=toc_object_name,
-            content_type="application/json"
-        )
-        logger.info(f"[FileStorageService] 【步骤 2 产物】TOC Catalog JSON stored to MinIO ({toc_object_name}), size={len(toc_bytes)} bytes")
+        minio_mgr.upload_bytes(data=toc_bytes, object_name=toc_object_name, content_type="application/json")
+        
+        toc_res = await session.execute(select(TaskFile).where(TaskFile.task_id == task_id, TaskFile.file_type == "pdf_toc_json"))
+        toc_file = toc_res.scalars().first()
+        if not toc_file:
+            toc_file = TaskFile(
+                id=str(uuid.uuid4()),
+                task_id=task_id,
+                report_id=report_id,
+                file_type="pdf_toc_json",
+                filename="catalog.json",
+                file_path=toc_object_name,
+                file_size=len(toc_bytes),
+                file_hash=hashlib.sha256(toc_bytes).hexdigest(),
+                mime_type="application/json",
+                source_url=source_url,
+                status="stored"
+            )
+            session.add(toc_file)
+        else:
+            toc_file.file_path = toc_object_name
+            toc_file.file_size = len(toc_bytes)
+            toc_file.file_hash = hashlib.sha256(toc_bytes).hexdigest()
+        records["catalog"] = toc_file
 
-        toc_file_record = TaskFile(
-            id=str(uuid.uuid4()),
-            task_id=task_id,
-            report_id=report_id,
-            file_type="pdf_toc_json",
-            filename="catalog.json",
-            file_path=toc_object_name,
-            file_size=len(toc_bytes),
-            file_hash=hashlib.sha256(toc_bytes).hexdigest(),
-            mime_type="application/json",
-            source_url=remote_url,
-            status="stored"
-        )
-        session.add(toc_file_record)
-
-        # =============================================================
-        # 步骤 3 产物上传 MinIO (reports/{日期}/{任务ID}/content.txt)
-        # =============================================================
+        # 2. content.txt
+        text_object_name = f"{task_dir}/content.txt"
         full_text = parsed_pdf_data.get("full_text_content", "")
         text_bytes = full_text.encode("utf-8")
-        minio_mgr.upload_bytes(
-            data=text_bytes,
-            object_name=text_object_name,
-            content_type="text/plain; charset=utf-8"
-        )
-        logger.info(f"[FileStorageService] 【步骤 3 产物】PDF Content Text stored to MinIO ({text_object_name}), size={len(text_bytes)} bytes")
+        minio_mgr.upload_bytes(data=text_bytes, object_name=text_object_name, content_type="text/plain; charset=utf-8")
 
-        text_file_record = TaskFile(
-            id=str(uuid.uuid4()),
-            task_id=task_id,
-            report_id=report_id,
-            file_type="pdf_content_txt",
-            filename="content.txt",
-            file_path=text_object_name,
-            file_size=len(text_bytes),
-            file_hash=hashlib.sha256(text_bytes).hexdigest(),
-            mime_type="text/plain",
-            source_url=remote_url,
-            status="stored"
-        )
-        session.add(text_file_record)
+        txt_res = await session.execute(select(TaskFile).where(TaskFile.task_id == task_id, TaskFile.file_type == "pdf_content_txt"))
+        txt_file = txt_res.scalars().first()
+        if not txt_file:
+            txt_file = TaskFile(
+                id=str(uuid.uuid4()),
+                task_id=task_id,
+                report_id=report_id,
+                file_type="pdf_content_txt",
+                filename="content.txt",
+                file_path=text_object_name,
+                file_size=len(text_bytes),
+                file_hash=hashlib.sha256(text_bytes).hexdigest(),
+                mime_type="text/plain",
+                source_url=source_url,
+                status="stored"
+            )
+            session.add(txt_file)
+        else:
+            txt_file.file_path = text_object_name
+            txt_file.file_size = len(text_bytes)
+            txt_file.file_hash = hashlib.sha256(text_bytes).hexdigest()
+        records["content"] = txt_file
 
-        # =============================================================
-        # 步骤 4 产物上传 MinIO (reports/{日期}/{任务ID}/knowledge_base.md)
-        # =============================================================
+        # 3. knowledge_base.md
+        md_object_name = f"{task_dir}/knowledge_base.md"
         knowledge_md = parsed_pdf_data.get("knowledge_base_md", "")
         md_bytes = knowledge_md.encode("utf-8")
-        md_object_name = f"{task_dir}/knowledge_base.md"
-        minio_mgr.upload_bytes(
-            data=md_bytes,
-            object_name=md_object_name,
-            content_type="text/markdown; charset=utf-8"
-        )
-        logger.info(f"[FileStorageService] 【步骤 4 产物】AI Markdown Knowledge Base stored to MinIO ({md_object_name}), size={len(md_bytes)} bytes")
+        minio_mgr.upload_bytes(data=md_bytes, object_name=md_object_name, content_type="text/markdown; charset=utf-8")
 
-        md_file_record = TaskFile(
-            id=str(uuid.uuid4()),
-            task_id=task_id,
-            report_id=report_id,
-            file_type="pdf_knowledge_md",
-            filename="knowledge_base.md",
-            file_path=md_object_name,
-            file_size=len(md_bytes),
-            file_hash=hashlib.sha256(md_bytes).hexdigest(),
-            mime_type="text/markdown",
-            source_url=remote_url,
-            status="stored"
-        )
-        session.add(md_file_record)
-        # =============================================================
-        # 步骤 5 产物上传 MinIO (reports/{日期}/{任务ID}/summary.json)
-        # =============================================================
+        md_res = await session.execute(select(TaskFile).where(TaskFile.task_id == task_id, TaskFile.file_type == "pdf_knowledge_md"))
+        md_file = md_res.scalars().first()
+        if not md_file:
+            md_file = TaskFile(
+                id=str(uuid.uuid4()),
+                task_id=task_id,
+                report_id=report_id,
+                file_type="pdf_knowledge_md",
+                filename="knowledge_base.md",
+                file_path=md_object_name,
+                file_size=len(md_bytes),
+                file_hash=hashlib.sha256(md_bytes).hexdigest(),
+                mime_type="text/markdown",
+                source_url=source_url,
+                status="stored"
+            )
+            session.add(md_file)
+        else:
+            md_file.file_path = md_object_name
+            md_file.file_size = len(md_bytes)
+            md_file.file_hash = hashlib.sha256(md_bytes).hexdigest()
+        records["knowledge_base"] = md_file
+
+        # 4. summary.json
+        summary_object_name = f"{task_dir}/summary.json"
         ai_summary_json = parsed_pdf_data.get("ai_summary_json", {})
         summary_bytes = json.dumps(ai_summary_json, ensure_ascii=False, indent=2).encode("utf-8")
-        summary_object_name = f"{task_dir}/summary.json"
-        minio_mgr.upload_bytes(
-            data=summary_bytes,
-            object_name=summary_object_name,
-            content_type="application/json; charset=utf-8"
-        )
-        logger.info(f"[FileStorageService] 【步骤 5 产物】AI Summary JSON stored to MinIO ({summary_object_name}), size={len(summary_bytes)} bytes")
+        minio_mgr.upload_bytes(data=summary_bytes, object_name=summary_object_name, content_type="application/json; charset=utf-8")
 
-        summary_file_record = TaskFile(
-            id=str(uuid.uuid4()),
-            task_id=task_id,
-            report_id=report_id,
-            file_type="pdf_summary_json",
-            filename="summary.json",
-            file_path=summary_object_name,
-            file_size=len(summary_bytes),
-            file_hash=hashlib.sha256(summary_bytes).hexdigest(),
-            mime_type="application/json",
-            source_url=remote_url,
-            status="stored"
-        )
-        session.add(summary_file_record)
+        sum_res = await session.execute(select(TaskFile).where(TaskFile.task_id == task_id, TaskFile.file_type == "pdf_summary_json"))
+        sum_file = sum_res.scalars().first()
+        if not sum_file:
+            sum_file = TaskFile(
+                id=str(uuid.uuid4()),
+                task_id=task_id,
+                report_id=report_id,
+                file_type="pdf_summary_json",
+                filename="summary.json",
+                file_path=summary_object_name,
+                file_size=len(summary_bytes),
+                file_hash=hashlib.sha256(summary_bytes).hexdigest(),
+                mime_type="application/json",
+                source_url=source_url,
+                status="stored"
+            )
+            session.add(sum_file)
+        else:
+            sum_file.file_path = summary_object_name
+            sum_file.file_size = len(summary_bytes)
+            sum_file.file_hash = hashlib.sha256(summary_bytes).hexdigest()
+        records["summary"] = sum_file
 
         await session.commit()
-        await session.refresh(file_record)
+        for k in records:
+            await session.refresh(records[k])
+
+        return records
+
+    @classmethod
+    async def check_task_files_health(
+        cls,
+        session: AsyncSession,
+        task_id: str
+    ) -> Dict[str, Any]:
+        """
+        【Step 4 专属】MinIO 5 大存证文件健康度校验矩阵
+        核验：
+        1. wfq_preloan_pdf (清洗后 PDF 底稿)
+        2. pdf_toc_json (catalog.json)
+        3. pdf_content_txt (content.txt)
+        4. pdf_knowledge_md (knowledge_base.md)
+        5. pdf_summary_json (summary.json)
+        返回: {
+            "is_healthy": bool,
+            "has_pdf": bool,
+            "has_ai_artifacts": bool,
+            "missing_steps": [2, 3],
+            "file_details": {...}
+        }
+        """
+        minio_mgr = get_minio_client()
+        result = await session.execute(
+            select(TaskFile).where(TaskFile.task_id == task_id)
+        )
+        files = result.scalars().all()
+        file_map = {f.file_type: f for f in files}
+
+        status_details = {}
+        required_types = {
+            "wfq_preloan_pdf": "清洗后标准 PDF 底稿",
+            "pdf_toc_json": "真实物理页目录大纲 JSON",
+            "pdf_content_txt": "全文对齐纯文本 TXT",
+            "pdf_knowledge_md": "Markdown 知识库 MD",
+            "pdf_summary_json": "综合画像与风控研判 JSON"
+        }
+
+        missing_steps = set()
+
+        # 检查 PDF
+        pdf_rec = file_map.get("wfq_preloan_pdf")
+        pdf_ok = False
+        if pdf_rec and minio_mgr.object_exists(pdf_rec.file_path) and (pdf_rec.file_size or 0) > 1024:
+            pdf_ok = True
+        if not pdf_ok:
+            missing_steps.add(2)
+        status_details["pdf"] = {"exists": pdf_ok, "path": pdf_rec.file_path if pdf_rec else None}
+
+        # 检查 AI 衍生资产
+        ai_types = ["pdf_toc_json", "pdf_content_txt", "pdf_knowledge_md", "pdf_summary_json"]
+        ai_all_ok = True
+        for t in ai_types:
+            rec = file_map.get(t)
+            is_ok = False
+            if rec and minio_mgr.object_exists(rec.file_path) and (rec.file_size or 0) > 0:
+                is_ok = True
+            else:
+                ai_all_ok = False
+            status_details[t] = {"exists": is_ok, "path": rec.file_path if rec else None}
+
+        if not ai_all_ok:
+            missing_steps.add(3)
+
+        is_healthy = (pdf_ok and ai_all_ok)
+        return {
+            "is_healthy": is_healthy,
+            "has_pdf": pdf_ok,
+            "has_ai_artifacts": ai_all_ok,
+            "missing_steps": sorted(list(missing_steps)),
+            "file_details": status_details
+        }
+
+    @classmethod
+    async def download_and_store_remote_file(
+        cls,
+        session: AsyncSession,
+        remote_url: str,
+        task_id: str,
+        report_id: Optional[str] = None,
+        file_type: str = "wfq_preloan_pdf",
+        custom_filename: Optional[str] = None,
+        company_name: str = "",
+        credit_code: str = "",
+        replacements: Optional[Dict[str, str]] = None
+    ) -> Tuple[TaskFile, Dict[str, Any]]:
+        """
+        从远程 URL (如微风企网关/电信云/Mock服务) 异步流式拉取 PDF 并完成全链路清洗存证
+        """
+        from app.services.cleansing_service import DataCleansingService
+
+        # 1. 流式下载
+        raw_data = await cls.download_raw_remote_pdf(remote_url)
+
+        # 2. 纯代码清洗 (Step 2)
+        cleaned_pdf_bytes, has_cover_removed = DataCleansingService.clean_pdf_bytes_only(
+            raw_pdf_bytes=raw_data,
+            replacements=replacements
+        )
+
+        # 3. 存入 MinIO 清洗后 PDF (Step 2 存证)
+        file_record = await cls.store_cleaned_pdf(
+            session=session,
+            task_id=task_id,
+            cleaned_pdf_bytes=cleaned_pdf_bytes,
+            custom_filename=custom_filename,
+            company_name=company_name,
+            credit_code=credit_code,
+            source_url=remote_url,
+            report_id=report_id
+        )
+
+        # 4. AI 深度解析 (Step 3)
+        parsed_pdf_data = await DataCleansingService.extract_ai_artifacts_from_pdf_bytes(
+            cleaned_pdf_bytes=cleaned_pdf_bytes,
+            company_name=company_name,
+            credit_code=credit_code
+        )
+        parsed_pdf_data["has_cover_removed"] = has_cover_removed
+
+        # 5. 上传 AI 衍生资产至 MinIO (Step 3 存证)
+        await cls.store_ai_artifacts(
+            session=session,
+            task_id=task_id,
+            parsed_pdf_data=parsed_pdf_data,
+            company_name=company_name,
+            credit_code=credit_code,
+            source_url=remote_url,
+            report_id=report_id
+        )
 
         return file_record, parsed_pdf_data
 

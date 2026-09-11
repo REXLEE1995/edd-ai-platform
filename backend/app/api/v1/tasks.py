@@ -846,6 +846,124 @@ async def get_task_admin_progress(
         "data": data
     }
 
+class TaskRetryRequest(BaseModel):
+    step: Optional[int] = None
+
+@router.post("/{task_id}/retry")
+@router.post("/{task_id}/retry-analysis")
+async def retry_xyzp_task(
+    task_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    req_body: Optional[TaskRetryRequest] = None,
+    actor = Depends(get_current_admin_or_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【用户端 / 管理后台】统一尽调任务智能断点重试入口 (POST /api/v1/tasks/{task_id}/retry & /retry-analysis)
+    
+    重试策略：
+    - 若指定了 step (1~4)，按指定 step 恢复执行；
+    - 若未指定 step：
+      1. 若状态为 waiting_auth 或 auth_failed，重新生成专属实名授权链接与二维码 (Step 1)；
+      2. 若没有 MinIO 清洗后 PDF 或 Step 2 失败，从 Step 2 (数据获取与纯代码清洗) 重新下载并清洗；
+      3. 若 MinIO 中已有清洗后 PDF 但 AI 衍生资产缺失，从 Step 3 (AI 研判) 重新调用大模型解析清洗后 PDF，无需重新下载；
+      4. 若 MinIO 5 大文件齐全但报告生成失败，从 Step 4 重新组装报告。
+    """
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    target_step = req_body.step if req_body and req_body.step in [1, 2, 3, 4] else None
+
+    # Step 1 智能推断或显式指定
+    if target_step == 1 or (target_step is None and (task.status in ["waiting_auth", "auth_failed"] or task.auth_status != "authorized")):
+        # 重新生成授权码
+        wfq_provider = get_weifengqi_provider()
+        public_base_url = get_public_base_url(request)
+        encoded_company = urllib.parse.quote(task.company_name)
+        encoded_credit = urllib.parse.quote(task.credit_code)
+        callback_url = f"{public_base_url}/api/v1/tasks/callback?orderNo={task.id}&task_id={task.id}&credit_code={encoded_credit}&company_name={encoded_company}"
+
+        auth_res = await wfq_provider.get_auth_link(
+            company_name=task.company_name,
+            taxpayer_id=task.credit_code,
+            cb_url=callback_url,
+            order_no=task.id,
+            db=db
+        )
+        task.status = "waiting_auth"
+        task.auth_status = "pending"
+        task.auth_link = auth_res.get("auth_url") or task.auth_link
+        task.wfq_order_no = auth_res.get("order_no") or task.wfq_order_no
+        task.error_message = None
+
+        TaskService.append_task_log(task, "【重新授权】已重新生成专属实名数据授权通道，等待企业法定代表人扫码授权。")
+        await db.commit()
+
+        return {
+            "code": 0,
+            "message": "已重新生成法人授权链接与二维码",
+            "data": {
+                "task_id": task.id,
+                "step": 1,
+                "step_title": "授权信息",
+                "status": task.status,
+                "auth_status": task.auth_status,
+                "auth_qrcode_url": task.short_url or task.auth_qrcode_url,
+                "auth_link": task.auth_link
+            }
+        }
+
+    # Step 2~4 智能推断
+    if target_step is None:
+        health = await FileStorageService.check_task_files_health(db, task.id)
+        if not health.get("has_pdf"):
+            target_step = 2
+        elif not health.get("has_ai_artifacts"):
+            target_step = 3
+        else:
+            target_step = 4
+
+    step_title_map = {
+        2: "数据获取 (纯代码清洗)",
+        3: "AI 研判 (知识库与画像生成)",
+        4: "报告生成 (文件核验与资产落库)"
+    }
+    step_title = step_title_map.get(target_step, "AI 研判")
+
+    task.error_message = None
+    if target_step == 2:
+        task.status = "pulling_data"
+    elif target_step == 3:
+        task.status = "ai_analyzing"
+    elif target_step == 4:
+        task.status = "generating_report"
+
+    TaskService.append_task_log(task, f"【断点重试】用户已触发重试操作，将从【{step_title}】节点恢复执行风控流水线...")
+    await db.commit()
+
+    task_user_res = await db.execute(select(User).where(User.id == task.user_id))
+    task_user = task_user_res.scalar_one_or_none()
+    is_locked = (task_user.balance_quota <= 0) if task_user else False
+
+    background_tasks.add_task(TaskService.run_ai_xyzp_task_async, task.id, is_locked, target_step)
+
+    return {
+        "code": 0,
+        "message": f"任务已重新启动，将从【{step_title}】节点继续执行！",
+        "data": {
+            "task_id": task.id,
+            "step": target_step,
+            "step_title": step_title,
+            "status": task.status
+        }
+    }
+
 @router.post("/{task_id}/reauth")
 async def reauth_task(
     task_id: str,
@@ -866,20 +984,22 @@ async def reauth_task(
 
     wfq_provider = get_weifengqi_provider()
     public_base_url = get_public_base_url(request)
-    callback_url = f"{public_base_url}/api/v1/tasks/callback"
+    encoded_company = urllib.parse.quote(task.company_name)
+    encoded_credit = urllib.parse.quote(task.credit_code)
+    callback_url = f"{public_base_url}/api/v1/tasks/callback?orderNo={task.id}&task_id={task.id}&credit_code={encoded_credit}&company_name={encoded_company}"
 
-    wfq_res = await wfq_provider.apply_preloan_auth(
+    auth_res = await wfq_provider.get_auth_link(
         company_name=task.company_name,
-        credit_code=task.credit_code,
-        legal_person=task.legal_person or "",
-        callback_url=callback_url
+        taxpayer_id=task.credit_code,
+        cb_url=callback_url,
+        order_no=task.id,
+        db=db
     )
 
     task.status = "waiting_auth"
     task.auth_status = "pending"
-    task.auth_qrcode_url = wfq_res.get("qrCode") or wfq_res.get("auth_qrcode_url")
-    task.auth_link = wfq_res.get("authUrl") or wfq_res.get("auth_link")
-    task.wfq_order_no = wfq_res.get("orderNo") or wfq_res.get("wfq_order_no")
+    task.auth_link = auth_res.get("auth_url") or task.auth_link
+    task.wfq_order_no = auth_res.get("order_no") or task.wfq_order_no
     task.thinking_logs = task.thinking_logs or []
     task.thinking_logs.append({
         "time": datetime.now().strftime("%H:%M:%S"),
@@ -894,7 +1014,7 @@ async def reauth_task(
             "task_id": task.id,
             "status": task.status,
             "auth_status": task.auth_status,
-            "auth_qrcode_url": task.auth_qrcode_url,
+            "auth_qrcode_url": task.short_url or task.auth_qrcode_url,
             "auth_link": task.auth_link
         }
     }

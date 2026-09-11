@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 from app.core.database import get_db, AsyncSessionLocal
 from app.models.user import User
@@ -52,30 +52,12 @@ async def _extract_report_kb_context(
         )
         files = file_result.scalars().all()
         for f in files:
-            if f.file_type == "pdf_knowledge_md" and minio_mgr.object_exists(f.file_path):
+            if f.file_type == "pdf_knowledge_md" and minio_mgr.stat_object(f.file_path):
                 raw = minio_mgr.get_object_bytes(f.file_path)
                 md_content = raw.decode("utf-8", errors="ignore")
-            elif f.file_type == "pdf_content_txt" and minio_mgr.object_exists(f.file_path):
+            elif f.file_type == "pdf_content_txt" and minio_mgr.stat_object(f.file_path):
                 raw = minio_mgr.get_object_bytes(f.file_path)
                 txt_content = raw.decode("utf-8", errors="ignore")
-
-        # 路径推导兜底
-        if not md_content or not txt_content:
-            for f in files:
-                if f.file_path:
-                    task_dir = "/".join(f.file_path.split("/")[:-1])
-                    if not md_content:
-                        for cand in ["knowledge_base.md", "pdf_knowledge.md", "knowledge.md"]:
-                            c_path = f"{task_dir}/{cand}"
-                            if minio_mgr.object_exists(c_path):
-                                md_content = minio_mgr.get_object_bytes(c_path).decode("utf-8", errors="ignore")
-                                break
-                    if not txt_content:
-                        for cand in ["content_text.txt", "pdf_content.txt", "full_text_content.txt"]:
-                            c_path = f"{task_dir}/{cand}"
-                            if minio_mgr.object_exists(c_path):
-                                txt_content = minio_mgr.get_object_bytes(c_path).decode("utf-8", errors="ignore")
-                                break
     except Exception as e:
         logger.warning(f"[ReportChat] 从 MinIO 读取 PDF 底稿文件异常 (task={task_id}): {e}")
 
@@ -92,15 +74,11 @@ async def _extract_report_kb_context(
             parts.append(f"【AI风控总括研判】：\n{report.summary_ai_comment}")
 
         if md_content:
-            # 目录定向模式下针对性高亮该章节
-            if catalog_name and catalog_name in md_content:
-                parts.append(f"【PDF 报告重点章节底稿内容】：\n{md_content}")
-            else:
-                parts.append(f"【PDF 报告结构化章节底稿内容】：\n{md_content[:15000]}")
-
-        if txt_content:
-            # 附带带有物理页码标记（--- [P.X] ---）的原版 PDF 逐页纯文本
-            parts.append(f"【PDF 报告原始物理页码逐页提取底稿】：\n{txt_content[:15000]}")
+            # 优先全量注入结构化 Markdown 知识库（包含目录、各章节分析及附件财务明细表）
+            parts.append(f"【PDF 报告结构化章节与附件完整底稿内容】：\n{md_content}")
+        elif txt_content:
+            # 若无结构化 Markdown，回退注入逐页提取的物理页码纯文本
+            parts.append(f"【PDF 报告原始物理页码逐页提取底稿】：\n{txt_content}")
 
         return "\n\n".join(parts)
 
@@ -171,6 +149,21 @@ async def report_chat_stream(
     is_admin = isinstance(actor, AdminUser) or getattr(actor, "role", "") == "admin"
     if not is_admin and report.user_id != actor.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该报告的对话资产")
+
+    # 提问配额上限校验 (限制每份报告最多提问 50 次)
+    MAX_REPORT_QUESTIONS = 50
+    count_res = await db.execute(
+        select(func.count(ReportChatMessage.id)).where(
+            ReportChatMessage.report_id == report_id,
+            ReportChatMessage.role == "user"
+        )
+    )
+    user_questions_count = count_res.scalar() or 0
+    if user_questions_count >= MAX_REPORT_QUESTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"当前报告提问次数已达到 {MAX_REPORT_QUESTIONS} 次上限，无法继续发起提问"
+        )
 
     # 2. 提取或注入知识库内容 (综合融合 MinIO 中的 markdown 知识库与 content-text 纯文本)
     kb_context = req.kb_content.strip() if req.kb_content and req.kb_content.strip() else await _extract_report_kb_context(report, db, req.catalog_key, req.catalog_name)

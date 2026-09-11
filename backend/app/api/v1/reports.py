@@ -47,6 +47,7 @@ async def get_my_reports(
             XYZPReport.suggested_quota_min,
             XYZPReport.suggested_quota_max,
             XYZPReport.summary_ai_comment,
+            XYZPReport.content_json,
             XYZPReport.created_at,
             XYZPTask.task_no
         )
@@ -73,6 +74,19 @@ async def get_my_reports(
         # 输出标准 Asia/Shanghai (UTC+8) ISO 8601 格式字符串
         report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
         formatted_task_no = r.task_no or (f"TSK{r.created_at.strftime('%Y%m%d%H%M%S')}{r.id[-4:].upper()}" if r.created_at else f"TSK2026083115816{r.id[-4:].upper()}")
+
+        content = r.content_json if isinstance(r.content_json, dict) else {}
+        ai_summary = content.get("ai_summary_json") or content.get("overall_ai_summary") or {}
+        enterprise_profile = ai_summary.get("enterprise_profile") or ai_summary.get("summary") or ""
+        risk_assessment = ai_summary.get("risk_assessment") or ai_summary.get("key_points") or []
+
+        # 确保 summary_ai_comment 严格与 summary.json 对应
+        formatted_comment = r.summary_ai_comment or ""
+        if not formatted_comment and enterprise_profile:
+            formatted_comment = f"### 企业信用全景综合画像\n{enterprise_profile}\n"
+            if risk_assessment:
+                formatted_comment += f"\n### 全景深度研判要点与风控审查结论\n" + "\n".join([f"- {pt}" for pt in risk_assessment])
+
         data.append({
             "id": r.id,
             "report_no": r.report_no,
@@ -85,7 +99,11 @@ async def get_my_reports(
             "score": r.score,
             "suggested_quota_min": r.suggested_quota_min,
             "suggested_quota_max": r.suggested_quota_max,
-            "summary_ai_comment": r.summary_ai_comment,
+            "summary_ai_comment": formatted_comment,
+            "ai_summary_json": {
+                "enterprise_profile": enterprise_profile,
+                "risk_assessment": risk_assessment
+            },
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
             "is_locked": False,
             "is_public_only": False,
@@ -135,6 +153,17 @@ async def get_report_detail(
         raise HTTPException(status_code=404, detail="未查询到该尽调报告资产")
     
     report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
+    content = r.content_json or {}
+    ai_summary = content.get("ai_summary_json") or content.get("overall_ai_summary") or {}
+    enterprise_profile = ai_summary.get("enterprise_profile") or ai_summary.get("summary") or ""
+    risk_assessment = ai_summary.get("risk_assessment") or ai_summary.get("key_points") or []
+
+    formatted_comment = r.summary_ai_comment or ""
+    if not formatted_comment and enterprise_profile:
+        formatted_comment = f"### 企业信用全景综合画像\n{enterprise_profile}\n"
+        if risk_assessment:
+            formatted_comment += f"\n### 全景深度研判要点与风控审查结论\n" + "\n".join([f"- {pt}" for pt in risk_assessment])
+
     return {
         "code": 0,
         "data": {
@@ -148,9 +177,13 @@ async def get_report_detail(
             "score": r.score,
             "suggested_quota_min": r.suggested_quota_min,
             "suggested_quota_max": r.suggested_quota_max,
-            "summary_ai_comment": r.summary_ai_comment,
+            "summary_ai_comment": formatted_comment,
+            "ai_summary_json": {
+                "enterprise_profile": enterprise_profile,
+                "risk_assessment": risk_assessment
+            },
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
-            "content": r.content_json or {},
+            "content": content,
             "raw_sources": r.raw_sources_json or {},
             "created_at": report_created_at,
             "is_expired": False
