@@ -222,15 +222,17 @@ export default function AdminSettingsPage() {
     }
   }, [activeTab]);
 
-  const isDirty = initialData && (
+  const isDirty = Boolean(initialData && (
     formData.llm_provider !== initialData.llm_provider ||
-    formData.new_api_base_url !== initialData.new_api_base_url ||
+    (formData.new_api_base_url || '').trim() !== (initialData.new_api_base_url || '').trim() ||
     formData.new_api_key.trim().length > 0 ||
-    formData.new_api_model !== initialData.new_api_model ||
-    formData.temperature !== initialData.temperature ||
-    formData.timeout_seconds !== initialData.timeout_seconds ||
-    formData.is_enabled !== initialData.is_enabled
-  );
+    (formData.new_api_model || '').trim() !== (initialData.new_api_model || '').trim() ||
+    Number(formData.temperature) !== Number(initialData.temperature) ||
+    String(formData.max_tokens ?? '') !== String(initialData.max_tokens ?? '') ||
+    Boolean(formData.enable_thinking) !== Boolean(initialData.enable_thinking) ||
+    Number(formData.timeout_seconds) !== Number(initialData.timeout_seconds) ||
+    Boolean(formData.is_enabled) !== Boolean(initialData.is_enabled)
+  ));
 
   const isSmsDirty = initialSmsData && (
     smsForm.name !== initialSmsData.name ||
@@ -504,13 +506,28 @@ export default function AdminSettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 self-end sm:self-center">
-                  <span className="text-xs font-semibold text-slate-700">服务启用状态</span>
-                  <Switch 
-                    checked={formData.is_enabled}
-                    onChange={(checked) => setFormData(prev => ({ ...prev, is_enabled: checked }))}
-                    className={formData.is_enabled ? 'bg-[#0096DB]' : 'bg-slate-300'}
-                  />
+                <div className="flex items-center gap-3.5 self-end sm:self-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700">服务启用状态</span>
+                    <Switch 
+                      checked={formData.is_enabled}
+                      onChange={(checked) => setFormData(prev => ({ ...prev, is_enabled: checked }))}
+                      className={formData.is_enabled ? 'bg-[#0096DB]' : 'bg-slate-300'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving}
+                    className={`px-4 py-2 text-xs font-semibold rounded-xl text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-[0.99] ${
+                      isDirty 
+                        ? 'bg-[#0096DB] hover:bg-[#0084c2] ring-2 ring-cyan-200' 
+                        : 'bg-slate-900 hover:bg-slate-800'
+                    }`}
+                  >
+                    <Save className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} />
+                    <span>{saving ? '正在保存...' : isDirty ? '保存未生效修改' : '保存配置'}</span>
+                  </button>
                 </div>
               </div>
 
@@ -763,6 +780,45 @@ export default function AdminSettingsPage() {
                         <p className="text-[11px] text-zinc-500 mt-1">
                           长篇尽调多维报告推理时间较长，建议保持在 60 秒以上，避免客户端超时断连。
                         </p>
+                      </div>
+
+                      {/* 卡片底部操作栏 */}
+                      <div className="pt-4 border-t border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs">
+                          {isDirty ? (
+                            <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 text-[11px]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                              存在未保存的参数修改
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-medium bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 text-[11px]">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              当前配置已同步最新数据
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          {isDirty && (
+                            <button
+                              type="button"
+                              onClick={fetchAiSettings}
+                              disabled={saving}
+                              className="px-3 py-2 text-xs font-semibold rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
+                            >
+                              放弃修改
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="px-4 py-2 text-xs font-semibold rounded-xl text-white bg-[#0096DB] hover:bg-[#0084c2] transition-all disabled:opacity-50 shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-[0.99]"
+                          >
+                            <Save className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} />
+                            <span>{saving ? '正在保存...' : '保存 AI 配置'}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1328,17 +1384,17 @@ export default function AdminSettingsPage() {
 
       {/* 底部浮动保存条 (AI 配置有未保存修改时) */}
       {activeTab === 'ai' && isDirty && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-2xl bg-slate-950 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-800 flex items-center justify-between animate-in fade-in slide-in-from-bottom-4">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-2xl bg-slate-950 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center justify-between backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4 ring-1 ring-white/10">
           <div className="flex items-center gap-2.5 text-xs">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-            <span className="font-medium text-slate-200">AI 配置已发生更改，尚未保存至数据库</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+            <span className="font-semibold text-slate-100">AI 配置已发生更改，尚未保存至数据库</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={fetchAiSettings}
               disabled={saving}
-              className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+              className="px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors cursor-pointer"
             >
               放弃修改
             </button>
@@ -1346,10 +1402,10 @@ export default function AdminSettingsPage() {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-1.5 text-xs font-semibold rounded-xl text-white bg-[#0096DB] hover:bg-[#0084c2] transition-all shadow-xs flex items-center gap-1.5"
+              className="px-4 py-1.5 text-xs font-semibold rounded-xl text-white bg-[#0096DB] hover:bg-[#0084c2] transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-[0.99]"
             >
               <Save className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} />
-              {saving ? '保存中...' : '立即保存'}
+              <span>{saving ? '保存中...' : '立即保存'}</span>
             </button>
           </div>
         </div>
