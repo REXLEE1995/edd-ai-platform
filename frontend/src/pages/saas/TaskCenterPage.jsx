@@ -1209,25 +1209,6 @@ export default function TaskCenterPage() {
                     {(() => {
                       const isFailed = progInfo.isFailed;
                       const isWaitingAuth = progInfo.isWaitingAuth;
-                      const pData = taskProgressMap[task.id];
-                      const logs = (Array.isArray(pData?.thinking_logs) && pData.thinking_logs.length > 0)
-                        ? pData.thinking_logs
-                        : (Array.isArray(pData?.raw_thinking_logs) && pData.raw_thinking_logs.length > 0)
-                        ? pData.raw_thinking_logs
-                        : (Array.isArray(task.thinking_logs) && task.thinking_logs.length > 0)
-                        ? task.thinking_logs
-                        : (Array.isArray(task.raw_thinking_logs) && task.raw_thinking_logs.length > 0)
-                        ? task.raw_thinking_logs
-                        : (Array.isArray(task.sanitized_logs) && task.sanitized_logs.length > 0)
-                        ? task.sanitized_logs
-                        : (Array.isArray(task.logs) && task.logs.length > 0)
-                        ? task.logs
-                        : (Array.isArray(task.raw_logs) && task.raw_logs.length > 0)
-                        ? task.raw_logs
-                        : (Array.isArray(pData?.sanitized_logs) && pData.sanitized_logs.length > 0)
-                        ? pData.sanitized_logs
-                        : [];
-                      const isExpanded = !!expandedTaskLogs[task.id];
 
                       return (
                         <div className={`p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border space-y-3.5 sm:space-y-4 backdrop-blur-md transition-all shadow-xs ${
@@ -1438,86 +1419,6 @@ export default function TaskCenterPage() {
                                   )}
                                 </div>
                               </div>
-                            </div>
-                          )}
-
-                          {/* 思考流日志折叠按钮与时间线 */}
-                          {logs.length > 0 && (
-                            <div className="pt-2 border-t border-slate-200/60 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
-                                  <Activity className="w-3.5 h-3.5 text-[#0096DB]" />
-                                  <span>流水线实时执行日志</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleTaskLogs(task.id)}
-                                  className="text-[11px] font-medium text-[#0096DB] hover:text-[#0070a4] bg-sky-50 hover:bg-sky-100/80 px-2.5 py-1 rounded-md border border-sky-200/60 transition-all cursor-pointer flex items-center gap-1 shadow-2xs select-none"
-                                >
-                                  <span>{isExpanded ? '收起步骤流' : `展开全流程日志 (${logs.length}步)`}</span>
-                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                </button>
-                              </div>
-
-                              {isExpanded && (
-                                <div className="bg-white/90 rounded-xl p-3.5 border border-slate-200/80 space-y-2.5 max-h-60 overflow-y-auto font-mono text-[11px] shadow-2xs">
-                                  {logs.map((log, idx) => {
-                                    const isLast = idx === logs.length - 1;
-                                    const timeStr = typeof log === 'string' ? '' : (log.time || '');
-                                    let textStr = typeof log === 'string' ? log : (log.content || log.it || log.text || log.message || '');
-                                    
-                                    // 提取与清洗 request_id 追踪标签
-                                    let logReqId = typeof log === 'object' ? log.request_id : null;
-                                    const reqMatch = textStr.match(/\[ReqID:\s*([^\]]+)\]/i);
-                                    if (reqMatch) {
-                                      logReqId = logReqId || reqMatch[1].trim();
-                                      textStr = textStr.replace(/\[ReqID:\s*[^\]]+\]\s*/i, '').trim();
-                                    }
-
-                                    return (
-                                      <div key={idx} className="flex items-start gap-2.5">
-                                        <div className="flex flex-col items-center mt-1">
-                                          <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                            isLast && !isFailed
-                                              ? 'bg-[#0096DB] animate-ping'
-                                              : isLast && isFailed
-                                              ? 'bg-rose-500'
-                                              : 'bg-slate-300'
-                                          }`} />
-                                        </div>
-                                        <div className="flex-1 min-w-0 space-y-0.5">
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            {timeStr && <span className="text-[10px] text-slate-400 font-bold">[{timeStr}]</span>}
-                                            {logReqId && (
-                                              <span 
-                                                className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-mono bg-sky-50 text-sky-700 border border-sky-200/80 cursor-pointer hover:bg-sky-100 select-none"
-                                                onClick={async () => {
-                                                  const ok = await copyToClipboard(logReqId);
-                                                  if (ok) {
-                                                    message.success(`已复制请求追踪ID: ${logReqId}`);
-                                                  } else {
-                                                    message.error('复制失败，请手动选择复制');
-                                                  }
-                                                }}
-                                                title="点击复制此步骤的请求追踪 ID"
-                                              >
-                                                trace: {logReqId.length > 20 ? `${logReqId.slice(0, 10)}...${logReqId.slice(-6)}` : logReqId}
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className={`${
-                                            isLast
-                                              ? (isFailed ? 'text-rose-900 font-semibold' : 'text-slate-900 font-semibold')
-                                              : 'text-slate-600'
-                                          } break-all`}>
-                                            {textStr}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
                             </div>
                           )}
                         </div>
