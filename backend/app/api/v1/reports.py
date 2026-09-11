@@ -48,6 +48,8 @@ async def get_my_reports(
             XYZPReport.suggested_quota_max,
             XYZPReport.summary_ai_comment,
             XYZPReport.content_json,
+            XYZPReport.is_read,
+            XYZPReport.read_at,
             XYZPReport.created_at,
             XYZPTask.task_no
         )
@@ -105,6 +107,8 @@ async def get_my_reports(
                 "risk_assessment": risk_assessment
             },
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
+            "is_read": bool(getattr(r, "is_read", False)),
+            "read_at": format_shanghai_iso(r.read_at) if getattr(r, "read_at", None) else None,
             "is_locked": False,
             "is_public_only": False,
             "created_at": report_created_at,
@@ -138,6 +142,7 @@ async def get_report_detail(
 ):
     """
     获取单份报告完整内容与 MinIO 真实 PDF 存证流地址（支持三栏阅读器）
+    若当前登录用户为报告所有者且尚未查阅，服务端自动落库更新 is_read=True 与 read_at
     """
 
     result = await db.execute(
@@ -151,6 +156,13 @@ async def get_report_detail(
     
     if not r:
         raise HTTPException(status_code=404, detail="未查询到该尽调报告资产")
+    
+    # 若当前用户为所有者且未读，自动标记为已读落库
+    if user and r.user_id == user.id and not getattr(r, "is_read", False):
+        r.is_read = True
+        r.read_at = shanghai_now()
+        await db.commit()
+        await db.refresh(r)
     
     report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
     content = r.content_json or {}
@@ -185,8 +197,53 @@ async def get_report_detail(
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
             "content": content,
             "raw_sources": r.raw_sources_json or {},
+            "is_read": bool(getattr(r, "is_read", False)),
+            "read_at": format_shanghai_iso(r.read_at) if getattr(r, "read_at", None) else None,
             "created_at": report_created_at,
             "is_expired": False
+        }
+    }
+
+
+@router.post("/{report_id}/read")
+async def mark_report_as_read(
+    report_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    将指定报告标记为已读（落库持久化，跨设备与强刷浏览器缓存后均保持已读状态）
+    """
+    result = await db.execute(
+        select(XYZPReport).where(
+            (XYZPReport.id == report_id) | 
+            (XYZPReport.report_no == report_id) | 
+            (XYZPReport.task_id == report_id)
+        )
+    )
+    r = result.scalar_one_or_none()
+    if not r:
+        raise HTTPException(status_code=404, detail="未查询到该尽调报告资产")
+    
+    # 权限校验：仅允许报告所有者标记已读
+    if r.user_id != user.id:
+        raise HTTPException(status_code=403, detail="无权操作他人所属尽调报告")
+
+    if not getattr(r, "is_read", False):
+        r.is_read = True
+        r.read_at = shanghai_now()
+        await db.commit()
+        await db.refresh(r)
+
+    return {
+        "code": 0,
+        "message": "报告已成功标记为已读",
+        "data": {
+            "id": r.id,
+            "report_no": r.report_no,
+            "task_id": r.task_id,
+            "is_read": True,
+            "read_at": format_shanghai_iso(r.read_at) if r.read_at else None
         }
     }
 

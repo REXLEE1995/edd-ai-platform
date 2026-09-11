@@ -131,36 +131,46 @@ export default function TaskCenterPage() {
     }
   }, [location.search]);
 
-  // 3. 已读报告追踪（新生成的报告展示红色 "新" 标识，点击查阅后记录已读并消除标识）
-  const [viewedReportIds, setViewedReportIds] = useState(() => {
-    try {
-      const raw = localStorage.getItem('edd_viewed_report_ids');
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  // 3. 已读报告追踪（服务端数据库落库持久化 + 前端内存乐观即时更新）
+  const [localReadIds, setLocalReadIds] = useState([]);
 
-  const markReportAsRead = (reportId) => {
+  const markReportAsRead = async (reportId) => {
     if (!reportId) return;
-    setViewedReportIds(prev => {
-      const strId = String(reportId);
-      if (prev.includes(strId)) return prev;
-      const next = [...prev, strId];
-      try {
-        localStorage.setItem('edd_viewed_report_ids', JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
+    const strId = String(reportId);
+
+    // 1. 内存与列表状态乐观更新：即刻消除红点，无任何 UI 卡顿
+    setLocalReadIds(prev => (prev.includes(strId) ? prev : [...prev, strId]));
+    setReports(prev =>
+      prev.map(r =>
+        String(r.id) === strId || String(r.report_no) === strId || String(r.task_id) === strId
+          ? { ...r, is_read: true }
+          : r
+      )
+    );
+
+    // 2. 异步上报后端数据库落库，确保强刷浏览器缓存及跨设备状态完全同步
+    try {
+      await apiClient.post(`/v1/reports/${encodeURIComponent(strId)}/read`);
+    } catch (err) {
+      console.debug('异步上报报告已读状态异常 (静默容错):', err);
+    }
   };
 
   const isNewReport = (report) => {
     if (!report) return false;
+    // 若服务端数据库已记录为已读，则绝不显示“新”标识
+    if (report.is_read) return false;
     const rId = String(report.id || '');
     const rNo = String(report.report_no || '');
     const tId = String(report.task_id || '');
-    if (!rId && !rNo && !tId) return false;
-    return !viewedReportIds.includes(rId) && (!rNo || !viewedReportIds.includes(rNo)) && (!tId || !viewedReportIds.includes(tId));
+    if (
+      (rId && localReadIds.includes(rId)) ||
+      (rNo && localReadIds.includes(rNo)) ||
+      (tId && localReadIds.includes(tId))
+    ) {
+      return false;
+    }
+    return true;
   };
 
   const fetchTaskTotalOnly = async () => {
