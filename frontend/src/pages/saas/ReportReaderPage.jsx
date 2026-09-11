@@ -1259,7 +1259,7 @@ export default function ReportReaderPage() {
             }}
             placeholder={
               isQuotaExceeded 
-                ? '当前报告提问已达到 100 次上限' 
+                ? `当前报告提问已达到 ${MAX_USER_QUESTIONS} 次上限` 
                 : '输入风控、税务、工商或信贷等研判问题...'
             }
             rows={1}
@@ -1422,7 +1422,6 @@ export default function ReportReaderPage() {
             >
               <Sparkles className="w-3.5 h-3.5 text-[#0096DB]" />
               <span>AI 助手</span>
-              <span className="text-xs font-mono text-zinc-400">({userQuestionsCount}/100)</span>
             </button>
 
             {/* 📱 移动端专属：大纲目录抽屉展开按钮 */}
