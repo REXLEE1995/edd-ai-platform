@@ -131,9 +131,76 @@ export default function TaskCenterPage() {
     }
   }, [location.search]);
 
+  // 3. 已读报告追踪（新生成的报告展示红色 "新" 标识，点击查阅后记录已读并消除标识）
+  const [viewedReportIds, setViewedReportIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem('edd_viewed_report_ids');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const markReportAsRead = (reportId) => {
+    if (!reportId) return;
+    setViewedReportIds(prev => {
+      const strId = String(reportId);
+      if (prev.includes(strId)) return prev;
+      const next = [...prev, strId];
+      try {
+        localStorage.setItem('edd_viewed_report_ids', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const isNewReport = (report) => {
+    if (!report) return false;
+    const rId = String(report.id || '');
+    const rNo = String(report.report_no || '');
+    const tId = String(report.task_id || '');
+    if (!rId && !rNo && !tId) return false;
+    return !viewedReportIds.includes(rId) && (!rNo || !viewedReportIds.includes(rNo)) && (!tId || !viewedReportIds.includes(tId));
+  };
+
+  const fetchTaskTotalOnly = async () => {
+    try {
+      const res = await apiClient.get('/v1/tasks/list?exclude_completed=true&page=1&page_size=1');
+      const rawList = res?.items || (Array.isArray(res?.data) ? res.data : res?.data?.items) || [];
+      const total = typeof res?.total === 'number'
+        ? res.total
+        : (typeof res?.data?.total === 'number' ? res.data.total : rawList.length);
+      setTaskTotal(total);
+    } catch (err) {
+      console.debug('获取任务总数失败:', err);
+    }
+  };
+
+  const fetchReportTotalOnly = async () => {
+    try {
+      const res = await apiClient.get('/v1/reports/list?page=1&page_size=1');
+      const rawList = res?.items || (Array.isArray(res?.data) ? res.data : res?.data?.items) || [];
+      const total = typeof res?.total === 'number'
+        ? res.total
+        : (typeof res?.data?.total === 'number' ? res.data.total : rawList.length);
+      setReportTotal(total);
+    } catch (err) {
+      console.debug('获取报告总数失败:', err);
+    }
+  };
+
   const switchTab = (tabKey) => {
     setActiveTab(tabKey);
     navigate(`/app/tasks?tab=${tabKey}`, { replace: true });
+    if (tabKey === 'tasks') {
+      lastTaskReqKeyRef.current = '';
+      fetchTasks(taskPage, taskPageSize, false);
+      fetchReportTotalOnly();
+    } else if (tabKey === 'reports') {
+      lastReportReqKeyRef.current = '';
+      fetchReports(reportPage, reportPageSize, reportKeyword, false);
+      fetchTaskTotalOnly();
+    }
   };
 
   const remoteApiHost = (typeof window !== 'undefined' && window.APP_CONFIG?.API_BASE_URL)
@@ -460,11 +527,10 @@ export default function TaskCenterPage() {
   // 严格按当前活动 Tab 定向拉取与防重签名：
   // 1) 处于 reports Tab 时只查报告列表，杜绝向后端发送 tasks 接口；
   // 2) 处于 tasks Tab 时只查任务列表，杜绝向后端发送 reports 接口；
-  // 3) 相同参数签名在组件渲染或依赖变动时严格仅调用 1 次，绝不重复调用。
   const lastTaskReqKeyRef = useRef('');
   const lastReportReqKeyRef = useRef('');
 
-  // 1. 任务列表数据加载（严格限定 activeTab === 'tasks' 时单次拉取）
+  // 1. 任务列表数据加载（进入 tasks Tab 时拉取最新数据）
   useEffect(() => {
     if (authLoading || activeTab !== 'tasks') return;
     const token = localStorage.getItem('edd_user_token');
@@ -475,14 +541,11 @@ export default function TaskCenterPage() {
       return;
     }
 
-    const reqKey = `tasks_${user?.id || (token ? token.slice(-10) : 'guest')}_${taskPage}_${taskPageSize}`;
-    if (lastTaskReqKeyRef.current === reqKey) return;
-    lastTaskReqKeyRef.current = reqKey;
-
     fetchTasks(taskPage, taskPageSize);
+    fetchReportTotalOnly();
   }, [activeTab, taskPage, taskPageSize, user?.id, authLoading]);
 
-  // 2. 报告列表数据加载（严格限定 activeTab === 'reports' 时单次拉取）
+  // 2. 报告列表数据加载（进入 reports Tab 时拉取最新数据）
   useEffect(() => {
     if (authLoading || activeTab !== 'reports') return;
     const token = localStorage.getItem('edd_user_token');
@@ -493,60 +556,9 @@ export default function TaskCenterPage() {
       return;
     }
 
-    const reqKey = `reports_${user?.id || (token ? token.slice(-10) : 'guest')}_${reportPage}_${reportPageSize}_${reportRiskFilter}_${reportKeyword}`;
-    if (lastReportReqKeyRef.current === reqKey) return;
-    lastReportReqKeyRef.current = reqKey;
-
     fetchReports(reportPage, reportPageSize, reportKeyword);
-  }, [activeTab, reportPage, reportPageSize, reportRiskFilter, reportKeyword, user?.id, authLoading]);
-
-  // 3. 仅单次查询未激活 Tab 的总数（供顶部 Tab 徽标精准显示数量，严格仅查一次，绝不开启轮询刷新）
-  const taskCountQueriedRef = useRef(false);
-  const reportCountQueriedRef = useRef(false);
-
-  useEffect(() => {
-    if (authLoading || activeTab !== 'reports') return;
-    const token = localStorage.getItem('edd_user_token');
-    if (!user && !token) return;
-    if (taskCountQueriedRef.current) return;
-    taskCountQueriedRef.current = true;
-
-    const fetchTaskTotalOnly = async () => {
-      try {
-        const res = await apiClient.get('/v1/tasks/list?exclude_completed=true&page=1&page_size=1');
-        const rawList = res?.items || (Array.isArray(res?.data) ? res.data : res?.data?.items) || [];
-        const total = typeof res?.total === 'number'
-          ? res.total
-          : (typeof res?.data?.total === 'number' ? res.data.total : rawList.length);
-        setTaskTotal(total);
-      } catch (err) {
-        console.debug('获取任务总数失败:', err);
-      }
-    };
     fetchTaskTotalOnly();
-  }, [activeTab, user?.id, authLoading]);
-
-  useEffect(() => {
-    if (authLoading || activeTab !== 'tasks') return;
-    const token = localStorage.getItem('edd_user_token');
-    if (!user && !token) return;
-    if (reportCountQueriedRef.current) return;
-    reportCountQueriedRef.current = true;
-
-    const fetchReportTotalOnly = async () => {
-      try {
-        const res = await apiClient.get('/v1/reports/list?page=1&page_size=1');
-        const rawList = res?.items || (Array.isArray(res?.data) ? res.data : res?.data?.items) || [];
-        const total = typeof res?.total === 'number'
-          ? res.total
-          : (typeof res?.data?.total === 'number' ? res.data.total : rawList.length);
-        setReportTotal(total);
-      } catch (err) {
-        console.debug('获取报告总数失败:', err);
-      }
-    };
-    fetchReportTotalOnly();
-  }, [activeTab, user?.id, authLoading]);
+  }, [activeTab, reportPage, reportPageSize, reportRiskFilter, reportKeyword, user?.id, authLoading]);
 
   // 3. 监听全局用户登录/登出事件：登录时仅刷新当前活动 Tab，登出时清空数据
   useEffect(() => {
@@ -1171,6 +1183,7 @@ export default function TaskCenterPage() {
                               <Link
                                 to={`/app/reports/${task.report_id || progInfo.reportId}`}
                                 state={{ from: `${location.pathname}${location.search || '?tab=tasks'}` }}
+                                onClick={() => markReportAsRead(task.report_id || progInfo.reportId)}
                                 className="w-full sm:w-auto justify-center shadcn-button-primary bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 sm:py-1.5 px-3 flex items-center gap-1.5 shadow-xs font-semibold cursor-pointer"
                               >
                                 <Eye className="w-3.5 h-3.5" />
@@ -1585,15 +1598,21 @@ export default function TaskCenterPage() {
                   <div key={report.id} className="shadcn-card-hover p-4 sm:p-5 bg-white/90 backdrop-blur-xl space-y-3.5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all rounded-xl sm:rounded-2xl">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                       <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="text-base font-bold text-slate-950 hover:text-[#0096DB] transition-colors">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                          <h3 className="text-base font-bold text-slate-950 hover:text-[#0096DB] transition-colors flex items-center gap-2">
                             <Link 
                               to={`/app/reports/${report.id}`}
                               state={{ from: `${location.pathname}${location.search || '?tab=reports'}` }}
+                              onClick={() => markReportAsRead(report.id)}
                             >
                               {report.company_name}
                             </Link>
                           </h3>
+                          {isNewReport(report) && (
+                            <span className="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] sm:text-[11px] font-bold bg-rose-500 text-white rounded-md shadow-xs animate-pulse select-none" title="新生成的报告（点击查阅后标记已读）">
+                              新
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
                           <span>任务单号: <strong className="text-slate-800">{report.task_no || report.task_id || report.report_no}</strong></span>
@@ -1614,6 +1633,7 @@ export default function TaskCenterPage() {
                               download={`${report.company_name}_尽调报告.pdf`}
                               target="_blank"
                               rel="noreferrer"
+                              onClick={() => markReportAsRead(report.id)}
                               className="flex-1 sm:flex-initial shadcn-button-outline text-xs py-1.5 px-2.5 sm:px-3 flex items-center justify-center gap-1 shadow-xs hover:border-[#0096DB] hover:text-[#0096DB]"
                             >
                               <Download className="w-3.5 h-3.5 text-slate-600" />
@@ -1625,7 +1645,8 @@ export default function TaskCenterPage() {
                         <Link
                           to={`/app/reports/${report.id}`}
                           state={{ from: `${location.pathname}${location.search || '?tab=reports'}` }}
-                          className="w-full sm:w-auto shadcn-button-primary text-xs py-1.5 px-3.5 flex items-center justify-center gap-1.5 cursor-pointer"
+                          onClick={() => markReportAsRead(report.id)}
+                          className="w-full sm:w-auto shadcn-button-primary text-xs py-1.5 px-3.5 flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
                         >
                           <span>在线查阅</span>
                           <ArrowRight className="w-3.5 h-3.5" />
