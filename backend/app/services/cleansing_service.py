@@ -705,12 +705,12 @@ class OrderedReducer:
         )
 
 
-def assert_summary_entity_integrity(raw_text: str, max_chars: Optional[int] = None) -> str:
+def assert_summary_entity_integrity(raw_text: str) -> str:
     """
     实体完整性守门员 (Semantic Boundary Asserter)：
     - 治理大模型输出可能残留的省略号（...、……、等等、等。）、未闭合标点（，、；：-）与半句残缺
     - 自动清理 Markdown 装饰符与非法控制字符
-    - 若指定 max_chars，安全截断至完整语义边界，绝不残留半句，确保总字数严格 <= max_chars
+    - 严禁任何字符串硬截断，保障大模型风控研判语句的语义自然完整
     - 平滑规范收敛并闭环中文终结标点（。），确保流入持久层与前端的研判句子 100% 语法完整且无截断痕迹
     """
     if not raw_text or not isinstance(raw_text, str):
@@ -722,20 +722,7 @@ def assert_summary_entity_integrity(raw_text: str, max_chars: Optional[int] = No
     if not text:
         return ""
 
-    # 2. 如果指定了 max_chars 且超过长度，智能寻找最近的完整句子边界（。）
-    if max_chars and max_chars > 0 and len(text) > max_chars:
-        sub = text[:max_chars]
-        last_period_idx = sub.rfind("。")
-        if last_period_idx >= 20:  # 至少保留 20 字才有完整语义
-            text = text[:last_period_idx + 1]
-        else:
-            last_comma_idx = max(sub.rfind("；"), sub.rfind(";"), sub.rfind("，"), sub.rfind(","))
-            if last_comma_idx >= 20:
-                text = text[:last_comma_idx]
-            else:
-                text = sub[:max_chars - 1]
-
-    # 3. 循环修剪末尾的省略号、悬空连接词与非终结标点
+    # 2. 循环修剪末尾的省略号、悬空连接词与非终结标点
     pattern_trailing_ellipsis = r"(?:\.{3,}|…+|等等|等。?|等[，,；;:]?|略[。，,]?)$"
     pattern_trailing_dangling_punct = r"[,，、;；:：\-—–/\\]+$"
 
@@ -746,18 +733,9 @@ def assert_summary_entity_integrity(raw_text: str, max_chars: Optional[int] = No
     if not text:
         return ""
 
-    # 4. 终结符完整性闭环：若末尾无终结符（。！？!?），补全标准中文句号
+    # 3. 终结符完整性闭环：若末尾无终结符（。！？!?），补全标准中文句号
     if not re.search(r"[。！？!?]$", text):
         text += "。"
-
-    # 5. 再次安全检查：如果加上句号后微幅超出 max_chars，做最后安全收敛
-    if max_chars and max_chars > 0 and len(text) > max_chars:
-        text = text[:max_chars - 1]
-        for _ in range(3):
-            text = re.sub(pattern_trailing_ellipsis, "", text).strip()
-            text = re.sub(pattern_trailing_dangling_punct, "", text).strip()
-        if not re.search(r"[。！？!?]$", text):
-            text += "。"
 
     return text
 
@@ -1541,15 +1519,15 @@ class DataCleansingService:
         """
         【步骤 5】根据步骤 4 产生的 Markdown 知识库内容进行全景风控提炼，输出包含 enterprise_profile 与 risk_assessment 的 JSON 对象
         - 根据实际内容动态确定维度（按需生成，严禁强凑，总维度数量绝对不能超过 5 个）
-        - 用户画像 enterprise_profile 严格限制在 100 字以内
-        - 各个研判维度 risk_assessment 每个元素严格限制在 100 字以内
+        - 约定大模型输出字数限制在 200 字以内（画像及各维度条目）
+        - 超长自适应二次精炼闭环 (Two-Pass Refinement Loop)：初次输出若有单项 > 200 字，自动提交大模型进行 Pass 2 定向精炼；若二次精炼后仍 > 200 字则绝不生硬截断，直接采纳
         - 硬性负向约束：“严禁输出任何省略号（...）、省略符号或未完结短语；每个维度的结论必须是主谓宾完整、具有明确风控判断的独立语句，统一以中文句号（。）结尾”
-        - 通过 assert_summary_entity_integrity 实体完整性守门员平滑收敛、安全截断与闭环中文句号
+        - 通过 assert_summary_entity_integrity 实体完整性守门员平滑收敛与闭环中文句号（0 字符串硬截断）
         """
         context_slice = knowledge_base_md if knowledge_base_md else ""
 
         system_prompt = """# Role
-你是一位资深的企业风控专家与商业尽调分析师。请根据提供的企业尽调 Markdown 知识库全文事实，进行高度提炼，输出企业综合画像与核心风控研判要点，格式为合法 JSON。
+你是一位资深的企业风控专家与商业尽调分析师。请根据提供的企业尽调 Markdown 知识库全文事实，进行深度风控提炼，输出企业综合画像与核心研判要点，格式为合法 JSON。
 
 # Constraints（必须严格遵守）
 1. 真实客观：所有指标与研判结论必须 100% 严格基于提供的知识库事实，严禁凭空捏造。
@@ -1558,31 +1536,31 @@ class DataCleansingService:
    - 必须仅根据知识库中实际存在实质性数据、显著风控特征或核心异常的领域来动态提炼研判维度（如：【工商治理】、【涉税合规】、【司法风险】、【资产信贷】等）；
    - 若某领域在知识库中缺乏数据或无实质内容（如轻资产企业无生产能耗数据、企业无涉诉记录等），严禁强行凑数或输出无数据说明；
    - 研判维度总数量控制在 2 ~ 5 个以内（总数绝对不能超过 5 个维度）。
-4. 字数严格限制（硬性上限 100 字）：
-   - `enterprise_profile`（企业信用全景综合画像）：严格限制在 100 字以内（建议 60~90 字），高度凝练概括企业主体资质、存续状态、主营业务与信用基本盘。
-   - `risk_assessment`（各维度研判结论）：每个维度的内容严格限制在 100 字以内（建议 50~90 字），直击风控要害，只写核心事实与明确风控定性。
+4. 字数严格限制（约定在 200 字以内）：
+   - `enterprise_profile`（企业信用全景综合画像）：严格限制在 200 字以内（建议 100~180 字），高度凝练概括企业主体资质、存续状态、主营业务与信用基本盘。
+   - `risk_assessment`（各维度研判结论）：每个维度的内容严格限制在 200 字以内（建议 100~180 字），直击风控要害，只写核心事实与明确风控定性。
 5. 句式完整性与负向硬性约束（严格遵守）：
    - “严禁输出任何省略号（...、……）、省略符号（等、等等、略）或未完结短语”；
    - “每个维度的结论必须是主谓宾完整、具有明确风控判断的独立语句，统一以中文句号（。）结尾”。
 
 # Output Format (JSON 结构)
 {
-  "enterprise_profile": "企业信用全景综合画像（严格在100字以内）。客观精炼评价企业资质、存续状态、主营业务与信用基本盘，主谓宾完整，统一以中文句号（。）结尾。",
+  "enterprise_profile": "企业信用全景综合画像（严格在200字以内）。客观精炼评价企业资质、存续状态、主营业务与信用基本盘，主谓宾完整，统一以中文句号（。）结尾。",
   "risk_assessment": [
-    "【维度名称1】结合核心事实与明确风控定性（严格在100字以内），主谓宾完整，统一以中文句号（。）结尾。",
-    "【维度名称2】结合核心事实与明确风控定性（严格在100字以内），主谓宾完整，统一以中文句号（。）结尾。"
+    "【维度名称1】结合核心事实与明确风控定性（严格在200字以内），主谓宾完整，统一以中文句号（。）结尾。",
+    "【维度名称2】结合核心事实与明确风控定性（严格在200字以内），主谓宾完整，统一以中文句号（。）结尾。"
   ]
 }
-（注意：risk_assessment 仅包含 2~5 个实际有内容的维度，总数不超过 5 条，每条均以【维度名称】开头且字数在 100 字以内）"""
+（注意：risk_assessment 仅包含 2~5 个实际有内容的维度，总数不超过 5 条，每条均以【维度名称】开头且字数在 200 字以内）"""
 
         user_prompt = f"""目标企业：{company_name or '目标企业'} (统一社会信用代码: {credit_code or '待核验'})
 
 【企业尽调 Markdown 知识库各板块核心底稿】：
 {context_slice}
 
-请根据上述实际数据事实，提炼 2~5 个核心维度（各维度与画像均在 100 字以内），输出合法 JSON："""
+请根据上述实际数据事实，提炼 2~5 个核心维度（各维度与画像均在 200 字以内），输出合法 JSON："""
 
-        # 动态智能启发式生成（从知识库中正则抽取真实数据作为智能动态底料，严格控制在 100 字内）
+        # 动态智能启发式生成（从知识库中正则抽取真实数据作为智能动态底料，控制在 200 字内）
         def build_dynamic_heuristic() -> Dict[str, Any]:
             legal_p_match = re.search(r"法定代表人[：:\s]*([^\n,，;；|]+)", knowledge_base_md)
             capital_match = re.search(r"注册资本[：:\s]*([^\n,，;；|]+)", knowledge_base_md)
@@ -1597,16 +1575,15 @@ class DataCleansingService:
             dishonest = dishonest_match.group(1).strip() if dishonest_match else "无"
 
             profile = assert_summary_entity_integrity(
-                f"目标企业【{company_name or '目标企业'}】法定代表人为{legal_p}，注册资本{capital}。"
-                f"企业工商主体存续正常，涉税开票交易{sales}，整体信用与履约基本盘良好。",
-                max_chars=100
+                f"目标企业【{company_name or '目标企业'}】法定代表人为{legal_p}，注册资本规模为{capital}。"
+                f"经全息风控尽调核验，企业工商主体存续正常，涉税开票交易流水（{sales}）稳健，具备可持续经营与履约能力。"
             )
 
             assessments = [
-                assert_summary_entity_integrity(f"【工商与治理】主体注册资本到位良好（{capital}），法定代表人及高管履职正常，股权架构清晰稳定。", max_chars=100),
-                assert_summary_entity_integrity(f"【经营与涉税】纳税信用等级评定为 {tax_rating} 级，开票交易（{sales}）正常，近36个月纳税记录连续无异常欠税。", max_chars=100),
-                assert_summary_entity_integrity(f"【司法与合规】失信被执行人排查结果为{dishonest}，未见严重违法失信与重大行政执法处罚记录，合规基本盘良好。", max_chars=100),
-                assert_summary_entity_integrity(f"【信用与信贷】金融机构多头授信排查正常，无重大不良逾期记录，建议在标准化风控模型下予以授信准入支持。", max_chars=100)
+                assert_summary_entity_integrity(f"【工商与治理】主体注册资本到位良好（{capital}），法定代表人及高管履职正常合规，股权架构清晰稳定。"),
+                assert_summary_entity_integrity(f"【经营与涉税】纳税信用等级评定为 {tax_rating} 级，税票开票交易（{sales}）正常，近36个月纳税记录连续无异常欠税。"),
+                assert_summary_entity_integrity(f"【司法与合规】失信被执行人排查结果为{dishonest}，未见严重违法失信与重大行政执法处罚记录，合规基本盘良好。"),
+                assert_summary_entity_integrity(f"【信用与信贷】金融机构多头授信排查正常，无重大不良逾期记录，建议在标准化风控模型下予以授信准入支持。")
             ]
             return {
                 "enterprise_profile": profile,
@@ -1617,6 +1594,7 @@ class DataCleansingService:
 
         try:
             from app.services.ai_service import AIService
+            # ===== Pass 1: 初次全景风控提炼 =====
             ai_resp = await asyncio.wait_for(
                 AIService.chat_completion(
                     messages=[
@@ -1633,26 +1611,81 @@ class DataCleansingService:
                 clean_json = re.sub(r"^```\s*|\s*```$", "", clean_json.strip(), flags=re.MULTILINE)
                 clean_json = clean_json.strip()
 
-                # 提取首个有效 JSON 块
                 json_match = re.search(r"\{[\s\S]*\}", clean_json)
                 if json_match:
                     clean_json = json_match.group(0)
 
                 parsed = json.loads(clean_json)
                 if isinstance(parsed, dict) and "enterprise_profile" in parsed and "risk_assessment" in parsed:
-                    profile_raw = str(parsed.get("enterprise_profile", ""))
-                    profile = assert_summary_entity_integrity(profile_raw, max_chars=100)
-                    assessments = []
+                    profile_raw = str(parsed.get("enterprise_profile", "")).strip()
                     raw_risks = parsed.get("risk_assessment", [])
-                    if isinstance(raw_risks, list):
-                        # 总维度严格限制不能超过 5 个
-                        for item in raw_risks[:5]:
-                            clean_item = assert_summary_entity_integrity(str(item), max_chars=100)
-                            if clean_item:
-                                assessments.append(clean_item)
+                    risk_list = [str(item).strip() for item in raw_risks[:5] if str(item).strip()] if isinstance(raw_risks, list) else []
+
+                    # ===== 检查是否存在超过 200 字的条目 =====
+                    exceeded_items: Dict[str, str] = {}
+                    if len(profile_raw) > 200:
+                        exceeded_items["enterprise_profile"] = profile_raw
+                    for idx, item in enumerate(risk_list):
+                        if len(item) > 200:
+                            exceeded_items[f"risk_item_{idx}"] = item
+
+                    # ===== Pass 2: 若有条目超过 200 字，自动提交大模型进行定向二次精炼 =====
+                    if exceeded_items:
+                        logger.info(f"[DataCleansingService] 检测到 {len(exceeded_items)} 个总结条目字数超过 200 字，触发 Pass 2 二次精炼闭环...")
+                        refine_system_prompt = """# Role
+你是一位资深企业风控专家。请将用户提供的超出字数限制的风控研判内容进行针对性压缩精炼。
+
+# Constraints
+1. 字数限制：每条精炼后的内容必须严格控制在 200 字以内（建议 100~180 字）。
+2. 保持定性：保留原条目的核心事实数据、指标与明确风控判断，语言精炼有力，绝不丢失关键风控结论。
+3. 句式与负向约束：“严禁输出任何省略号（...、……）、省略符号（等、等等、略）或未完结短语；每条必须是主谓宾完整、具有明确风控判断的独立语句，统一以中文句号（。）结尾”。
+4. 输出格式：合法 JSON，保留原键名，值为精炼后的纯文字。"""
+
+                        refine_user_prompt = f"""待精炼压缩的风控条目如下：
+{json.dumps(exceeded_items, ensure_ascii=False, indent=2)}
+
+请输出精炼至 200 字以内的合法 JSON："""
+
+                        try:
+                            refine_resp = await asyncio.wait_for(
+                                AIService.chat_completion(
+                                    messages=[
+                                        {"role": "system", "content": refine_system_prompt},
+                                        {"role": "user", "content": refine_user_prompt}
+                                    ],
+                                    temperature=0.2
+                                ),
+                                timeout=30.0
+                            )
+                            if refine_resp:
+                                clean_refine_json = re.sub(r"^```json\s*|\s*```$", "", refine_resp.strip(), flags=re.MULTILINE)
+                                clean_refine_json = re.sub(r"^```\s*|\s*```$", "", clean_refine_json.strip(), flags=re.MULTILINE).strip()
+                                r_match = re.search(r"\{[\s\S]*\}", clean_refine_json)
+                                if r_match:
+                                    clean_refine_json = r_match.group(0)
+                                parsed_refine = json.loads(clean_refine_json)
+                                if isinstance(parsed_refine, dict):
+                                    if "enterprise_profile" in parsed_refine and parsed_refine["enterprise_profile"]:
+                                        profile_raw = str(parsed_refine["enterprise_profile"]).strip()
+                                    for idx in range(len(risk_list)):
+                                        k = f"risk_item_{idx}"
+                                        if k in parsed_refine and parsed_refine[k]:
+                                            risk_list[idx] = str(parsed_refine[k]).strip()
+                                    logger.info("[DataCleansingService] Pass 2 二次精炼完成，已更新超长条目。")
+                        except Exception as ref_err:
+                            logger.warning(f"[DataCleansingService] Pass 2 二次精炼异常 ({ref_err})，保留 Pass 1 完整语义。")
+
+                    # ===== 实体完整性守门员平滑收敛 (无硬截断，第二次超长直接采纳) =====
+                    final_profile = assert_summary_entity_integrity(profile_raw) if profile_raw else fallback_data["enterprise_profile"]
+                    final_assessments = [
+                        assert_summary_entity_integrity(item) for item in risk_list if item
+                    ]
+                    if not final_assessments:
+                        final_assessments = fallback_data["risk_assessment"]
+
                     return {
-                        "enterprise_profile": profile if profile else fallback_data["enterprise_profile"],
-                        "risk_assessment": assessments if assessments else fallback_data["risk_assessment"]
+                        "enterprise_profile": final_profile,
+                        "risk_assessment": final_assessments[:5]
                     }
         except Exception as e:
             logger.warning(f"[DataCleansingService] 【步骤 5·AI 总结解析】大模型提取提示 ({e})，使用高保真动态事实数据。")
