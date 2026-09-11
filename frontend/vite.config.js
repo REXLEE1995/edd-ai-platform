@@ -39,6 +39,10 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiTarget,
           changeOrigin: true
+        },
+        '/s/': {
+          target: apiTarget,
+          changeOrigin: true
         }
       }
     },
@@ -47,6 +51,10 @@ export default defineConfig(({ mode }) => {
       host: true,
       proxy: {
         '/api': {
+          target: apiTarget,
+          changeOrigin: true
+        },
+        '/s/': {
           target: apiTarget,
           changeOrigin: true
         }

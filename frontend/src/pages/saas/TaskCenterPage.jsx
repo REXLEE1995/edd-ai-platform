@@ -48,7 +48,7 @@ const DD_STEPS = [
   {
     step: 2,
     title: '数据获取',
-    status_desc: '法人授权凭证核验成功！正在跨源归集企业工商、涉税及风险底册...',
+    status_desc: '法人授权核验通过！正在自适应归集企业涉税及风控底册（通常耗时 1~10 分钟，可离开页面）...',
     percentage: 50,
     icon: Download,
     emoji: '📥'
@@ -1247,11 +1247,13 @@ export default function TaskCenterPage() {
                                       ? 'bg-rose-100/80 text-rose-700 border-rose-200'
                                       : isWaitingAuth
                                       ? 'bg-amber-100/80 text-amber-800 border-amber-200'
+                                      : task.status === 'pulling_data'
+                                      ? 'bg-sky-100/90 text-[#0070a4] border-sky-300 animate-pulse'
                                       : progInfo.percentage >= 100
                                       ? 'bg-emerald-100/80 text-emerald-700 border-emerald-200'
                                       : 'bg-sky-100/80 text-[#0070a4] border-sky-200'
                                   }`}>
-                                    {isFailed ? '异常中断' : isWaitingAuth ? '等待法人实名授权' : progInfo.percentage >= 100 ? '已完成' : '实时执行中'}
+                                    {isFailed ? '异常中断' : isWaitingAuth ? '等待法人实名授权' : task.status === 'pulling_data' ? '数据归集中 (预计1~10分钟)' : progInfo.percentage >= 100 ? '已完成' : '实时执行中'}
                                   </span>
                                 </div>
                                 <p className="text-[11.5px] sm:text-xs text-slate-600 font-normal leading-relaxed break-words">
@@ -1704,7 +1706,7 @@ export default function TaskCenterPage() {
         </div>
       )}
 
-      {/* 金税授权弹窗 */}
+      {/* 官方系统授权弹窗 */}
       <Modal
         open={!!selectedTaskForAuth}
         onCancel={() => setSelectedTaskForAuth(null)}

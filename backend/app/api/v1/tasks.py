@@ -39,16 +39,19 @@ def sanitize_thinking_logs(logs: Optional[list]) -> list:
     
     clean_logs = []
     replacements = [
-        (r"【微风企·金税中台】", "【金税涉税数据中台】"),
-        (r"【微风企·金税平台】", "【金税涉税数据中台】"),
-        (r"微风企·金税中台", "金税涉税数据中台"),
-        (r"微风企·金税平台", "金税涉税数据中台"),
+        (r"【微风企·金税中台】", "【官方涉税数据中台】"),
+        (r"【微风企·金税平台】", "【官方涉税数据中台】"),
+        (r"微风企·金税中台", "官方涉税数据中台"),
+        (r"微风企·金税平台", "官方涉税数据中台"),
         (r"微风企专属授权链接", "专属实名数据授权通道"),
         (r"微风企企业法人实名授权", "企业法定代表人实名数据授权"),
         (r"微风企贷前报告", "企业尽调分析报告"),
-        (r"微风企网关", "政企金税通道"),
-        (r"微风企端", "权威金税端"),
-        (r"微风企", "金税系统"),
+        (r"微风企网关", "官方数据通道"),
+        (r"微风企端", "官方系统端"),
+        (r"微风企", "官方系统"),
+        (r"金税系统", "官方系统"),
+        (r"金税中台", "官方涉税数据中台"),
+        (r"金税平台", "官方涉税数据中台"),
         (r"【New-API 智能体网关】", "【AI 深度研判引擎】"),
         (r"New-API 智能体网关", "AI 深度研判引擎"),
         (r"New-API", "AI 深度研判引擎"),
@@ -155,7 +158,7 @@ async def create_xyzp_task(
         credit_code=req.credit_code,
         legal_person=req.legal_person,
         scene=req.scene or "bank_credit",
-        dimensions=req.dimensions or ['工商股权穿透', '经营司法合规', '金税36月申报矩阵', '发票流水与三费真实性', '供应链客商对标', '财报8大动态预警'],
+        dimensions=req.dimensions or ['工商股权穿透', '经营司法合规', '官方36月申报矩阵', '发票流水与三费真实性', '供应链客商对标', '财报8大动态预警'],
         auth_mode="weifengqi_qr",
         status="waiting_auth",
         auth_status="pending",
@@ -846,6 +849,124 @@ async def get_task_admin_progress(
         "data": data
     }
 
+class TaskRetryRequest(BaseModel):
+    step: Optional[int] = None
+
+@router.post("/{task_id}/retry")
+@router.post("/{task_id}/retry-analysis")
+async def retry_xyzp_task(
+    task_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    req_body: Optional[TaskRetryRequest] = None,
+    actor = Depends(get_current_admin_or_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    【用户端 / 管理后台】统一尽调任务智能断点重试入口 (POST /api/v1/tasks/{task_id}/retry & /retry-analysis)
+    
+    重试策略：
+    - 若指定了 step (1~4)，按指定 step 恢复执行；
+    - 若未指定 step：
+      1. 若状态为 waiting_auth 或 auth_failed，重新生成专属实名授权链接与二维码 (Step 1)；
+      2. 若没有 MinIO 清洗后 PDF 或 Step 2 失败，从 Step 2 (数据获取与纯代码清洗) 重新下载并清洗；
+      3. 若 MinIO 中已有清洗后 PDF 但 AI 衍生资产缺失，从 Step 3 (AI 研判) 重新调用大模型解析清洗后 PDF，无需重新下载；
+      4. 若 MinIO 5 大文件齐全但报告生成失败，从 Step 4 重新组装报告。
+    """
+    if isinstance(actor, AdminUser):
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id))
+    else:
+        result = await db.execute(select(XYZPTask).where(XYZPTask.id == task_id, XYZPTask.user_id == actor.id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    target_step = req_body.step if req_body and req_body.step in [1, 2, 3, 4] else None
+
+    # Step 1 智能推断或显式指定
+    if target_step == 1 or (target_step is None and (task.status in ["waiting_auth", "auth_failed"] or task.auth_status != "authorized")):
+        # 重新生成授权码
+        wfq_provider = get_weifengqi_provider()
+        public_base_url = get_public_base_url(request)
+        encoded_company = urllib.parse.quote(task.company_name)
+        encoded_credit = urllib.parse.quote(task.credit_code)
+        callback_url = f"{public_base_url}/api/v1/tasks/callback?orderNo={task.id}&task_id={task.id}&credit_code={encoded_credit}&company_name={encoded_company}"
+
+        auth_res = await wfq_provider.get_auth_link(
+            company_name=task.company_name,
+            taxpayer_id=task.credit_code,
+            cb_url=callback_url,
+            order_no=task.id,
+            db=db
+        )
+        task.status = "waiting_auth"
+        task.auth_status = "pending"
+        task.auth_link = auth_res.get("auth_url") or task.auth_link
+        task.wfq_order_no = auth_res.get("order_no") or task.wfq_order_no
+        task.error_message = None
+
+        TaskService.append_task_log(task, "【重新授权】已重新生成专属实名数据授权通道，等待企业法定代表人扫码授权。")
+        await db.commit()
+
+        return {
+            "code": 0,
+            "message": "已重新生成法人授权链接与二维码",
+            "data": {
+                "task_id": task.id,
+                "step": 1,
+                "step_title": "授权信息",
+                "status": task.status,
+                "auth_status": task.auth_status,
+                "auth_qrcode_url": task.short_url or task.auth_qrcode_url,
+                "auth_link": task.auth_link
+            }
+        }
+
+    # Step 2~4 智能推断
+    if target_step is None:
+        health = await FileStorageService.check_task_files_health(db, task.id)
+        if not health.get("has_pdf"):
+            target_step = 2
+        elif not health.get("has_ai_artifacts"):
+            target_step = 3
+        else:
+            target_step = 4
+
+    step_title_map = {
+        2: "数据获取 (纯代码清洗)",
+        3: "AI 研判 (知识库与画像生成)",
+        4: "报告生成 (文件核验与资产落库)"
+    }
+    step_title = step_title_map.get(target_step, "AI 研判")
+
+    task.error_message = None
+    if target_step == 2:
+        task.status = "pulling_data"
+    elif target_step == 3:
+        task.status = "ai_analyzing"
+    elif target_step == 4:
+        task.status = "generating_report"
+
+    TaskService.append_task_log(task, f"【断点重试】用户已触发重试操作，将从【{step_title}】节点恢复执行风控流水线...")
+    await db.commit()
+
+    task_user_res = await db.execute(select(User).where(User.id == task.user_id))
+    task_user = task_user_res.scalar_one_or_none()
+    is_locked = (task_user.balance_quota <= 0) if task_user else False
+
+    background_tasks.add_task(TaskService.run_ai_xyzp_task_async, task.id, is_locked, target_step)
+
+    return {
+        "code": 0,
+        "message": f"任务已重新启动，将从【{step_title}】节点继续执行！",
+        "data": {
+            "task_id": task.id,
+            "step": target_step,
+            "step_title": step_title,
+            "status": task.status
+        }
+    }
+
 @router.post("/{task_id}/reauth")
 async def reauth_task(
     task_id: str,
@@ -866,20 +987,22 @@ async def reauth_task(
 
     wfq_provider = get_weifengqi_provider()
     public_base_url = get_public_base_url(request)
-    callback_url = f"{public_base_url}/api/v1/tasks/callback"
+    encoded_company = urllib.parse.quote(task.company_name)
+    encoded_credit = urllib.parse.quote(task.credit_code)
+    callback_url = f"{public_base_url}/api/v1/tasks/callback?orderNo={task.id}&task_id={task.id}&credit_code={encoded_credit}&company_name={encoded_company}"
 
-    wfq_res = await wfq_provider.apply_preloan_auth(
+    auth_res = await wfq_provider.get_auth_link(
         company_name=task.company_name,
-        credit_code=task.credit_code,
-        legal_person=task.legal_person or "",
-        callback_url=callback_url
+        taxpayer_id=task.credit_code,
+        cb_url=callback_url,
+        order_no=task.id,
+        db=db
     )
 
     task.status = "waiting_auth"
     task.auth_status = "pending"
-    task.auth_qrcode_url = wfq_res.get("qrCode") or wfq_res.get("auth_qrcode_url")
-    task.auth_link = wfq_res.get("authUrl") or wfq_res.get("auth_link")
-    task.wfq_order_no = wfq_res.get("orderNo") or wfq_res.get("wfq_order_no")
+    task.auth_link = auth_res.get("auth_url") or task.auth_link
+    task.wfq_order_no = auth_res.get("order_no") or task.wfq_order_no
     task.thinking_logs = task.thinking_logs or []
     task.thinking_logs.append({
         "time": datetime.now().strftime("%H:%M:%S"),
@@ -894,7 +1017,7 @@ async def reauth_task(
             "task_id": task.id,
             "status": task.status,
             "auth_status": task.auth_status,
-            "auth_qrcode_url": task.auth_qrcode_url,
+            "auth_qrcode_url": task.short_url or task.auth_qrcode_url,
             "auth_link": task.auth_link
         }
     }
@@ -1041,6 +1164,28 @@ async def get_task_content_text(
         raw_bytes = minio_mgr.get_object_bytes(txt_file.file_path)
         return Response(content=raw_bytes, media_type="text/plain; charset=utf-8")
 
+    # 路径推导兜底：若 DB 记录丢失但 MinIO 中实际存有文件
+    other_files = await db.execute(
+        select(TaskFile).where(TaskFile.task_id == task_id)
+    )
+    for of in other_files.scalars().all():
+        if of.file_path:
+            task_dir = "/".join(of.file_path.split("/")[:-1])
+            for candidate_name in ["content_text.txt", "pdf_content.txt", "full_text_content.txt"]:
+                candidate = f"{task_dir}/{candidate_name}"
+                if minio_mgr.object_exists(candidate):
+                    raw_bytes = minio_mgr.get_object_bytes(candidate)
+                    return Response(content=raw_bytes, media_type="text/plain; charset=utf-8")
+
+    # 兜底降级查报告中的已存信息
+    report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
+    report = report_res.scalar_one_or_none()
+    if report:
+        txt = f"【企业尽调核心信息】\n企业名称：{report.company_name}\n统一社会信用代码：{report.credit_code}\n法定代表人：{report.legal_person or '未记载'}\n风控评级：{report.risk_level}\n综合评分：{report.score}\n建议授信：{report.suggested_quota_min}~{report.suggested_quota_max}万元\n"
+        if report.summary_ai_comment:
+            txt += f"\n【AI风控研判综述】\n{report.summary_ai_comment}\n"
+        return Response(content=txt, media_type="text/plain; charset=utf-8")
+
     raise HTTPException(status_code=404, detail="未找到该任务的解析文本存证文件")
 
 @router.get("/{task_id}/knowledge-base")
@@ -1078,10 +1223,22 @@ async def get_task_knowledge_base(
     for of in other_files.scalars().all():
         if of.file_path:
             task_dir = "/".join(of.file_path.split("/")[:-1])
-            candidate = f"{task_dir}/knowledge_base.md"
-            if minio_mgr.object_exists(candidate):
-                raw_bytes = minio_mgr.get_object_bytes(candidate)
-                return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
+            for candidate_name in ["knowledge_base.md", "pdf_knowledge.md", "knowledge.md"]:
+                candidate = f"{task_dir}/{candidate_name}"
+                if minio_mgr.object_exists(candidate):
+                    raw_bytes = minio_mgr.get_object_bytes(candidate)
+                    return Response(content=raw_bytes, media_type="text/markdown; charset=utf-8")
+
+    # 兜底降级查报告中的已存知识库/Markdown数据
+    report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
+    report = report_res.scalar_one_or_none()
+    if report:
+        kb_content = ""
+        if isinstance(report.content_json, dict):
+            kb_content = report.content_json.get("markdown_knowledge_base") or report.content_json.get("knowledge_base_md") or ""
+        if not kb_content:
+            kb_content = f"# {report.company_name} 尽调报告知识库\n\n- 统一社会信用代码: {report.credit_code}\n- 法定代表人: {report.legal_person or '未记载'}\n- 风险评级: {report.risk_level}\n- 综合评分: {report.score}\n- 建议授信: {report.suggested_quota_min}~{report.suggested_quota_max} 万元\n\n## AI研判综述\n{report.summary_ai_comment or '暂无'}\n"
+        return Response(content=kb_content, media_type="text/markdown; charset=utf-8")
 
     raise HTTPException(status_code=404, detail="未找到该任务的 AI Markdown 知识库存证文件")
 
@@ -1122,18 +1279,50 @@ async def get_task_summary(
         except Exception:
             return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
 
-    # 兜底降级查报告
+    # 路径推导兜底：若 DB 记录丢失但 MinIO 中实际存有文件
+    other_files = await db.execute(
+        select(TaskFile).where(TaskFile.task_id == task_id)
+    )
+    for of in other_files.scalars().all():
+        if of.file_path:
+            task_dir = "/".join(of.file_path.split("/")[:-1])
+            for candidate_name in ["summary.json", "pdf_summary.json"]:
+                candidate = f"{task_dir}/{candidate_name}"
+                if minio_mgr.object_exists(candidate):
+                    raw_bytes = minio_mgr.get_object_bytes(candidate)
+                    try:
+                        summary_data = json.loads(raw_bytes.decode("utf-8"))
+                        return {
+                            "code": 0,
+                            "message": "success",
+                            "data": summary_data
+                        }
+                    except Exception:
+                        return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
+
+    # 兜底降级查报告中的已存研判数据
     report_res = await db.execute(select(XYZPReport).where(XYZPReport.task_id == task_id))
     report = report_res.scalar_one_or_none()
-    if report and report.overall_ai_summary:
-        ov = report.overall_ai_summary
-        return {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "enterprise_profile": ov.get("summary", ""),
-                "risk_assessment": [kp for kp in ov.get("key_points", [])]
+    if report:
+        ov = report.content_json.get("overall_ai_summary") if (report.content_json and isinstance(report.content_json, dict)) else None
+        if ov and isinstance(ov, dict):
+            return {
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "enterprise_profile": ov.get("summary", "") or ov.get("enterprise_profile", ""),
+                    "risk_assessment": [kp for kp in (ov.get("key_points") or ov.get("risk_assessment") or [])]
+                }
             }
-        }
+        if report.summary_ai_comment:
+            return {
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "enterprise_profile": report.summary_ai_comment,
+                    "risk_assessment": []
+                }
+            }
 
     raise HTTPException(status_code=404, detail="未找到该任务的 AI 总结存证文件")
+

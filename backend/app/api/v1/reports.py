@@ -35,7 +35,22 @@ async def get_my_reports(
     - 接口数据层面进行物理分页，返回 total, page, page_size, total_pages
     """
     query = (
-        select(XYZPReport, XYZPTask.task_no)
+        select(
+            XYZPReport.id,
+            XYZPReport.report_no,
+            XYZPReport.task_id,
+            XYZPReport.company_name,
+            XYZPReport.credit_code,
+            XYZPReport.legal_person,
+            XYZPReport.risk_level,
+            XYZPReport.score,
+            XYZPReport.suggested_quota_min,
+            XYZPReport.suggested_quota_max,
+            XYZPReport.summary_ai_comment,
+            XYZPReport.content_json,
+            XYZPReport.created_at,
+            XYZPTask.task_no
+        )
         .outerjoin(XYZPTask, XYZPReport.task_id == XYZPTask.id)
         .where(XYZPReport.user_id == user.id)
         .order_by(desc(XYZPReport.created_at))
@@ -55,10 +70,23 @@ async def get_my_reports(
     rows = result.all()
     
     data = []
-    for r, t_no in rows:
+    for r in rows:
         # 输出标准 Asia/Shanghai (UTC+8) ISO 8601 格式字符串
         report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
-        formatted_task_no = t_no or (f"TSK{r.created_at.strftime('%Y%m%d%H%M%S')}{r.id[-4:].upper()}" if r.created_at else f"TSK2026083115816{r.id[-4:].upper()}")
+        formatted_task_no = r.task_no or (f"TSK{r.created_at.strftime('%Y%m%d%H%M%S')}{r.id[-4:].upper()}" if r.created_at else f"TSK2026083115816{r.id[-4:].upper()}")
+
+        content = r.content_json if isinstance(r.content_json, dict) else {}
+        ai_summary = content.get("ai_summary_json") or content.get("overall_ai_summary") or {}
+        enterprise_profile = ai_summary.get("enterprise_profile") or ai_summary.get("summary") or ""
+        risk_assessment = ai_summary.get("risk_assessment") or ai_summary.get("key_points") or []
+
+        # 确保 summary_ai_comment 严格与 summary.json 对应
+        formatted_comment = r.summary_ai_comment or ""
+        if not formatted_comment and enterprise_profile:
+            formatted_comment = f"### 企业信用全景综合画像\n{enterprise_profile}\n"
+            if risk_assessment:
+                formatted_comment += f"\n### 全景深度研判要点与风控审查结论\n" + "\n".join([f"- {pt}" for pt in risk_assessment])
+
         data.append({
             "id": r.id,
             "report_no": r.report_no,
@@ -71,10 +99,14 @@ async def get_my_reports(
             "score": r.score,
             "suggested_quota_min": r.suggested_quota_min,
             "suggested_quota_max": r.suggested_quota_max,
-            "summary_ai_comment": r.summary_ai_comment,
+            "summary_ai_comment": formatted_comment,
+            "ai_summary_json": {
+                "enterprise_profile": enterprise_profile,
+                "risk_assessment": risk_assessment
+            },
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
-            "is_locked": bool(r.content_json.get("is_locked", False) if r.content_json else False),
-            "is_public_only": bool(r.content_json.get("is_public_only", False) if r.content_json else False),
+            "is_locked": False,
+            "is_public_only": False,
             "created_at": report_created_at,
             "is_expired": False
         })
@@ -121,6 +153,17 @@ async def get_report_detail(
         raise HTTPException(status_code=404, detail="未查询到该尽调报告资产")
     
     report_created_at = format_shanghai_iso(r.created_at) if r.created_at else ""
+    content = r.content_json or {}
+    ai_summary = content.get("ai_summary_json") or content.get("overall_ai_summary") or {}
+    enterprise_profile = ai_summary.get("enterprise_profile") or ai_summary.get("summary") or ""
+    risk_assessment = ai_summary.get("risk_assessment") or ai_summary.get("key_points") or []
+
+    formatted_comment = r.summary_ai_comment or ""
+    if not formatted_comment and enterprise_profile:
+        formatted_comment = f"### 企业信用全景综合画像\n{enterprise_profile}\n"
+        if risk_assessment:
+            formatted_comment += f"\n### 全景深度研判要点与风控审查结论\n" + "\n".join([f"- {pt}" for pt in risk_assessment])
+
     return {
         "code": 0,
         "data": {
@@ -134,9 +177,13 @@ async def get_report_detail(
             "score": r.score,
             "suggested_quota_min": r.suggested_quota_min,
             "suggested_quota_max": r.suggested_quota_max,
-            "summary_ai_comment": r.summary_ai_comment,
+            "summary_ai_comment": formatted_comment,
+            "ai_summary_json": {
+                "enterprise_profile": enterprise_profile,
+                "risk_assessment": risk_assessment
+            },
             "pdf_url": f"/api/v1/reports/{r.id}/pdf",
-            "content": r.content_json or {},
+            "content": content,
             "raw_sources": r.raw_sources_json or {},
             "created_at": report_created_at,
             "is_expired": False
@@ -249,74 +296,34 @@ async def get_report_pdf_file(
                 await db.commit()
                 target_object_key = migrated_key
 
-    # 2. 兜底策略：检查或自动上传模版样本 PDF 至 MinIO
-    if not target_object_key:
-        template_key = "templates/sample_report.pdf"
-        if not minio_mgr.object_exists(template_key):
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-            candidates = [
-                os.path.join(base_dir, "frontend", "public", "reports", "hangzhou_preloan.pdf"),
-                os.path.join(base_dir, "wfqmockserver", "贷前报告样例-享宇智评版.pdf"),
-                os.path.join(base_dir, "frontend", "public", "sample_report.pdf"),
-            ]
-            for c_path in candidates:
-                if os.path.exists(c_path):
-                    try:
-                        minio_mgr.upload_file(c_path, template_key)
-                        target_object_key = template_key
-                        break
-                    except Exception:
-                        pass
-        else:
-            target_object_key = template_key
+    # 2. 若 MinIO 中未查到真实报告 PDF 资产，严格抛出 404
+    if not target_object_key or not minio_mgr.object_exists(target_object_key):
+        raise HTTPException(status_code=404, detail="该尽调报告原始 PDF 资产尚未生成就绪或已被归档")
 
-    # 3. 从 MinIO 提取对象流并通过 StreamingResponse 流式直出
-    if target_object_key and minio_mgr.object_exists(target_object_key):
-        minio_stream = minio_mgr.get_object_stream(target_object_key)
-        encoded_filename = urllib.parse.quote(display_filename)
+    # 3. 从 MinIO 提取真实对象流并通过 StreamingResponse 流式直出
+    minio_stream = minio_mgr.get_object_stream(target_object_key)
+    encoded_filename = urllib.parse.quote(display_filename)
+    ascii_filename = f"report_{report_id}.pdf"
 
-        def iter_minio_stream():
-            try:
-                for chunk in minio_stream.stream(32 * 1024):
-                    yield chunk
-            finally:
-                minio_stream.close()
-                minio_stream.release_conn()
+    def iter_minio_stream():
+        try:
+            for chunk in minio_stream.stream(32 * 1024):
+                yield chunk
+        finally:
+            minio_stream.close()
+            minio_stream.release_conn()
 
-        return StreamingResponse(
-            iter_minio_stream(),
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"inline; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}",
-                "Access-Control-Allow-Origin": "*",
-                "X-Storage-Engine": "MinIO",
-                "X-MinIO-Bucket": minio_mgr.default_bucket,
-                "X-MinIO-Object": urllib.parse.quote(target_object_key)
-            }
-        )
-
-    # 4. 容错兜底：若 MinIO 不可用或未命中，检测本地工程预置 PDF 样本直接响应
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    candidates = [
-        os.path.join(base_dir, "贷前报告样例-享宇智评版.pdf"),
-        os.path.join(base_dir, "wfqmockserver", "贷前报告样例-享宇智评版.pdf"),
-        os.path.join(base_dir, "frontend", "public", "reports", "hangzhou_preloan.pdf"),
-        os.path.join(base_dir, "frontend", "public", "sample_report.pdf"),
-    ]
-    for c_path in candidates:
-        if os.path.exists(c_path):
-            encoded_filename = urllib.parse.quote(display_filename)
-            return FileResponse(
-                path=c_path,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"inline; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}",
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Storage-Engine": "Local-Fallback"
-                }
-            )
-
-    raise HTTPException(status_code=404, detail="未检索到报告 PDF 存证文件")
+    return StreamingResponse(
+        iter_minio_stream(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}",
+            "Access-Control-Allow-Origin": "*",
+            "X-Storage-Engine": "MinIO",
+            "X-MinIO-Bucket": minio_mgr.default_bucket,
+            "X-Storage-File-Key": urllib.parse.quote(target_object_key),
+        }
+    )
 
 @router.post("/ai/chat")
 async def ai_chat_with_report(
@@ -534,16 +541,24 @@ async def get_report_summary_from_minio(
             return Response(content=raw_bytes, media_type="application/json; charset=utf-8")
 
     # 兜底降级查报告中的已存研判数据
-    ov = r.content_json.get("overall_ai_summary") if (r and r.content_json) else None
-    if ov:
-        return {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "enterprise_profile": ov.get("summary", ""),
-                "risk_assessment": [kp for kp in ov.get("key_points", [])]
+    if r and r.content_json:
+        sum_json = r.content_json.get("ai_summary_json")
+        if sum_json and isinstance(sum_json, dict):
+            return {
+                "code": 0,
+                "message": "success",
+                "data": sum_json
             }
-        }
+        ov = r.content_json.get("overall_ai_summary")
+        if ov and isinstance(ov, dict):
+            return {
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "enterprise_profile": ov.get("summary", ""),
+                    "risk_assessment": [kp for kp in ov.get("key_points", [])]
+                }
+            }
 
     raise HTTPException(status_code=404, detail="未找到该报告的 AI 总结存证文件")
 

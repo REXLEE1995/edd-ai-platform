@@ -388,8 +388,8 @@ export default function ReportReaderPage() {
     }
   }, [isAiDrawerOpen, aiViewMode]);
 
-  // 100 次全局提问额度管理
-  const MAX_USER_QUESTIONS = 100;
+  // 50 次全局提问额度管理
+  const MAX_USER_QUESTIONS = 50;
   const userQuestionsCount = useMemo(() => {
     return chatMessages.filter(m => m.role === 'user').length;
   }, [chatMessages]);
@@ -429,10 +429,12 @@ export default function ReportReaderPage() {
     }
   };
 
-  // 预设快捷追问 Prompts (去除 emoji icon，保持视觉纯粹简洁)
+  // 预设快捷追问 Prompts (覆盖企业实调、专业名词概念、双轨联动与审贷风控)
   const QUICK_PROMPTS = [
     { label: '涉税合规穿透', prompt: '请详细核查该企业近 36 个月的增值税与所得税申报是否存在异常波动或未申报？' },
     { label: '营收与偿债测算', prompt: '请基于该企业的开票规模和毛利率，测算其最大负债承载力与还款保障倍数。' },
+    { label: '实缴到位率解读', prompt: '什么是实缴到位率？在商业风控中有何意义？本企业的实缴出资情况表现如何？' },
+    { label: '纳税信用等级释义', prompt: '纳税信用 A 级和 M 级有什么区别？本企业的纳税信用评级与风控表现如何？' },
     { label: '生成审贷专审意见', prompt: '请以银行高级信贷审批官的口吻，输出一份 300 字的标准审贷专审结论与风控建议。' },
     { label: '司法涉诉排查', prompt: '排查该企业及其实际控制人是否存在被执行、限制高消费或重大行政处罚？' }
   ];
@@ -448,9 +450,9 @@ export default function ReportReaderPage() {
   }) => {
     if (!content || isAiThinking) return;
 
-    // 校验 100 次提问配额
+    // 校验 50 次提问配额
     if (userQuestionsCount >= MAX_USER_QUESTIONS) {
-      message.warning('当前报告提问次数已达到 100 次上限，无法继续发起提问');
+      message.warning('当前报告提问次数已达到 50 次上限，无法继续发起提问');
       return;
     }
 
@@ -622,7 +624,7 @@ export default function ReportReaderPage() {
     if (!query || isAiThinking) return;
 
     if (userQuestionsCount >= MAX_USER_QUESTIONS) {
-      message.warning('当前报告提问次数已达到 100 次上限，无法继续发起提问');
+      message.warning('当前报告提问次数已达到 50 次上限，无法继续发起提问');
       return;
     }
 
@@ -1283,7 +1285,7 @@ export default function ReportReaderPage() {
         <div className="flex items-center justify-between text-[11px] sm:text-xs text-slate-500 px-1 pt-0.5 font-medium">
           <span>基于尽调报告原件实时多维解析</span>
           <span className="font-mono">
-            剩余提问: <strong className={remainingQuestions <= 10 ? 'text-amber-600 font-bold' : 'text-slate-800 font-bold'}>{remainingQuestions}</strong>/100 次
+            剩余提问: <strong className={remainingQuestions <= 5 ? 'text-amber-600 font-bold' : 'text-slate-800 font-bold'}>{remainingQuestions}</strong>/{MAX_USER_QUESTIONS} 次
           </span>
         </div>
       </div>

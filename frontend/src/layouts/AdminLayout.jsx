@@ -78,7 +78,7 @@ const NAV_ITEMS = [
         label: '短信网关', 
         icon: MessageSquare, 
         badge: '外发',
-        desc: '享畅通短信商户号、签名与模版' 
+        desc: '短信商户账号、签名与外发设置' 
       },
     ]
   }

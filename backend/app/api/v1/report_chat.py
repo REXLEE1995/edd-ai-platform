@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 from app.core.database import get_db, AsyncSessionLocal
 from app.models.user import User
@@ -74,15 +74,11 @@ async def _extract_report_kb_context(
             parts.append(f"【AI风控总括研判】：\n{report.summary_ai_comment}")
 
         if md_content:
-            # 目录定向模式下针对性高亮该章节
-            if catalog_name and catalog_name in md_content:
-                parts.append(f"【PDF 报告重点章节底稿内容】：\n{md_content}")
-            else:
-                parts.append(f"【PDF 报告结构化章节底稿内容】：\n{md_content[:15000]}")
-
-        if txt_content:
-            # 附带带有物理页码标记（--- [P.X] ---）的原版 PDF 逐页纯文本
-            parts.append(f"【PDF 报告原始物理页码逐页提取底稿】：\n{txt_content[:15000]}")
+            # 优先全量注入结构化 Markdown 知识库（包含目录、各章节分析及附件财务明细表）
+            parts.append(f"【PDF 报告结构化章节与附件完整底稿内容】：\n{md_content}")
+        elif txt_content:
+            # 若无结构化 Markdown，回退注入逐页提取的物理页码纯文本
+            parts.append(f"【PDF 报告原始物理页码逐页提取底稿】：\n{txt_content}")
 
         return "\n\n".join(parts)
 
@@ -106,7 +102,7 @@ async def _extract_report_kb_context(
         tax = report.content_json.get("tax_info", {})
         if tax:
             parts.append(
-                f"【涉税与金税开票】：纳税评级 {tax.get('tax_rating', '--')} 级，近36个月开票总额 {tax.get('annual_vat_sales', '--')}，"
+                f"【涉税与官方开票】：纳税评级 {tax.get('tax_rating', '--')} 级，近36个月开票总额 {tax.get('annual_vat_sales', '--')}，"
                 f"发票有效率 {tax.get('valid_ratio', '--')}，红冲废票率 {tax.get('cancel_ratio', '极低')}。"
             )
         risk = report.content_json.get("risk_radar", {})
@@ -118,7 +114,7 @@ async def _extract_report_kb_context(
 
     if report.raw_sources_json and isinstance(report.raw_sources_json, dict):
         raw_snippet = json.dumps(report.raw_sources_json, ensure_ascii=False)
-        parts.append(f"【原始金税与征信申报底稿切片】：\n{raw_snippet[:4000]}")
+        parts.append(f"【原始官方涉税与征信申报底稿切片】：\n{raw_snippet[:40000]}")
 
     return "\n\n".join(parts)
 
@@ -153,6 +149,21 @@ async def report_chat_stream(
     is_admin = isinstance(actor, AdminUser) or getattr(actor, "role", "") == "admin"
     if not is_admin and report.user_id != actor.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该报告的对话资产")
+
+    # 提问配额上限校验 (限制每份报告最多提问 50 次)
+    MAX_REPORT_QUESTIONS = 50
+    count_res = await db.execute(
+        select(func.count(ReportChatMessage.id)).where(
+            ReportChatMessage.report_id == report_id,
+            ReportChatMessage.role == "user"
+        )
+    )
+    user_questions_count = count_res.scalar() or 0
+    if user_questions_count >= MAX_REPORT_QUESTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"当前报告提问次数已达到 {MAX_REPORT_QUESTIONS} 次上限，无法继续发起提问"
+        )
 
     # 2. 提取或注入知识库内容 (综合融合 MinIO 中的 markdown 知识库与 content-text 纯文本)
     kb_context = req.kb_content.strip() if req.kb_content and req.kb_content.strip() else await _extract_report_kb_context(report, db, req.catalog_key, req.catalog_name)
@@ -192,8 +203,7 @@ async def report_chat_stream(
         try:
             async for delta in AIService.stream_chat_completion(
                 messages=messages,
-                temperature=0.1,  # 严格事实模式，严禁自由发挥
-                max_tokens=2500
+                temperature=0.1  # 严格事实模式，严禁自由发挥
             ):
                 full_assistant_reply.append(delta)
                 payload = json.dumps({"delta": delta, "status": "generating"}, ensure_ascii=False)

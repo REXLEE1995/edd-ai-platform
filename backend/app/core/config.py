@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 4320
 
     # ==========================================
+    # 字体库路径配置 (脱敏与 PDF 处理独立字体)
+    # ==========================================
+    FONTS_DIR: str = ""
+    PDF_FONTS_DIR: str = ""
+
+    # ==========================================
     # MinIO 对象存储配置
     # ==========================================
     MINIO_ENDPOINT: str = "127.0.0.1:9000"
@@ -121,7 +127,7 @@ class Settings(BaseSettings):
         return origins
 
     class Config:
-        env_file = ".env"
+        env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
         extra = "allow"
 
 settings = Settings()

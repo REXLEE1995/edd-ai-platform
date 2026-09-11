@@ -1,5 +1,10 @@
 import os
 import sys
+import asyncio
+
+if sys.platform == "win32":
+    # 修复 Windows 下 Python 3.8+ 默认 ProactorEventLoop 搭配 asyncmy/MySQL 在处理大包数据时的 BufferError 异常
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -166,6 +171,8 @@ async def health():
     }
 
 @app.get("/s/{short_code}")
+@app.get("/api/s/{short_code}")
+@app.get("/api/v1/s/{short_code}")
 async def redirect_short_link(short_code: str):
     """
     自研本地短链重定向服务 (302 自动跳转至微风企 H5 授权超长地址)

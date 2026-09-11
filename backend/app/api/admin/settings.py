@@ -48,6 +48,8 @@ class AISettingsUpdatePayload(BaseModel):
     new_api_key: Optional[str] = Field(None, description="API Token 密钥 (留空或掩码则保持不变)")
     new_api_model: Optional[str] = Field("xyzp-ai", description="业务统一调用代号 (由 New API 网关重定向至真实模型)")
     temperature: Optional[float] = Field(0.3, ge=0.0, le=2.0, description="采样温度")
+    max_tokens: Optional[int] = Field(None, description="单次最大输出 Token 配额 (留空或0为不限制)")
+    enable_thinking: Optional[bool] = Field(False, description="是否启用深度推理思考 (Reasoning/Thinking)")
     timeout_seconds: Optional[int] = Field(60, ge=5, le=300, description="超时时间(秒)")
     is_enabled: Optional[bool] = Field(True, description="是否启用 AI 网关")
 
@@ -77,6 +79,8 @@ async def get_ai_settings(
             "has_key": bool(raw_key and raw_key.strip() and raw_key != "sk-your-new-api-master-token"),
             "new_api_model": cfg.get("new_api_model", "xyzp-ai"),
             "temperature": cfg.get("temperature", 0.3),
+            "max_tokens": cfg.get("max_tokens"),
+            "enable_thinking": cfg.get("enable_thinking", False),
             "timeout_seconds": cfg.get("timeout_seconds", 60),
             "is_enabled": cfg.get("is_enabled", True),
             "last_test_at": cfg.get("last_test_at"),
@@ -100,6 +104,8 @@ async def update_ai_settings(
         "new_api_base_url": payload.new_api_base_url,
         "new_api_model": payload.new_api_model,
         "temperature": payload.temperature,
+        "max_tokens": payload.max_tokens,
+        "enable_thinking": payload.enable_thinking,
         "timeout_seconds": payload.timeout_seconds,
         "is_enabled": payload.is_enabled,
     }
@@ -119,10 +125,13 @@ async def update_ai_settings(
             "has_key": bool(raw_key and raw_key.strip()),
             "new_api_model": updated_cfg.get("new_api_model"),
             "temperature": updated_cfg.get("temperature"),
+            "max_tokens": updated_cfg.get("max_tokens"),
+            "enable_thinking": updated_cfg.get("enable_thinking", False),
             "timeout_seconds": updated_cfg.get("timeout_seconds"),
             "is_enabled": updated_cfg.get("is_enabled")
         }
     }
+
 
 @router.post("/ai/test")
 async def test_ai_settings(
